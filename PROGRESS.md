@@ -3,16 +3,16 @@
 ## Current
 
 * Phase: 0 — Engineering Foundations
-* Lesson: 0.1 — Development Environment & Rust Toolchain
+* Lesson: 02 — Data Types and Type System
 * Status: Not Started
 
 ## Completed
 
-None.
+* Lesson 01 — Variables and Mutability
 
 ## Labs
 
-None.
+* `hello-rust` — Lesson 01: Variables and Mutability
 
 ## Projects
 
@@ -20,15 +20,21 @@ None.
 
 ## Skills Under Review
 
-None.
+* Variable bindings
+* Immutability and mutability
+* Type inference
+* Explicit types
+* Shadowing
+* Scope
+* Basic compiler error analysis
 
 ## Known Weaknesses
 
-None.
+* Rust syntax and standard library vocabulary
 
 ## Engineering Reviews
 
-None.
+* Lesson 01 — Variables and Mutability
 
 ## Milestones
 
