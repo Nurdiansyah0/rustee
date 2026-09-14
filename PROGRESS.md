@@ -3,16 +3,18 @@
 ## Current
 
 * Phase: 0 — Engineering Foundations
-* Lesson: 02 — Data Types and Type System
+* Lesson: 03 — Expressions and Statements
 * Status: Not Started
 
 ## Completed
 
 * Lesson 01 — Variables and Mutability
+* Lesson 02 — Data Types and Type System
 
 ## Labs
 
 * `hello-rust` — Lesson 01: Variables and Mutability
+* `hello-rust` — Lesson 02: Data Types and Type System
 
 ## Projects
 
@@ -26,7 +28,17 @@ None.
 * Explicit types
 * Shadowing
 * Scope
-* Basic compiler error analysis
+* Data types
+* Static type system
+* Scalar types
+* Compound types
+* Integer types
+* Signed and unsigned integers
+* Floating-point types
+* Boolean and character types
+* Tuples and arrays
+* Basic type conversion
+* Compiler error analysis
 
 ## Known Weaknesses
 
@@ -35,6 +47,7 @@ None.
 ## Engineering Reviews
 
 * Lesson 01 — Variables and Mutability
+* Lesson 02 — Data Types and Type System
 
 ## Milestones
 
