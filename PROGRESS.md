@@ -3,18 +3,20 @@
 ## Current
 
 * Phase: 0 — Engineering Foundations
-* Lesson: 03 — Expressions and Statements
+* Lesson: 04 — Functions
 * Status: Not Started
 
 ## Completed
 
 * Lesson 01 — Variables and Mutability
 * Lesson 02 — Data Types and Type System
+* Lesson 03 — Expressions and Statements
 
 ## Labs
 
 * `hello-rust` — Lesson 01: Variables and Mutability
 * `hello-rust` — Lesson 02: Data Types and Type System
+* `hello-rust` — Lesson 03: Expressions and Statements
 
 ## Projects
 
@@ -39,15 +41,28 @@ None.
 * Tuples and arrays
 * Basic type conversion
 * Compiler error analysis
+* Expressions
+* Statements
+* Expression statements
+* Semicolon behavior
+* Block expressions
+* Final expressions
+* Unit type
+* If expressions
+* Function return values
+* Expression-oriented design
 
 ## Known Weaknesses
 
 * Rust syntax and standard library vocabulary
 
+
 ## Engineering Reviews
 
 * Lesson 01 — Variables and Mutability
 * Lesson 02 — Data Types and Type System
+* Lesson 03 — Expressions and Statements
+
 
 ## Milestones
 
