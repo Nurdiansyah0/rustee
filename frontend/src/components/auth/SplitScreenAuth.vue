@@ -83,7 +83,7 @@
           <ShieldCheck class="w-4 h-4 text-emerald-400" />
           <span>Privasi data finansial Anda terlindungi penuh</span>
         </div>
-        <span class="text-[11px] text-zinc-400">Invinite Digital Solutions</span>
+        <span class="text-[11px] text-zinc-400">by Invinite Digital Solutions</span>
       </div>
     </div>
 
