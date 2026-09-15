@@ -214,7 +214,7 @@
         <div class="pt-4 border-t border-border-subtle">
           <div class="flex items-center justify-between mb-2.5">
             <span class="text-xs font-semibold text-content-secondary">Coba Simulasi Interaktif</span>
-            <span class="text-[10px] text-content-muted">Data sintetis tanpa komitmen</span>
+            <span class="text-[10px] text-content-muted">Coba fitur langsung tanpa isi data pribadi</span>
           </div>
           <div class="grid grid-cols-2 gap-2.5">
             <button
