@@ -3,7 +3,7 @@
 ## Current
 
 * Phase: 0 — Engineering Foundations
-* Lesson: 04 — Functions
+* Lesson: 05— Control Flow
 * Status: Not Started
 
 ## Completed
@@ -11,6 +11,7 @@
 * Lesson 01 — Variables and Mutability
 * Lesson 02 — Data Types and Type System
 * Lesson 03 — Expressions and Statements
+* Lesson 04 — Functions
 
 ## Labs
 
@@ -51,6 +52,20 @@ None.
 * If expressions
 * Function return values
 * Expression-oriented design
+* Functions
+* Function declarations
+* Function calls
+* Parameters
+* Arguments
+* Function signatures
+* Return types
+* Implicit returns
+* Explicit returns
+* Early returns
+* Function scope
+* Function composition
+* Function contracts
+* Unit return type
 
 ## Known Weaknesses
 
@@ -62,6 +77,7 @@ None.
 * Lesson 01 — Variables and Mutability
 * Lesson 02 — Data Types and Type System
 * Lesson 03 — Expressions and Statements
+* Lesson 04 — Fuctions
 
 
 ## Milestones
