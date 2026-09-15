@@ -77,12 +77,8 @@
         </div>
       </div>
 
-      <!-- Bottom Trust Statement -->
-      <div class="relative z-10 flex items-center justify-between text-xs text-zinc-400 pt-6 border-t border-zinc-800/80">
-        <div class="flex items-center gap-2">
-          <ShieldCheck class="w-4 h-4 text-emerald-400" />
-          <span>Privasi data finansial Anda terlindungi penuh</span>
-        </div>
+      <!-- Bottom Footer -->
+      <div class="relative z-10 flex items-center justify-end text-xs text-zinc-400 pt-6 border-t border-zinc-800/80">
         <span class="text-[11px] text-zinc-400">by Invinite Digital Solutions</span>
       </div>
     </div>
@@ -235,7 +231,6 @@ import { Input, Button } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import {
   TrendingUp,
-  ShieldCheck,
   AlertCircle,
   Sparkles
 } from 'lucide-vue-next'
