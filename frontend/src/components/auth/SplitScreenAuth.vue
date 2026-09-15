@@ -125,12 +125,12 @@
         <!-- Form Heading -->
         <div>
           <h2 class="text-2xl sm:text-3xl font-black text-content-primary tracking-tight">
-            {{ isRegister ? 'Mulai bersama Invinite' : 'Selamat datang kembali' }}
+            {{ isRegister ? 'Buat Akun Finansial Anda' : 'Akses Kendali Finansial Anda' }}
           </h2>
           <p class="text-xs sm:text-sm text-content-secondary mt-1.5 leading-relaxed">
             {{ isRegister
-              ? 'Kelola semua dompet dan pantau arus kas Anda dengan presisi.'
-              : 'Masuk ke ruang keuangan pribadi Anda.'
+              ? 'Kelola semua dompet, pantau arus kas, dan rencanakan masa depan.'
+              : 'Kelola arus kas, aset, dan rencana masa depan di satu tempat.'
             }}
           </p>
         </div>
@@ -152,7 +152,7 @@
               v-model="form.email"
               type="email"
               label="Alamat Email"
-              placeholder="nama@email.com"
+              placeholder="nama@domain.com"
               autocomplete="email"
               required
             />
@@ -163,7 +163,7 @@
               v-model="form.password"
               type="password"
               label="Kata Sandi"
-              placeholder="Minimal 8 karakter"
+              placeholder="Min. 8 karakter kombinasi"
               autocomplete="current-password"
               showPasswordToggle
               required
@@ -203,8 +203,8 @@
               class="text-xs font-semibold text-brand-default hover:underline focus-ring rounded p-1 cursor-pointer"
             >
               {{ isRegister
-                ? 'Sudah memiliki akun? Masuk di sini'
-                : 'Belum punya akun? Daftar gratis sekarang'
+                ? 'Sudah terdaftar? Masuk ke akun Anda'
+                : 'Belum terdaftar? Buat akun gratis'
               }}
             </button>
           </div>
@@ -213,8 +213,8 @@
         <!-- Deliberate Demo Access (Subtle, Clean, Non-intrusive) -->
         <div class="pt-4 border-t border-border-subtle">
           <div class="flex items-center justify-between mb-2.5">
-            <span class="text-xs font-semibold text-content-secondary">Eksplorasi Mode Demo</span>
-            <span class="text-[10px] text-content-muted">Data simulasi</span>
+            <span class="text-xs font-semibold text-content-secondary">Coba Simulasi Interaktif</span>
+            <span class="text-[10px] text-content-muted">Data sintetis tanpa komitmen</span>
           </div>
           <div class="grid grid-cols-2 gap-2.5">
             <button
@@ -222,8 +222,8 @@
               @click="fillDemo('demo@example.com', 'Password123!')"
               class="px-3 py-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer"
             >
-              <div class="text-xs font-bold text-content-primary">Akun Standar</div>
-              <div class="text-[10px] text-content-muted mt-0.5">Akses fitur dasar gratis</div>
+              <div class="text-xs font-bold text-content-primary">Personal</div>
+              <div class="text-[10px] text-content-muted mt-0.5">Pencatatan arus kas esensial selamanya gratis</div>
             </button>
 
             <button
@@ -232,10 +232,10 @@
               class="px-3 py-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer"
             >
               <div class="text-xs font-bold text-brand-default flex items-center gap-1">
-                <span>Akun Pro</span>
+                <span>Pro</span>
                 <Sparkles class="w-3 h-3 text-amber-500" />
               </div>
-              <div class="text-[10px] text-content-muted mt-0.5">Fitur analitik lengkap</div>
+              <div class="text-[10px] text-content-muted mt-0.5">Otomatisasi & analitik portofolio mendalam</div>
             </button>
           </div>
         </div>
@@ -243,7 +243,7 @@
         <!-- Simple Trust Statement -->
         <div class="text-center pt-2">
           <p class="text-[11px] text-content-muted">
-            Dilindungi enkripsi sesi standar perbankan untuk menjamin kerahasiaan data Anda.
+            Keamanan data terproteksi dengan enkripsi setara standar perbankan.
           </p>
         </div>
       </div>
