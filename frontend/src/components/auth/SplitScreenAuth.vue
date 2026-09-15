@@ -27,7 +27,7 @@
             Kejelasan finansial untuk setiap Rupiah Anda.
           </h1>
           <p class="text-sm text-zinc-400 mt-2.5 leading-relaxed">
-            Satu ruang tenang dan terpadu untuk memantau arus kas, mengelola multi-dompet, dan mengambil keputusan keuangan harian dengan percaya diri.
+            Satu aplikasi untuk memantau arus kas keuangan anda.
           </p>
         </div>
 
