@@ -35,13 +35,8 @@
         <div class="p-6 bg-zinc-900/90 rounded-2xl border border-zinc-800 shadow-2xl backdrop-blur-md space-y-5">
           <!-- Total Balance Widget -->
           <div class="flex items-center justify-between pb-4 border-b border-zinc-800/80">
-            <div>
-              <div class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Total Saldo Bersih
-              </div>
-              <div class="text-2xl xl:text-3xl font-black text-white tracking-tight tabular-nums mt-1">
-                Rp 18.450.000
-              </div>
+            <div class="text-2xl xl:text-3xl font-black text-white tracking-tight tabular-nums">
+              Rp 18.450.000
             </div>
             <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold tabular-nums">
               <TrendingUp class="w-3.5 h-3.5 stroke-[2.5]" />
