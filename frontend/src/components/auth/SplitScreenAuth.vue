@@ -7,14 +7,7 @@
       <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <!-- Top Brand Header -->
-      <div class="relative z-10 flex items-center gap-3">
-        <img
-          src="/icons/Invinite_Logo.png"
-          alt="Invinite"
-          class="h-9 w-auto object-contain select-none brightness-110"
-          loading="eager"
-        />
-        <div class="h-4 w-px bg-zinc-700"></div>
+      <div class="relative z-10 flex items-center">
         <span class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
           Personal Finance
         </span>
@@ -78,8 +71,14 @@
       </div>
 
       <!-- Bottom Footer -->
-      <div class="relative z-10 flex items-center justify-end text-xs text-zinc-400 pt-6 border-t border-zinc-800/80">
+      <div class="relative z-10 flex items-center justify-end gap-2.5 text-xs text-zinc-400 pt-6 border-t border-zinc-800/80">
         <span class="text-[11px] text-zinc-400">by Invinite Digital Solutions</span>
+        <img
+          src="/icons/Invinite_Logo.png"
+          alt="Invinite Digital Solutions"
+          class="h-6 w-auto object-contain select-none"
+          loading="eager"
+        />
       </div>
     </div>
 
