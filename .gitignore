@@ -13,11 +13,6 @@
 *.p12
 *.rsa
 
-# Rust & Cargo Artifacts
-/target/
-backend/target/
-**/*.rs.bk
-Cargo.lock.bk
 
 # Node & Frontend Build Artifacts
 node_modules/
