@@ -6,12 +6,6 @@
       <div class="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
       <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <!-- Top Brand Header -->
-      <div class="relative z-10 flex items-center">
-        <span class="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-          Personal Finance
-        </span>
-      </div>
 
       <!-- Center Financial Product Preview Canvas -->
       <div class="relative z-10 space-y-6 max-w-lg my-auto py-8">
@@ -86,15 +80,12 @@
     <div class="col-span-12 lg:col-span-6 xl:col-span-5 flex flex-col justify-center px-6 sm:px-12 md:px-16 py-12 bg-surface-card">
       <div class="w-full max-w-md mx-auto space-y-6">
         <!-- Mobile Logo Header (Shown when left panel is hidden) -->
-        <div class="lg:hidden flex items-center justify-between mb-4">
+        <div class="lg:hidden flex items-center mb-4">
           <img
             src="/icons/Invinite_Logo.png"
             alt="Invinite"
             class="h-8 w-auto object-contain"
           />
-          <span class="text-xs font-semibold text-content-muted">
-            Personal Finance
-          </span>
         </div>
 
         <!-- Form Heading -->
