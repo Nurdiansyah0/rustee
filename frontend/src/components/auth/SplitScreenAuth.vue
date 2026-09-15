@@ -1,10 +1,9 @@
 <template>
   <div class="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-surface-canvas font-sans selection:bg-brand-default selection:text-white">
     <!-- LEFT SIDE: Brand + Product Financial Visualization (Desktop only) -->
-    <div class="hidden lg:flex lg:col-span-6 xl:col-span-7 bg-zinc-950 border-r border-zinc-800/80 p-10 xl:p-14 flex-col justify-between relative overflow-hidden text-white">
-      <!-- Ambient Background Radial Glows -->
-      <div class="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="hidden lg:flex lg:col-span-6 xl:col-span-7 bg-zinc-950 bg-[url('/images/background.webp')] bg-cover bg-center bg-no-repeat border-r border-zinc-800/80 p-10 xl:p-14 flex-col justify-between relative overflow-hidden text-white">
+      <!-- High-Precision Gradient Scrim for Visual Depth & Text Contrast -->
+      <div class="absolute inset-0 bg-gradient-to-br from-zinc-950/85 via-zinc-950/70 to-zinc-950/85 pointer-events-none"></div>
 
 
       <!-- Center Financial Product Preview Canvas -->
@@ -66,10 +65,10 @@
 
       <!-- Bottom Footer -->
       <div class="relative z-10 flex items-center justify-end gap-2.5 text-xs text-zinc-400 pt-6 border-t border-zinc-800/80">
-        <span class="text-[11px] text-zinc-400">by Invinite Digital Solutions</span>
+        <span class="text-[11px] text-zinc-400">by Invinite.id - Digital Creative Solutions</span>
         <img
           src="/icons/Invinite_Logo.png"
-          alt="Invinite Digital Solutions"
+          alt="Invinite.id - Digital Creative Solutions"
           class="h-6 w-auto object-contain select-none"
           loading="eager"
         />
