@@ -193,17 +193,15 @@
         <!-- Deliberate Demo Access (Subtle, Clean, Non-intrusive) -->
         <div class="pt-4 border-t border-border-subtle">
           <div class="flex items-center justify-between mb-2.5">
-            <span class="text-xs font-semibold text-content-secondary">Coba Simulasi Interaktif</span>
-            <span class="text-[10px] text-content-muted">Coba fitur langsung tanpa isi data pribadi</span>
+            <span class="text-xs font-semibold text-content-secondary">Coba account demo</span>
           </div>
           <div class="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               @click="fillDemo('demo@example.com', 'Password123!')"
-              class="px-3 py-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer"
+              class="px-3 py-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex flex-col justify-center"
             >
-              <div class="text-xs font-bold text-content-primary">Personal</div>
-              <div class="text-[10px] text-content-muted mt-0.5">Pencatatan arus kas esensial selamanya gratis</div>
+              <div class="text-xs font-bold text-content-primary">Personal account</div>
             </button>
 
             <button
@@ -215,7 +213,7 @@
                 <span>Pro</span>
                 <Sparkles class="w-3 h-3 text-amber-500" />
               </div>
-              <div class="text-[10px] text-content-muted mt-0.5">Otomatisasi & analitik portofolio mendalam</div>
+              <div class="text-[10px] text-content-muted mt-0.5">Nikmati fitur penuh analisis keuangan</div>
             </button>
           </div>
         </div>
