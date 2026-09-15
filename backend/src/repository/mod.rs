@@ -1,0 +1,29 @@
+pub mod account_repo;
+pub mod audit_repo;
+pub mod category_repo;
+pub mod db;
+pub mod error;
+pub mod idempotency_repo;
+pub mod subscription_repo;
+pub mod transaction_repo;
+pub mod user_repo;
+
+pub use account_repo::{Account, AccountRepository, NewAccount, SqlxAccountRepository};
+pub use audit_repo::{AuditLog, AuditRepository, NewAuditLog, SqlxAuditRepository};
+pub use category_repo::{Category, CategoryRepository, NewCategory, SqlxCategoryRepository};
+pub use db::{
+    ensure_parent_dir_exists, init_pool, run_migrations, verify_pragmas, DbConfig, PragmaStatus,
+};
+pub use error::DbError;
+pub use idempotency_repo::{
+    IdempotencyLockResult, IdempotencyRecord, IdempotencyRepository, SqlxIdempotencyRepository,
+};
+pub use subscription_repo::{
+    NewSubscription, NewWebhookEvent, SqlxSubscriptionRepository, Subscription,
+    SubscriptionRepository, WebhookEvent,
+};
+pub use transaction_repo::{
+    CashFlowSummary, NewTransaction, SqlxTransactionRepository, TransactionFilter,
+    TransactionRecord, TransactionRepository,
+};
+pub use user_repo::{NewUser, SqlxUserRepository, User, UserRepository};

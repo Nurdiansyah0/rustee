@@ -1,0 +1,27 @@
+{
+  "midtrans_settlement": {
+    "order_id": "ORDER-MOCK-001",
+    "status_code": "200",
+    "gross_amount": "5000.00",
+    "transaction_status": "settlement",
+    "fraud_status": "accept",
+    "payment_type": "gopay",
+    "transaction_id": "trx-midtrans-001"
+  },
+  "midtrans_expire": {
+    "order_id": "ORDER-MOCK-002",
+    "status_code": "200",
+    "gross_amount": "5000.00",
+    "transaction_status": "expire",
+    "transaction_id": "trx-midtrans-002"
+  },
+  "xendit_invoice_paid": {
+    "id": "xendit_inv_001",
+    "external_id": "USER-MOCK-XENDIT-001",
+    "status": "PAID",
+    "amount": 5000,
+    "paid_amount": 5000,
+    "payment_method": "OVO",
+    "payment_channel": "OVO"
+  }
+}
