@@ -79,21 +79,6 @@
             </div>
           </div>
 
-          <!-- Mini Wallet Snapshot Grid -->
-          <div class="grid grid-cols-3 gap-2.5 pt-2 border-t border-zinc-800/80 text-xs">
-            <div class="p-2.5 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-              <div class="text-[10px] text-zinc-400 font-medium">Rekening Utama</div>
-              <div class="font-bold text-white tabular-nums mt-0.5">Rp 12.500.000</div>
-            </div>
-            <div class="p-2.5 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-              <div class="text-[10px] text-zinc-400 font-medium">Dompet Digital</div>
-              <div class="font-bold text-white tabular-nums mt-0.5">Rp 3.450.000</div>
-            </div>
-            <div class="p-2.5 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
-              <div class="text-[10px] text-zinc-400 font-medium">Dana Darurat</div>
-              <div class="font-bold text-emerald-400 tabular-nums mt-0.5">Rp 2.500.000</div>
-            </div>
-          </div>
         </div>
       </div>
 
