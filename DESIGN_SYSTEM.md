@@ -452,11 +452,3 @@ All raw emojis (`🏠`, `📜`, `+`, `📊`, `👤`, `👁️`, `🙈`, `💵`, 
 | **Reduced Motion** | `prefers-reduced-motion` | Media query suppresses animations and transitions for users with vestibular sensitivities. |
 | **Icon Accessibility**| Explicit `aria-label` / `aria-hidden` | Icon-only buttons mandate `aria-label`. Decorative inline icons declare `aria-hidden="true"`. |
 
----
-
-## 9. Architectural Integrity & Verification Baseline
-
-Every change made within this design system maintains 100% compatibility with the underlying Axum / Tokio / SQLite backend:
-- **Zero Monorepo Drift**: Application builds cleanly with `npm run build`.
-- **Zero Backend Regressions**: Passes all 108 backend unit and integration tests (`cargo test --workspace`).
-- **Zero E2E Regressions**: Passes all 334 end-to-end acceptance tests (`bash e2e_tests/runner.sh all`).
