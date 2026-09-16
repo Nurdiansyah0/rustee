@@ -1,14 +1,17 @@
 <template>
-  <header class="sticky top-0 z-30 bg-surface-card/90 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 md:px-8 pt-[max(env(safe-area-inset-top),0.875rem)] pb-3 flex items-center justify-between select-none">
+  <header class="sticky top-0 z-30 shrink-0 bg-surface-card/90 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 md:px-8 pt-[max(env(safe-area-inset-top),0.875rem)] pb-3 flex items-center justify-between select-none">
     <!-- Left Section: Title / Mobile Logo -->
     <div class="flex items-center gap-3">
-      <!-- Mobile Logo (Shown only on small screens) -->
-      <div class="md:hidden flex items-center">
-        <FinrepIcon size="32" theme="auto" :show-typography="true" />
+      <!-- Mobile / Tablet Header (Shown on screens <1024px) -->
+      <div class="lg:hidden flex items-center gap-2.5">
+        <FinrepIcon size="30" theme="auto" :show-typography="false" />
+        <h1 class="text-sm sm:text-base font-extrabold text-content-primary tracking-tight">
+          {{ title }}
+        </h1>
       </div>
 
-      <!-- Desktop Page Title & Breadcrumb -->
-      <div class="hidden md:block">
+      <!-- Desktop Page Title & Breadcrumb (Shown on desktop >=1024px) -->
+      <div class="hidden lg:block">
         <h1 class="text-base font-extrabold text-content-primary tracking-tight">
           {{ title }}
         </h1>
@@ -17,20 +20,12 @@
 
     <!-- Right Section: Quick Balance, Status, Upgrade Pill -->
     <div class="flex items-center gap-2.5 sm:gap-3">
-      <!-- Quick Balance Pill (Header peek) -->
-      <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle border border-border-subtle text-xs">
-        <span class="text-content-muted">Saldo:</span>
-        <span class="font-extrabold text-content-primary tabular-nums">
+      <!-- Quick Balance Pill (Contextual: shown on secondary tabs, quiet on Dashboard) -->
+      <div v-if="currentTab !== 'home'" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle border border-border-subtle text-xs select-none">
+        <span class="text-content-muted font-medium">Saldo:</span>
+        <span class="font-bold text-content-primary tabular-nums">
           {{ walletStore.displayTotalBalance }}
         </span>
-        <button
-          type="button"
-          @click="walletStore.toggleHideBalance()"
-          class="text-content-muted hover:text-content-primary p-0.5 rounded transition cursor-pointer"
-          :title="walletStore.hideBalance ? 'Tampilkan Saldo' : 'Sembunyikan Saldo'"
-        >
-          <component :is="walletStore.hideBalance ? Eye : EyeOff" class="w-3 h-3 stroke-[2]" />
-        </button>
       </div>
 
       <!-- Trial Countdown Badge (when trialing) -->
@@ -62,7 +57,7 @@
         class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-emerald-500/15 border border-brand-border text-brand-default hover:bg-brand-muted text-[11px] font-extrabold transition cursor-pointer"
       >
         <Sparkles class="w-3 h-3 text-amber-500" />
-        <span>Upgrade Rp5k</span>
+        <span>Upgrade Pro</span>
       </button>
 
       <!-- Online / Offline Status Dot -->
@@ -87,7 +82,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
 import { useSubscriptionStore } from '@/stores/subscription'
 import FinrepIcon from '@/components/FinrepIcon.vue'
-import { Eye, EyeOff, Sparkles, Clock } from 'lucide-vue-next'
+import { Sparkles, Clock } from 'lucide-vue-next'
 
 defineProps({
   title: {
@@ -97,6 +92,10 @@ defineProps({
   isOnline: {
     type: Boolean,
     default: true
+  },
+  currentTab: {
+    type: String,
+    default: 'home'
   }
 })
 

@@ -1,6 +1,6 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none">
-    <div class="relative w-full max-w-md p-6 max-h-[90vh] overflow-y-auto bg-surface-card rounded-2xl sm:rounded-3xl shadow-2xl border border-border-subtle animate-in fade-in zoom-in-95 duration-200">
+  <div v-if="isOpen" @click.self="$emit('close')" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none">
+    <div class="relative w-full max-w-md p-6 max-h-[90vh] overflow-y-auto bg-surface-card rounded-2xl shadow-2xl border border-border-subtle animate-in fade-in zoom-in-95 duration-200">
       <!-- Close button -->
       <button
         type="button"
@@ -13,7 +13,7 @@
 
       <!-- Header -->
       <div class="text-center mb-5">
-        <div class="inline-flex items-center justify-center w-12 h-12 mb-2.5 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-2xl text-amber-500 border border-amber-500/30">
+        <div class="inline-flex items-center justify-center w-12 h-12 mb-2.5 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30">
           <Sparkles class="w-6 h-6 stroke-[2]" />
         </div>
         <h2 class="text-2xl font-black text-content-primary tracking-tight">Upgrade ke FinRep Pro</h2>
@@ -21,7 +21,7 @@
       </div>
 
       <!-- Active Trial Alert Banner -->
-      <div v-if="isTrialing" class="mb-5 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs">
+      <div v-if="isTrialing" class="mb-5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
         <div class="flex items-center gap-2 text-amber-500 font-bold mb-1">
           <Clock class="w-4 h-4 shrink-0 animate-pulse" />
           <span>Masa Uji Coba Pro Aktif</span>
@@ -32,7 +32,7 @@
       </div>
 
       <!-- Trial Expired Alert Banner (Zero data loss reassurance) -->
-      <div v-else-if="hasUsedTrial" class="mb-5 p-4 rounded-2xl bg-surface-subtle border border-border-default text-xs">
+      <div v-else-if="hasUsedTrial" class="mb-5 p-4 rounded-xl bg-surface-subtle border border-border-default text-xs">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2 text-content-primary font-bold">
             <ShieldCheck class="w-4 h-4 text-brand-default shrink-0" />
@@ -46,7 +46,7 @@
       </div>
 
       <!-- 7-Day Free Trial Promotion Card (Only shown if NOT trialing and NOT already used trial) -->
-      <div v-else-if="!isPremium" class="mb-5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 relative overflow-hidden">
+      <div v-else-if="!isPremium" class="mb-5 p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 relative overflow-hidden">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles class="w-3.5 h-3.5" />
@@ -184,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { X, Sparkles, Check, Clock, ShieldCheck } from 'lucide-vue-next'
@@ -194,6 +194,25 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
+
+function handleKeyDown(e) {
+  if (e.key === 'Escape' && props.isOpen) {
+    e.stopPropagation()
+    emit('close')
+  }
+}
+
+watch(() => props.isOpen, (open) => {
+  if (open) {
+    window.addEventListener('keydown', handleKeyDown)
+  } else {
+    window.removeEventListener('keydown', handleKeyDown)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 
 const subscriptionStore = useSubscriptionStore()
 

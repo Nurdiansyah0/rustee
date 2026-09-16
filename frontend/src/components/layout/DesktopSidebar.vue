@@ -1,10 +1,10 @@
 <template>
-  <aside class="hidden md:flex w-64 lg:w-72 flex-col justify-between border-r border-border-subtle bg-surface-card p-4 h-full sticky top-0 z-20 select-none">
+  <aside class="hidden lg:flex w-64 xl:w-72 flex-col justify-between border-r border-border-subtle bg-surface-card p-3 xl:p-4 h-full min-h-0 z-20 select-none overflow-y-auto scroll-native">
     <!-- Top Cluster -->
-    <div class="space-y-6">
+    <div class="space-y-3.5 xl:space-y-4 shrink-0">
       <!-- FinRep Brand Logo -->
-      <div class="flex items-center justify-between px-2 py-1">
-        <FinrepIcon size="36" theme="auto" :show-typography="true" />
+      <div class="flex items-center justify-between px-2 py-0.5">
+        <FinrepIcon size="32" theme="auto" :show-typography="true" />
       </div>
 
       <!-- Quick Action: Catat Transaksi -->
@@ -28,7 +28,7 @@
           type="button"
           @click="$emit('select-tab', item.id)"
           :class="[
-            'w-full h-11 px-3.5 rounded-xl flex items-center gap-3 text-xs font-semibold transition text-left focus-ring cursor-pointer',
+            'w-full h-9 xl:h-10 px-3 rounded-xl flex items-center gap-3 text-xs font-semibold transition text-left focus-ring cursor-pointer',
             activeTab === item.id
               ? 'bg-brand-muted text-brand-default font-bold shadow-xs'
               : 'text-content-secondary hover:text-content-primary hover:bg-surface-subtle'
@@ -48,30 +48,13 @@
     </div>
 
     <!-- Bottom Cluster -->
-    <div class="space-y-3 pt-4 border-t border-border-subtle">
-      <!-- Total Saldo Mini Widget -->
-      <div class="p-3 bg-surface-subtle rounded-xl border border-border-subtle">
-        <div class="flex items-center justify-between text-[11px] font-medium text-content-muted">
-          <span>Total Saldo</span>
-          <button
-            type="button"
-            @click="walletStore.toggleHideBalance()"
-            class="hover:text-content-primary p-0.5 rounded transition cursor-pointer"
-            :title="walletStore.hideBalance ? 'Tampilkan Saldo' : 'Sembunyikan Saldo'"
-          >
-            <component :is="walletStore.hideBalance ? Eye : EyeOff" class="w-3.5 h-3.5 stroke-[2]" />
-          </button>
-        </div>
-        <div class="text-base font-black text-content-primary tabular-nums tracking-tight mt-1">
-          {{ walletStore.displayTotalBalance }}
-        </div>
-      </div>
-
+    <div class="space-y-2 pt-3 border-t border-border-subtle shrink-0">
       <!-- Trial Status Card (when trialing) -->
-      <div
+      <button
         v-if="subscriptionStore.isTrialing"
+        type="button"
         @click="$emit('open-upgrade')"
-        class="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-600/15 border border-amber-500/30 cursor-pointer hover:border-amber-500 transition shadow-xs group"
+        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-600/15 border border-amber-500/30 cursor-pointer hover:border-amber-500 transition shadow-xs group focus-ring block"
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5 text-xs font-extrabold text-amber-500">
@@ -85,13 +68,14 @@
         <p class="text-[10px] text-content-secondary mt-1 leading-snug">
           Fitur Pro aktif. Kunci langganan Rp5k/bln sebelum masa uji coba berakhir.
         </p>
-      </div>
+      </button>
 
       <!-- Upgrade Banner (for Free Tier) -->
-      <div
+      <button
         v-else-if="!authStore.isPremium"
+        type="button"
         @click="$emit('open-upgrade')"
-        class="p-3 rounded-xl bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 border border-brand-border cursor-pointer hover:border-brand-default transition"
+        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 border border-brand-border cursor-pointer hover:border-brand-default transition focus-ring block"
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5 text-xs font-bold text-brand-default">
@@ -102,20 +86,20 @@
             Rp5k/bln
           </span>
         </div>
-        <p class="text-[10px] text-content-secondary mt-1">
-          Buka analitik runway & proyeksi keuangan tanpa batas.
+        <p class="text-[10px] text-content-secondary mt-0.5 leading-snug">
+          Buka analitik runway & proyeksi keuangan.
         </p>
-      </div>
+      </button>
 
       <!-- User Profile Card -->
-      <div class="p-2 flex items-center justify-between rounded-xl hover:bg-surface-subtle transition">
-        <div class="flex items-center gap-2.5 overflow-hidden">
+      <div class="p-1.5 flex items-center justify-between rounded-xl hover:bg-surface-subtle transition shrink-0">
+        <div class="flex items-center gap-2 overflow-hidden min-w-0">
           <div class="w-8 h-8 rounded-full bg-brand-muted text-brand-default font-extrabold text-xs flex items-center justify-center shrink-0">
             {{ authStore.initials }}
           </div>
-          <div class="overflow-hidden">
+          <div class="overflow-hidden min-w-0">
             <div class="text-xs font-bold text-content-primary truncate flex items-center gap-1.5">
-              <span>{{ authStore.displayName }}</span>
+              <span class="truncate">{{ authStore.displayName }}</span>
               <Badge v-if="subscriptionStore.isTrialing" variant="warning" size="sm">Trial</Badge>
               <Badge v-else-if="authStore.isPremium" variant="premium" size="sm">Pro</Badge>
             </div>
@@ -126,10 +110,11 @@
         <button
           type="button"
           @click="$emit('logout')"
-          class="p-1.5 text-content-muted hover:text-expense-default rounded-lg transition cursor-pointer"
+          class="min-w-[44px] min-h-[44px] flex items-center justify-center text-content-muted hover:text-expense-default rounded-lg transition cursor-pointer shrink-0 ml-1 focus-ring"
           title="Keluar (Logout)"
+          aria-label="Keluar dari akun FinRep"
         >
-          <LogOut class="w-4 h-4 stroke-[2]" />
+          <LogOut class="w-4 h-4 stroke-[2]" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -149,8 +134,6 @@ import {
   PieChart,
   User,
   Plus,
-  Eye,
-  EyeOff,
   LogOut,
   Sparkles,
   Clock
@@ -167,6 +150,7 @@ defineEmits(['select-tab', 'open-add', 'open-upgrade', 'logout'])
 
 const authStore = useAuthStore()
 const walletStore = useWalletStore()
+const subscriptionStore = useSubscriptionStore()
 
 const navItems = [
   { id: 'home', label: 'Dashboard', icon: markRaw(LayoutDashboard) },

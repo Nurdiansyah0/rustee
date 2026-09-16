@@ -1,5 +1,5 @@
 <template>
-  <div class="p-3 sm:p-4 bg-zinc-900/90 rounded-2xl border border-zinc-800 shadow-xl backdrop-blur-md space-y-2.5 text-white">
+  <div class="p-3 sm:p-3.5 bg-zinc-900/90 rounded-2xl border border-zinc-800 shadow-xl backdrop-blur-md space-y-2 text-white">
     <!-- Total Balance Widget -->
     <div class="flex items-center justify-between gap-2 pb-2 border-b border-zinc-800/80">
       <div>
@@ -44,7 +44,7 @@
         <span class="text-emerald-400 font-bold tabular-nums">Surplus Rp 4.250.000</span>
       </div>
 
-      <div class="h-16 sm:h-18 w-full relative">
+      <div class="h-14 sm:h-16 w-full relative">
         <svg class="w-full h-full" viewBox="0 0 340 100" preserveAspectRatio="none">
           <defs>
             <linearGradient id="livePreviewEmeraldArea" x1="0" y1="0" x2="0" y2="1">

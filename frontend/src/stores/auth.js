@@ -107,7 +107,14 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      await api.login(email, password)
+      const res = await api.login(email, password)
+      if (res?.user) {
+        user.value = res.user
+        permissions.value = res.user.permissions || []
+        saveCachedUser(res.user)
+        initialized.value = true
+        return true
+      }
       const ok = await checkAuth()
       if (!ok) {
         throw new Error('Gagal mengambil sesi profil setelah masuk.')
@@ -124,7 +131,14 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      await api.register(name, email, password)
+      const res = await api.register(name, email, password)
+      if (res?.user) {
+        user.value = res.user
+        permissions.value = res.user.permissions || []
+        saveCachedUser(res.user)
+        initialized.value = true
+        return true
+      }
       const ok = await checkAuth()
       if (!ok) {
         throw new Error('Gagal menginisialisasi sesi setelah pendaftaran.')

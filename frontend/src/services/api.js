@@ -1,6 +1,4 @@
-/**
- * API Service Client for Personal Finance PWA backend
- */
+import { handleMockApiRequest } from './mockData.js';
 
 export class ApiError extends Error {
   constructor(status, title, detail, code) {
@@ -29,32 +27,50 @@ async function request(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const response = await fetch(path, {
-    ...options,
-    headers,
-    credentials: 'include', // Ensure HttpOnly auth cookie is automatically sent
-  });
+  try {
+    const response = await fetch(path, {
+      ...options,
+      headers,
+      credentials: 'include', // Ensure HttpOnly auth cookie is automatically sent
+    });
 
-  if (!response.ok) {
-    let errorData = {};
-    try {
-      errorData = await response.json();
-    } catch {
-      // Non-JSON response
+    if (!response.ok) {
+      // If Vite proxy returns 502/504 or 404 due to offline backend, fallback to mock
+      if (response.status === 404 || response.status >= 500) {
+        return handleMockApiRequest(path, options);
+      }
+
+      let errorData = {};
+      try {
+        errorData = await response.json();
+      } catch {
+        // Non-JSON response
+      }
+      throw new ApiError(
+        response.status,
+        errorData.title || 'Error',
+        errorData.detail || errorData.message || response.statusText,
+        errorData.code || 'UNKNOWN_ERROR'
+      );
     }
-    throw new ApiError(
-      response.status,
-      errorData.title || 'Error',
-      errorData.detail || errorData.message || response.statusText,
-      errorData.code || 'UNKNOWN_ERROR'
-    );
-  }
 
-  if (response.status === 204) {
-    return null;
-  }
+    if (response.status === 204) {
+      return null;
+    }
 
-  return response.json();
+    return response.json();
+  } catch (err) {
+    // If backend is offline (Failed to fetch, network error, proxy down)
+    if (
+      err instanceof TypeError ||
+      err.message?.includes('Failed to fetch') ||
+      err.message?.includes('NetworkError') ||
+      err.message?.includes('network')
+    ) {
+      return handleMockApiRequest(path, options);
+    }
+    throw err;
+  }
 }
 
 export const api = {

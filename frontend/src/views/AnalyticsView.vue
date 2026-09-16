@@ -1,8 +1,8 @@
 <template>
-  <div class="space-y-6 pb-24 md:pb-8">
+  <div class="space-y-5 lg:space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-xl font-black text-content-primary tracking-tight">Analisis & Proyeksi</h2>
+        <h2 class="text-xl font-bold text-content-primary tracking-tight">Analisis & Proyeksi</h2>
         <p class="text-xs text-content-secondary mt-0.5">Metrik kesehatan finansial dan estimasi ketahanan aset</p>
       </div>
       <div :class="[
@@ -17,30 +17,30 @@
     </div>
 
     <!-- Basic Metrics Card -->
-    <div class="p-6 bg-surface-card rounded-2xl border border-border-subtle shadow-card space-y-4">
+    <div class="p-4 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-4">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Ringkasan Arus Kas</h3>
-        <span class="text-[11px] text-content-muted font-medium">Bulan Ini</span>
+        <span class="text-[11px] text-content-muted font-medium">{{ basicData?.cash_flow?.period_label || 'Bulan Ini' }}</span>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <div class="p-4 bg-income-muted/50 rounded-xl border border-income-border/50">
-          <div class="text-[11px] text-income-default font-semibold flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-income-default"></span>
-            <span>Total Pemasukan</span>
+      <div class="grid grid-cols-2 gap-2.5 sm:gap-4">
+        <div class="p-3 sm:p-4 bg-income-muted/50 rounded-xl border border-income-border/50 min-w-0 flex flex-col justify-between">
+          <div class="text-[11px] text-income-default font-semibold flex items-center gap-1 min-w-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-income-default shrink-0"></span>
+            <span class="truncate">Total Pemasukan</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-income-default mt-1.5 tabular-nums">
-            {{ formatIDR(basicData?.cash_flow?.total_income || 0) }}
+          <div class="text-sm sm:text-base md:text-lg lg:text-xl font-bold sm:font-extrabold lg:font-black text-income-default mt-1 sm:mt-1.5 tabular-nums tracking-tight leading-tight">
+            {{ walletStore.hideBalance ? '••••••••' : formatIDR(basicData?.cash_flow?.total_income || 0) }}
           </div>
         </div>
 
-        <div class="p-4 bg-expense-muted/50 rounded-xl border border-expense-border/50">
-          <div class="text-[11px] text-expense-default font-semibold flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-expense-default"></span>
-            <span>Total Pengeluaran</span>
+        <div class="p-3 sm:p-4 bg-expense-muted/50 rounded-xl border border-expense-border/50 min-w-0 flex flex-col justify-between">
+          <div class="text-[11px] text-expense-default font-semibold flex items-center gap-1 min-w-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-expense-default shrink-0"></span>
+            <span class="truncate">Total Pengeluaran</span>
           </div>
-          <div class="text-lg sm:text-xl font-black text-expense-default mt-1.5 tabular-nums">
-            {{ formatIDR(basicData?.cash_flow?.total_expenses || 0) }}
+          <div class="text-sm sm:text-base md:text-lg lg:text-xl font-bold sm:font-extrabold lg:font-black text-expense-default mt-1 sm:mt-1.5 tabular-nums tracking-tight leading-tight">
+            {{ walletStore.hideBalance ? '••••••••' : formatIDR(basicData?.cash_flow?.total_expenses || 0) }}
           </div>
         </div>
       </div>
@@ -54,7 +54,7 @@
     </div>
 
     <!-- Advanced Analytics (Gated Feature Section) -->
-    <div class="relative rounded-2xl overflow-hidden border border-border-subtle shadow-card">
+    <div class="relative rounded-xl overflow-hidden border border-border-subtle shadow-card">
       <!-- Section Content -->
       <div class="p-6 bg-surface-card space-y-4">
         <div class="flex items-center justify-between">
@@ -106,7 +106,7 @@
         v-if="userTier !== 'premium'"
         class="absolute inset-0 bg-surface-card/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-10 select-none"
       >
-        <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3 shadow-xs">
+        <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3 shadow-xs">
           <Lock class="w-5 h-5 stroke-[2]" />
         </div>
         <h4 class="text-base font-black text-content-primary tracking-tight">Fitur Eksklusif FinRep Pro</h4>
@@ -130,7 +130,10 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
+import { useWalletStore } from '@/stores/wallets'
 import { Sparkles, ShieldCheck, Lock } from 'lucide-vue-next'
+
+const walletStore = useWalletStore()
 
 const props = defineProps({
   userTier: {

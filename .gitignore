@@ -54,4 +54,6 @@ Thumbs.db
 *.swo
 
 # Multi-Agent Workspace Scratch Dirs
+.agents
 .agents/
+.agents/**

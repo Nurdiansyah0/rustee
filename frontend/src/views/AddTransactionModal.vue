@@ -1,16 +1,17 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 select-none">
-    <div class="relative w-full sm:max-w-md bg-surface-card rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-border-subtle animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+  <div v-if="isOpen" @click.self="$emit('close')" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 select-none">
+    <div class="relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto scroll-native bg-surface-card rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-2xl border border-border-subtle animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
       <!-- Header -->
       <div class="flex items-center justify-between mb-4">
         <div>
-          <h3 class="text-base sm:text-lg font-black text-content-primary tracking-tight">Catat Transaksi</h3>
+          <h3 class="text-base sm:text-lg font-bold text-content-primary tracking-tight">Catat Transaksi</h3>
           <p class="text-[11px] text-content-secondary">Entri instan dengan presisi Rupiah</p>
         </div>
         <button
           type="button"
           @click="$emit('close')"
           class="p-2 text-content-muted hover:text-content-primary rounded-full hover:bg-surface-subtle transition cursor-pointer"
+          aria-label="Tutup modal"
         >
           <X class="w-5 h-5 stroke-[2]" />
         </button>
@@ -39,7 +40,7 @@
       </div>
 
       <!-- Display Amount Input -->
-      <div class="mb-4 text-center py-2 bg-surface-subtle rounded-2xl border border-border-subtle">
+      <div class="mb-4 text-center py-2 bg-surface-subtle rounded-xl border border-border-subtle">
         <div class="text-[11px] font-semibold text-content-muted uppercase tracking-wider mb-0.5">Nominal Mutasi</div>
         <div class="text-3xl sm:text-4xl font-black text-content-primary tracking-tight tabular-nums">
           {{ formattedAmount }}
@@ -69,20 +70,22 @@
       <!-- Form Inputs: Account & Category -->
       <div class="space-y-3 mb-4 text-xs">
         <div>
-          <label class="block font-semibold text-content-secondary mb-1">Dari Dompet / Rekening</label>
+          <label for="from-account" class="block font-semibold text-content-secondary mb-1">Dari Dompet / Rekening</label>
           <select
+            id="from-account"
             v-model="selectedAccount"
             class="w-full px-3.5 py-2.5 border border-border-default rounded-xl bg-surface-sunken text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-default/30"
           >
             <option v-for="acc in accounts" :key="acc.id" :value="acc.id">
-              {{ acc.name }} ({{ formatIDR(acc.balance || acc.current_balance) }})
+              {{ acc.name }} ({{ walletStore.hideBalance ? '••••' : formatIDR(acc.balance || acc.current_balance) }})
             </option>
           </select>
         </div>
 
         <div v-if="txType === 'transfer'">
-          <label class="block font-semibold text-content-secondary mb-1">Ke Dompet / Rekening Tujuan</label>
+          <label for="to-account" class="block font-semibold text-content-secondary mb-1">Ke Dompet / Rekening Tujuan</label>
           <select
+            id="to-account"
             v-model="toAccount"
             class="w-full px-3.5 py-2.5 border border-border-default rounded-xl bg-surface-sunken text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-default/30"
           >
@@ -93,8 +96,9 @@
         </div>
 
         <div v-if="txType !== 'transfer'">
-          <label class="block font-semibold text-content-secondary mb-1">Kategori Transaksi</label>
+          <label for="category-select" class="block font-semibold text-content-secondary mb-1">Kategori Transaksi</label>
           <select
+            id="category-select"
             v-model="selectedCategory"
             class="w-full px-3.5 py-2.5 border border-border-default rounded-xl bg-surface-sunken text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-default/30"
           >
@@ -106,8 +110,9 @@
         </div>
 
         <div>
-          <label class="block font-semibold text-content-secondary mb-1">Keterangan / Catatan</label>
+          <label for="tx-description" class="block font-semibold text-content-secondary mb-1">Keterangan / Catatan</label>
           <input
+            id="tx-description"
             v-model="description"
             type="text"
             placeholder="Contoh: Makan siang, langganan internet, dsb."
@@ -132,6 +137,7 @@
           @click="pressKey('backspace')"
           class="h-11 flex items-center justify-center text-lg font-bold rounded-xl bg-surface-subtle hover:bg-border-default active:bg-expense-muted active:text-expense-default border border-border-subtle transition cursor-pointer"
           title="Hapus Digit Terakhir"
+          aria-label="Hapus digit terakhir"
         >
           <Delete class="w-5 h-5 stroke-[2]" />
         </button>
@@ -156,10 +162,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
+import { useWalletStore } from '@/stores/wallets'
 import { X, Delete } from 'lucide-vue-next'
+
+const walletStore = useWalletStore()
 
 const props = defineProps({
   isOpen: Boolean,
@@ -174,6 +183,25 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'transaction-created'])
+
+function handleKeyDown(e) {
+  if (e.key === 'Escape' && props.isOpen) {
+    e.stopPropagation()
+    emit('close')
+  }
+}
+
+watch(() => props.isOpen, (open) => {
+  if (open) {
+    window.addEventListener('keydown', handleKeyDown)
+  } else {
+    window.removeEventListener('keydown', handleKeyDown)
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 
 const txType = ref('expense')
 const rawAmount = ref('0')
@@ -263,6 +291,7 @@ async function submitTransaction() {
       category_id: selectedCategory.value || null,
       transaction_type: txType.value,
       amount: amount,
+      transaction_date: new Date().toISOString(),
       date: new Date().toISOString(),
       description: description.value || (txType.value === 'transfer' ? 'Transfer Saldo' : 'Transaksi'),
     }

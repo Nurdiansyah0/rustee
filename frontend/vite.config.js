@@ -13,6 +13,9 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: false
+      },
       includeAssets: ['favicon.ico', 'favicon.svg', 'safari-pinned-tab.svg', 'icons/*.png', 'push-worker.js'],
       manifest: {
         id: '/',
@@ -93,7 +96,9 @@ export default defineConfig({
     })
   ],
   server: {
+    host: '0.0.0.0',
     port: 3000,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8080',

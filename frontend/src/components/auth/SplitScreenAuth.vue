@@ -1,18 +1,20 @@
 <template>
-  <div class="min-h-dvh lg:h-screen lg:max-h-screen lg:overflow-hidden w-full grid grid-cols-1 lg:grid-cols-12 bg-surface-canvas font-sans selection:bg-brand-default selection:text-white">
-    <!-- LEFT SIDE: Brand + Product Financial Visualization (Desktop only) -->
-    <div class="hidden lg:flex lg:col-span-6 xl:col-span-7 bg-zinc-950 border-r border-zinc-800/80 p-5 xl:p-8 2xl:p-10 flex-col justify-between relative text-white lg:h-full lg:overflow-y-auto scroll-native">
-      <!-- Ambient Background Radial Glows -->
-      <div class="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="min-h-dvh w-full grid grid-cols-1 md:grid-cols-12 bg-surface-canvas font-sans selection:bg-brand-default selection:text-white">
+    <!-- LEFT SIDE: Brand + Product Financial Visualization (Tablet & Desktop) -->
+    <div class="hidden md:flex md:col-span-5 lg:col-span-6 xl:col-span-7 bg-zinc-950 border-r border-zinc-800/80 p-5 md:p-6 lg:p-8 xl:p-10 flex-col justify-between relative text-white min-h-full overflow-y-auto scroll-native select-none">
+      <!-- Ambient Background Radial Glows (Contained to prevent document overflow) -->
+      <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-32 -left-32 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-32 -right-32 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl"></div>
+      </div>
 
       <!-- Center Financial Product Preview Canvas -->
-      <div class="relative z-10 space-y-3 xl:space-y-4 max-w-md xl:max-w-lg my-auto py-2 w-full">
+      <div class="relative z-10 space-y-2.5 xl:space-y-3 max-w-md xl:max-w-lg my-auto py-2 w-full">
         <div>
           <div class="mb-2">
-            <FinrepIcon size="44" theme="dark" />
+            <FinrepIcon size="38" theme="dark" />
           </div>
-          <h1 class="text-xl xl:text-2xl 2xl:text-3xl font-black text-white tracking-tight leading-snug">
+          <h1 class="text-base sm:text-lg xl:text-xl 2xl:text-2xl font-black text-white tracking-tight leading-snug">
             Satu Dasbor Finansial, Keputusan Lebih Presisi.
           </h1>
         </div>
@@ -22,7 +24,7 @@
       </div>
 
       <!-- Bottom Footer -->
-      <div class="relative z-10 flex items-center justify-end gap-2 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80 shrink-0">
+      <div class="relative z-10 flex items-center justify-end gap-2 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80 shrink-0 mt-auto">
         <span class="text-[11px] text-zinc-400">by Invinite.id - Digital Creative Solutions</span>
         <img
           src="/icons/Invinite_Logo.png"
@@ -34,11 +36,11 @@
     </div>
 
     <!-- RIGHT SIDE: Focused, Frictionless Authentication Form -->
-    <div class="col-span-12 lg:col-span-6 xl:col-span-5 flex flex-col justify-start lg:justify-center px-5 sm:px-8 md:px-10 lg:px-8 xl:px-12 py-4 lg:py-3.5 bg-surface-card min-h-dvh lg:h-full lg:overflow-y-auto scroll-native">
-      <div class="w-full max-w-md mx-auto space-y-3 my-auto">
+    <div class="col-span-12 md:col-span-7 lg:col-span-6 xl:col-span-5 flex flex-col justify-center px-4 sm:px-6 md:px-8 lg:px-10 xl:px-14 py-6 md:py-8 bg-surface-card min-h-dvh overflow-y-auto scroll-native">
+      <div class="w-full max-w-sm sm:max-w-md lg:max-w-md xl:max-w-lg mx-auto space-y-3 py-2">
         <!-- Mobile Logo Header (Shown when left panel is hidden) -->
-        <div class="lg:hidden flex items-start mb-2">
-          <FinrepIcon size="44" theme="auto" />
+        <div class="md:hidden flex items-start mb-2">
+          <FinrepIcon size="40" theme="auto" />
         </div>
 
         <!-- Form Heading (Penyambutan Hangat & Tenang) -->
@@ -67,11 +69,6 @@
           </p>
         </div>
 
-        <!-- Mobile Live Dashboard Preview (Hidden in Forgot view to keep recovery frictionless) -->
-        <div v-if="!isForgot" class="lg:hidden">
-          <LiveDashboardPreview />
-        </div>
-
         <!-- ============================================================ -->
         <!-- FLOW 1: "LUPA AKUN" (ACCOUNT RECOVERY) VIEW -->
         <!-- ============================================================ -->
@@ -87,7 +84,6 @@
                 placeholder="contoh: budi@perusahaan.com"
                 autocomplete="email"
                 required
-                autofocus
               />
             </div>
 
@@ -209,7 +205,6 @@
               label="Nama Lengkap"
               placeholder="Contoh: Budi Santoso"
               autocomplete="name"
-              autofocus
               required
             />
           </div>
@@ -289,11 +284,11 @@
           </div>
         </form>
 
-        <!-- Pilihan Akun & Paket Demo (Bukan Sekadar Label Kering) -->
+        <!-- Pilihan Akun & Paket Demo (Sleek, Compact, High-Converting) -->
         <div v-if="!isForgot" class="pt-2 border-t border-border-subtle space-y-1.5">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold text-content-secondary">
-              Ingin lihat-lihat dulu? Coba akun demo tanpa daftar
+              Ingin lihat-lihat dulu? Coba akun demo tanpa daftar:
             </span>
           </div>
 
@@ -302,46 +297,42 @@
             <button
               type="button"
               @click="fillDemo('demo@example.com', 'Password123!')"
-              class="p-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex flex-col justify-between group"
+              class="p-2.5 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex items-center justify-between group"
             >
-              <div>
-                <div class="text-xs font-bold text-content-primary group-hover:text-brand-default transition">
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-content-primary group-hover:text-brand-default transition truncate">
                   Akun Pribadi
                 </div>
-                <div class="text-[10px] text-content-muted mt-0.5 leading-snug">
-                  Untuk kamu yang ingin keuangan harian lebih tertata rapi.
-                </div>
+                <div class="text-[10px] text-content-muted truncate mt-0.5">Keuangan harian tertata</div>
               </div>
-              <div class="text-[10px] font-semibold text-brand-default mt-1">Coba Demo Pribadi &rarr;</div>
+              <div class="text-[10px] font-bold text-brand-default shrink-0 ml-2">Coba &rarr;</div>
             </button>
 
             <!-- FinRep Pro -->
             <button
               type="button"
               @click="fillDemo('premium@example.com', 'Password123!')"
-              class="p-2 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex flex-col justify-between group"
+              class="p-2.5 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex items-center justify-between group"
             >
-              <div>
-                <div class="text-xs font-bold text-brand-default flex items-center gap-1">
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-brand-default flex items-center gap-1 truncate">
                   <span>FinRep Pro</span>
-                  <Sparkles class="w-3 h-3 text-amber-500" />
+                  <Sparkles class="w-3 h-3 text-amber-500 shrink-0" />
                 </div>
-                <div class="text-[10px] text-content-muted mt-0.5 leading-snug">
-                  Dirancang untuk pemilik bisnis dan profesional yang butuh proyeksi laba lebih presisi.
-                </div>
+                <div class="text-[10px] text-content-muted truncate mt-0.5">Proyeksi laba presisi</div>
               </div>
-              <div class="text-[10px] font-semibold text-brand-default mt-1">Coba Demo Pro &rarr;</div>
+              <div class="text-[10px] font-bold text-brand-default shrink-0 ml-2">Coba &rarr;</div>
             </button>
           </div>
         </div>
 
-        <!-- Mobile Footer (by Invinite.id) -->
-        <div class="lg:hidden flex items-center justify-center gap-2 pt-2.5 text-xs text-content-muted border-t border-border-subtle">
+        <!-- Footer (by Invinite.id) -->
+        <div class="flex items-center justify-center lg:justify-end gap-2 pt-2.5 text-xs text-content-muted border-t border-border-subtle mt-1 shrink-0">
           <span class="text-[11px]">by Invinite.id - Digital Creative Solutions</span>
           <img
             src="/icons/Invinite_Logo.png"
             alt="Invinite.id - Digital Creative Solutions"
-            class="h-4 w-auto max-h-4 object-contain select-none"
+            class="h-3.5 w-auto max-h-3.5 object-contain select-none opacity-80"
             loading="eager"
           />
         </div>
@@ -471,11 +462,13 @@ function openForgotPassword() {
   setMode('forgot', true)
 }
 
-function fillDemo(email, password) {
+async function fillDemo(email, password) {
   setMode('login', false)
   form.value.email = email
   form.value.password = password
   errorMessage.value = ''
+  await nextTick()
+  await handleSubmit()
 }
 
 function validateEmail(email) {
@@ -594,11 +587,11 @@ async function syncModeFromUrl() {
     updateAuthUrl(targetMode, false)
     await nextTick()
     if (authMode.value === 'forgot') {
-      recoveryInputRef.value?.focus?.()
+      recoveryInputRef.value?.focus?.({ preventScroll: true })
     } else if (authMode.value === 'register') {
-      registerNameInputRef.value?.focus?.()
+      registerNameInputRef.value?.focus?.({ preventScroll: true })
     } else if (authMode.value === 'login') {
-      loginEmailInputRef.value?.focus?.()
+      loginEmailInputRef.value?.focus?.({ preventScroll: true })
     }
   } catch {}
 }

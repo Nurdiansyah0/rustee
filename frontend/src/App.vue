@@ -7,8 +7,8 @@
     />
 
     <!-- Authenticated State: Responsive Dual-Mode Shell -->
-    <div v-else class="flex-1 flex flex-col md:flex-row min-w-0 h-dvh max-h-dvh overflow-hidden">
-      <!-- Desktop Sidebar (Hidden on mobile <768px) -->
+    <div v-else class="flex-1 flex flex-col lg:flex-row min-w-0 min-h-0 h-dvh max-h-dvh overflow-hidden">
+      <!-- Desktop Sidebar (Hidden on screens <1024px) -->
       <DesktopSidebar
         :active-tab="currentTab"
         @select-tab="handleSelectTab"
@@ -18,20 +18,21 @@
       />
 
       <!-- Main View Stream -->
-      <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <div class="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
         <!-- Top App Header (Pinned with Notch / Safe Area support) -->
         <AppHeader
           :title="currentTabTitle"
           :is-online="isOnline"
+          :current-tab="currentTab"
           @open-upgrade="subscriptionStore.openUpgradeModal()"
         />
 
         <!-- View Content Canvas (Isolated Native Momentum Scroll Container) -->
         <main
           ref="mainScrollRef"
-          class="flex-1 scroll-native px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 pb-safe-nav md:pb-8"
+          class="flex-1 min-h-0 scroll-native px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] lg:pb-6"
         >
-          <div class="w-full max-w-7xl mx-auto space-y-6">
+          <div class="w-full max-w-7xl mx-auto space-y-5 lg:space-y-6">
             <Transition :name="transitionName" mode="out-in">
               <HomeView
                 v-if="currentTab === 'home'"
@@ -39,7 +40,6 @@
                 :dashboard="analyticsStore.dashboardData || {}"
                 @nav="handleSelectTab"
                 @open-add="showAddModal = true"
-                @open-accounts="handleSelectTab('profile')"
               />
 
               <TransactionsView
@@ -66,6 +66,17 @@
                 @logout="handleLogout"
               />
             </Transition>
+
+            <!-- Desktop App Footnote (Hidden on mobile PWA stream) -->
+            <footer class="hidden lg:flex pt-3 pb-2 text-center text-xs text-content-muted items-center justify-center gap-2 border-t border-border-subtle/60">
+              <span class="text-[11px] text-content-muted">FinRep by Invinite.id - Digital Creative Solutions</span>
+              <img
+                src="/icons/Invinite_Logo.png"
+                alt="Invinite.id"
+                class="h-3.5 w-auto max-h-3.5 object-contain opacity-75 select-none"
+                loading="lazy"
+              />
+            </footer>
           </div>
         </main>
       </div>

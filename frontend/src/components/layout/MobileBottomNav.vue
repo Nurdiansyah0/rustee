@@ -1,5 +1,5 @@
 <template>
-  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-card/95 backdrop-blur-lg border-t border-border-subtle px-3 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-floating select-none">
+  <nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-card/95 backdrop-blur-lg border-t border-border-subtle px-3 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-floating select-none">
     <div class="flex items-center justify-around max-w-lg mx-auto">
       <!-- Tab 1: Home -->
       <button

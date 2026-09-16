@@ -227,6 +227,26 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-strong) / 0.4) transparent;
+  }
+
+  .scroll-native::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scroll-native::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-native::-webkit-scrollbar-thumb {
+    background: rgb(var(--border-strong) / 0.4);
+    border-radius: 9999px;
+  }
+
+  .scroll-native::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--border-strong) / 0.7);
   }
 
   /* Accessible Focus-Visible Ring */

@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-6 pb-24 md:pb-8">
+  <div class="space-y-5 lg:space-y-6">
     <!-- User Profile Card -->
-    <div class="p-6 bg-surface-card rounded-2xl border border-border-subtle shadow-card flex items-center gap-4">
-      <div class="w-14 h-14 rounded-2xl bg-brand-muted text-brand-default flex items-center justify-center font-black text-xl shrink-0 border border-brand-border">
+    <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card flex items-center gap-4">
+      <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-brand-muted text-brand-default flex items-center justify-center font-bold text-lg sm:text-xl shrink-0 border border-brand-border">
         {{ computedUserInitials }}
       </div>
       <div class="min-w-0">
-        <h2 class="text-base sm:text-lg font-black text-content-primary truncate">{{ computedDisplayName }}</h2>
+        <h2 class="text-base sm:text-lg font-bold text-content-primary truncate">{{ computedDisplayName }}</h2>
         <div class="text-xs text-content-secondary mt-0.5 truncate">{{ computedEmail }}</div>
         <div class="inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 bg-surface-subtle border border-border-subtle rounded-md text-[10px] font-bold text-content-secondary">
           <Banknote class="w-3 h-3 text-brand-default" />
@@ -16,7 +16,7 @@
     </div>
 
     <!-- Subscription Status Card -->
-    <div class="p-6 bg-surface-card rounded-2xl border border-border-subtle shadow-card space-y-4">
+    <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-4">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Status Langganan</h3>
         <!-- Badge based on trialing vs active vs free -->
@@ -110,7 +110,7 @@
     </div>
 
     <!-- Security & Device Info -->
-    <div class="p-6 bg-surface-card rounded-2xl border border-border-subtle shadow-card space-y-3">
+    <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-3">
       <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Keamanan & Layanan</h3>
 
       <div class="flex items-center justify-between py-2 border-b border-border-subtle text-xs">
@@ -139,7 +139,7 @@
           <Smartphone class="w-3.5 h-3.5 text-content-muted" />
           <span>Aplikasi</span>
         </span>
-        <span class="font-medium text-content-muted">Invinite Finance</span>
+        <span class="font-medium text-content-muted">FinRep PWA v0.1.0</span>
       </div>
     </div>
 
@@ -152,6 +152,17 @@
       <LogOut class="w-4 h-4 stroke-[2]" />
       <span>Keluar dari Akun</span>
     </button>
+
+    <!-- Brand Footnote & Platform Attribution -->
+    <div class="pt-2 pb-1 text-center text-xs text-content-muted flex items-center justify-center gap-2 select-none">
+      <span class="text-[11px] text-content-muted">FinRep by Invinite.id - Digital Creative Solutions</span>
+      <img
+        src="/icons/Invinite_Logo.png"
+        alt="Invinite.id"
+        class="h-3.5 w-auto max-h-3.5 object-contain opacity-70"
+        loading="lazy"
+      />
+    </div>
   </div>
 </template>
 
