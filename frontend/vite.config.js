@@ -13,12 +13,12 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icons/*.png', 'push-worker.js'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'safari-pinned-tab.svg', 'icons/*.png', 'push-worker.js'],
       manifest: {
         id: '/',
-        name: 'Invinite — Personal Finance PWA',
-        short_name: 'Invinite',
-        description: 'Invinite — Presisi Keuangan Pribadi (Personal Finance Progressive Web App SaaS)',
+        name: 'FinRep — Satu Dasbor Finansial, Keputusan Lebih Presisi',
+        short_name: 'FinRep',
+        description: 'FinRep — Satu Dasbor Finansial, Keputusan Lebih Presisi. Platform Manajemen Keuangan Personal & Bisnis.',
         theme_color: '#059669',
         background_color: '#09090B',
         display: 'standalone',

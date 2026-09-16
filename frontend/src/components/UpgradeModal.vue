@@ -16,7 +16,7 @@
         <div class="inline-flex items-center justify-center w-12 h-12 mb-2.5 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-2xl text-amber-500 border border-amber-500/30">
           <Sparkles class="w-6 h-6 stroke-[2]" />
         </div>
-        <h2 class="text-2xl font-black text-content-primary tracking-tight">Upgrade ke Invinite Pro</h2>
+        <h2 class="text-2xl font-black text-content-primary tracking-tight">Upgrade ke FinRep Pro</h2>
         <p class="text-xs text-content-secondary mt-1">Buka analitik presisi perbankan dan proyeksi finansial tanpa batas</p>
       </div>
 
@@ -41,7 +41,7 @@
           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-card border border-border-subtle text-content-muted">Data Tersimpan 100%</span>
         </div>
         <p class="text-content-secondary text-[11px] leading-relaxed">
-          Masa uji coba 7 hari telah berakhir. Seluruh data keuangan & catatan transaksi Anda tetap aman tersimpan di akun Free Tier. Aktifkan Invinite Pro hanya Rp 5.000/bulan untuk membuka kembali analitik runway & laporan penuh.
+          Masa uji coba 7 hari telah berakhir. Seluruh data keuangan & catatan transaksi Anda tetap aman tersimpan di akun Free Tier. Aktifkan FinRep Pro hanya Rp 5.000/bulan untuk membuka kembali analitik runway & laporan penuh.
         </p>
       </div>
 

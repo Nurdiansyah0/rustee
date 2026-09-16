@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-surface-canvas text-content-primary selection:bg-brand-default selection:text-white flex flex-col antialiased">
+  <div class="min-h-dvh w-full bg-surface-canvas text-content-primary selection:bg-brand-default selection:text-white flex flex-col antialiased">
     <!-- Unauthenticated State: Split-Screen Auth -->
     <SplitScreenAuth
       v-if="!authStore.isAuthenticated"
@@ -7,7 +7,7 @@
     />
 
     <!-- Authenticated State: Responsive Dual-Mode Shell -->
-    <div v-else class="flex-1 flex flex-col md:flex-row min-w-0">
+    <div v-else class="flex-1 flex flex-col md:flex-row min-w-0 h-dvh max-h-dvh overflow-hidden">
       <!-- Desktop Sidebar (Hidden on mobile <768px) -->
       <DesktopSidebar
         :active-tab="currentTab"
@@ -18,44 +18,55 @@
       />
 
       <!-- Main View Stream -->
-      <div class="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <!-- Top App Header -->
+      <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <!-- Top App Header (Pinned with Notch / Safe Area support) -->
         <AppHeader
           :title="currentTabTitle"
           :is-online="isOnline"
           @open-upgrade="subscriptionStore.openUpgradeModal()"
         />
 
-        <!-- View Content Canvas (Responsive Max-Width Container) -->
-        <main class="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8 space-y-6">
-          <HomeView
-            v-if="currentTab === 'home'"
-            :dashboard="analyticsStore.dashboardData || {}"
-            @nav="handleSelectTab"
-            @open-add="showAddModal = true"
-            @open-accounts="handleSelectTab('profile')"
-          />
+        <!-- View Content Canvas (Isolated Native Momentum Scroll Container) -->
+        <main
+          ref="mainScrollRef"
+          class="flex-1 scroll-native px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 pb-safe-nav md:pb-8"
+        >
+          <div class="w-full max-w-7xl mx-auto space-y-6">
+            <Transition :name="transitionName" mode="out-in">
+              <HomeView
+                v-if="currentTab === 'home'"
+                key="home"
+                :dashboard="analyticsStore.dashboardData || {}"
+                @nav="handleSelectTab"
+                @open-add="showAddModal = true"
+                @open-accounts="handleSelectTab('profile')"
+              />
 
-          <TransactionsView
-            v-else-if="currentTab === 'transactions'"
-            ref="transactionsViewRef"
-            @open-add="showAddModal = true"
-            @refresh="handleTransactionCreated"
-          />
+              <TransactionsView
+                v-else-if="currentTab === 'transactions'"
+                key="transactions"
+                ref="transactionsViewRef"
+                @open-add="showAddModal = true"
+                @refresh="handleTransactionCreated"
+              />
 
-          <AnalyticsView
-            v-else-if="currentTab === 'analytics'"
-            :user-tier="authStore.isPremium ? 'premium' : 'free'"
-            @open-upgrade="subscriptionStore.openUpgradeModal()"
-          />
+              <AnalyticsView
+                v-else-if="currentTab === 'analytics'"
+                key="analytics"
+                :user-tier="authStore.isPremium ? 'premium' : 'free'"
+                @open-upgrade="subscriptionStore.openUpgradeModal()"
+              />
 
-          <ProfileView
-            v-else-if="currentTab === 'profile'"
-            :user="authStore.user"
-            :user-tier="authStore.isPremium ? 'premium' : 'free'"
-            @open-upgrade="subscriptionStore.openUpgradeModal()"
-            @logout="handleLogout"
-          />
+              <ProfileView
+                v-else-if="currentTab === 'profile'"
+                key="profile"
+                :user="authStore.user"
+                :user-tier="authStore.isPremium ? 'premium' : 'free'"
+                @open-upgrade="subscriptionStore.openUpgradeModal()"
+                @logout="handleLogout"
+              />
+            </Transition>
+          </div>
         </main>
       </div>
 
@@ -85,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
 import { useCategoryStore } from '@/stores/categories'
@@ -115,7 +126,12 @@ const subscriptionStore = useSubscriptionStore()
 const currentTab = ref('home')
 const showAddModal = ref(false)
 const transactionsViewRef = ref(null)
+const mainScrollRef = ref(null)
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
+
+// Dynamic Navigation Transition (Compose Navigation Feel)
+const tabOrder = ['home', 'transactions', 'analytics', 'profile']
+const transitionName = ref('slide-left')
 
 const currentTabTitle = computed(() => {
   const titles = {
@@ -124,14 +140,53 @@ const currentTabTitle = computed(() => {
     analytics: 'Analisis & Proyeksi',
     profile: 'Profil & Pengaturan Akun'
   }
-  return titles[currentTab.value] || 'Invinite Finance'
+  return titles[currentTab.value] || 'FinRep'
 })
 
 function handleSelectTab(tab) {
-  currentTab.value = tab
+  if (tab === currentTab.value) {
+    // Tap on active tab in native apps smoothly scrolls to top
+    if (mainScrollRef.value) {
+      mainScrollRef.value.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    return
+  }
+
+  const oldIndex = tabOrder.indexOf(currentTab.value)
+  const newIndex = tabOrder.indexOf(tab)
+  transitionName.value = newIndex >= oldIndex ? 'slide-left' : 'slide-right'
+
+  // Seamless View Transitions API with instant fallback
+  if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+    document.startViewTransition(() => {
+      currentTab.value = tab
+      if (mainScrollRef.value) {
+        mainScrollRef.value.scrollTop = 0
+      }
+    })
+  } else {
+    currentTab.value = tab
+    if (mainScrollRef.value) {
+      mainScrollRef.value.scrollTop = 0
+    }
+  }
+}
+
+function cleanupAuthUrlParams() {
+  if (typeof window === 'undefined') return
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('auth') || url.searchParams.has('mode') || url.searchParams.has('view')) {
+      url.searchParams.delete('auth')
+      url.searchParams.delete('mode')
+      url.searchParams.delete('view')
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash)
+    }
+  } catch {}
 }
 
 async function handleAuthenticated() {
+  cleanupAuthUrlParams()
   await Promise.allSettled([
     walletStore.fetchWallets(),
     categoryStore.fetchCategories(),
@@ -139,6 +194,19 @@ async function handleAuthenticated() {
     subscriptionStore.fetchSubscriptionStatus()
   ])
 }
+
+// Reactively respond to cross-tab multi-session login or logout
+watch(
+  () => authStore.isAuthenticated,
+  (isAuth, wasAuth) => {
+    if (isAuth && !wasAuth) {
+      cleanupAuthUrlParams()
+      handleAuthenticated()
+    } else if (!isAuth && wasAuth) {
+      currentTab.value = 'home'
+    }
+  }
+)
 
 async function handleTransactionCreated() {
   await Promise.allSettled([
@@ -180,6 +248,9 @@ async function handleOnline() {
 onMounted(async () => {
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', updateOnlineStatus)
+  if (authStore.isAuthenticated) {
+    cleanupAuthUrlParams()
+  }
   const ok = await authStore.checkAuth()
   if (ok) {
     await handleAuthenticated()

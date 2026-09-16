@@ -50,6 +50,7 @@
         :disabled="disabled"
         :readonly="readonly"
         :required="required"
+        :autofocus="autofocus"
         :autocomplete="autocomplete"
         :spellcheck="spellcheck"
         :inputmode="inputmode"
@@ -126,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Eye, EyeOff, X, AlertCircle } from 'lucide-vue-next'
 
 export interface InputProps {
@@ -145,6 +146,7 @@ export interface InputProps {
   disabled?: boolean
   readonly?: boolean
   required?: boolean
+  autofocus?: boolean
   autocomplete?: string
   spellcheck?: boolean | 'false' | 'true'
   inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url'
@@ -169,6 +171,7 @@ const props = withDefaults(defineProps<InputProps>(), {
   disabled: false,
   readonly: false,
   required: false,
+  autofocus: false,
   autocomplete: undefined,
   spellcheck: false,
   inputmode: undefined,
@@ -186,6 +189,12 @@ const emit = defineEmits<{
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const isPasswordVisible = ref(false)
+
+onMounted(() => {
+  if (props.autofocus) {
+    inputRef.value?.focus()
+  }
+})
 
 // Generate deterministic IDs for accessibility
 const uniqueId = `input-${Math.random().toString(36).substring(2, 9)}`

@@ -1,17 +1,10 @@
 <template>
-  <aside class="hidden md:flex w-64 lg:w-72 flex-col justify-between border-r border-border-subtle bg-surface-card p-4 h-screen sticky top-0 z-20 select-none">
+  <aside class="hidden md:flex w-64 lg:w-72 flex-col justify-between border-r border-border-subtle bg-surface-card p-4 h-full sticky top-0 z-20 select-none">
     <!-- Top Cluster -->
     <div class="space-y-6">
-      <!-- Invinite Brand Logo -->
+      <!-- FinRep Brand Logo -->
       <div class="flex items-center justify-between px-2 py-1">
-        <img
-          src="/icons/Invinite_Logo.png"
-          alt="Invinite"
-          class="h-8 w-auto object-contain select-none"
-        />
-        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-surface-subtle text-content-secondary border border-border-subtle">
-          Finance
-        </span>
+        <FinrepIcon size="36" theme="auto" :show-typography="true" />
       </div>
 
       <!-- Quick Action: Catat Transaksi -->
@@ -103,7 +96,7 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5 text-xs font-bold text-brand-default">
             <Sparkles class="w-3.5 h-3.5" />
-            <span>Invinite Pro</span>
+            <span>FinRep Pro</span>
           </div>
           <span class="text-[10px] font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded">
             Rp5k/bln
@@ -146,6 +139,7 @@
 <script setup>
 import { markRaw } from 'vue'
 import { Button, Badge } from '@/components/ui'
+import FinrepIcon from '@/components/FinrepIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
 import { useSubscriptionStore } from '@/stores/subscription'

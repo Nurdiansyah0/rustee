@@ -1,14 +1,10 @@
 <template>
-  <header class="sticky top-0 z-30 bg-surface-card/90 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 md:px-8 py-3.5 flex items-center justify-between select-none">
+  <header class="sticky top-0 z-30 bg-surface-card/90 backdrop-blur-md border-b border-border-subtle px-4 sm:px-6 md:px-8 pt-[max(env(safe-area-inset-top),0.875rem)] pb-3 flex items-center justify-between select-none">
     <!-- Left Section: Title / Mobile Logo -->
     <div class="flex items-center gap-3">
       <!-- Mobile Logo (Shown only on small screens) -->
-      <div class="md:hidden flex items-center gap-2">
-        <img
-          src="/icons/Invinite_Logo.png"
-          alt="Invinite"
-          class="h-7 w-auto object-contain"
-        />
+      <div class="md:hidden flex items-center">
+        <FinrepIcon size="32" theme="auto" :show-typography="true" />
       </div>
 
       <!-- Desktop Page Title & Breadcrumb -->
@@ -90,6 +86,7 @@
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
 import { useSubscriptionStore } from '@/stores/subscription'
+import FinrepIcon from '@/components/FinrepIcon.vue'
 import { Eye, EyeOff, Sparkles, Clock } from 'lucide-vue-next'
 
 defineProps({

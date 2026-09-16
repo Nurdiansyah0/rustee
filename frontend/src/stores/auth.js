@@ -162,6 +162,28 @@ export const useAuthStore = defineStore('auth', () => {
     saveCachedUser(null)
   }
 
+  // Synchronize authentication status across multiple browser tabs
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (event) => {
+      if (event.key === CACHED_USER_KEY) {
+        if (event.newValue) {
+          try {
+            const newUser = JSON.parse(event.newValue)
+            user.value = newUser
+            permissions.value = newUser.permissions || []
+            initialized.value = true
+          } catch {
+            user.value = null
+            permissions.value = []
+          }
+        } else {
+          user.value = null
+          permissions.value = []
+        }
+      }
+    })
+  }
+
   return {
     // State
     user,

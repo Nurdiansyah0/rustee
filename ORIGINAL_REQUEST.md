@@ -838,3 +838,41 @@ Deliver the comprehensive audit report written to `AUDIT_REPORT.md` in the repos
 - **Agent 6 — DevOps & Deployment Auditor**: Analyze Docker, CI/CD, deployment scripts, web server configs, health checks, rollback/backup strategy.
 - **Agent 7 — Product & Requirements Auditor**: Compare current implementation vs expected product behavior, identifying implemented, partial, broken, and missing features.
 - **Agent 8 — Architecture Auditor**: High-level architecture model, coupling, cohesion, bottlenecks, single points of failure.
+
+## 2026-09-15T11:30:45Z
+
+This is a single self-contained fix; keep it small and focused.
+
+Resolve the favicon rendering issues, concise browser title, and complete the production-ready UI flows for authentication, specifically the email login flow and the "Lupa Akun" (account recovery / forgot password) view in FinRep.
+
+Working directory: /home/nurdiansyah/teamwork_projects/personal_finance_pwa
+Integrity mode: development
+
+## Requirements
+
+### R1. Favicon Assets & Browser Tab Title Resolution
+- Replace the corrupted/black `favicon.ico` with a crisp multi-resolution ICO file (16x16, 32x32, 48x48) generated accurately from `favicon.svg` with emerald and mint palette and transparent background.
+- Update `index.html` document title from the truncated 57-character string to a concise, non-overflowing title (e.g. `FinRep — Dasbor Finansial`).
+- Ensure all related touch and PWA icons (`apple-touch-icon.png`, `icon-192.png`, `icon-512.png`) render the full shield and arrow logo with appropriate `#09090b` background padding.
+
+### R2. "Lupa Akun" (Account Recovery) UI Flow
+- Implement a dedicated, polished "Lupa Akun" (Forgot Password / Account Recovery) UI accessible from the authentication screen.
+- Include clear input for user's registered email, validation handling, friendly microcopy matching FinRep tone, and a seamless return link to "Masuk ke Akun Saya".
+- Include a simulated or actual submission state displaying confirmation feedback ("Tautan pemulihan akun telah dikirimkan ke email Anda") with an option to resend or back to login.
+
+### R3. Production-Ready Authentication UI Polish
+- Ensure login and recovery forms adhere to production quality: complete loading states, inline customer-safe error handling, password visibility toggle, and keyboard accessibility (Enter to submit).
+- Guarantee 100% viewport fitting on desktop screens (down to 600px height) without cut-off elements, and fluid mobile ergonomics with safe scrolling.
+
+## Acceptance Criteria
+
+### Asset Integrity & Branding
+- [ ] `favicon.ico` contains valid 16x16, 32x32, and 48x48 icons with non-black, emerald and mint brand colors identical to `favicon.svg`.
+- [ ] Browser `<title>` in `frontend/index.html` is under 30 characters and does not get truncated on standard browser tabs.
+- [ ] `npm run build` in `frontend/` succeeds without compilation errors or missing asset warnings.
+
+### Authentication & Recovery Flow
+- [ ] Users can navigate from the Login screen to "Lupa Akun" and back without broken routing or layout shifts.
+- [ ] Submitting the "Lupa Akun" form with a valid email triggers a clear confirmation feedback state.
+- [ ] The entire layout on desktop (1366x600, 1280x720, 1920x1080) fits without clipping or invisible scrollbars.
+- [ ] Touch targets and mobile viewport ergonomics are preserved on mobile screens.

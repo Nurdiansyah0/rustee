@@ -62,7 +62,7 @@
             <Sparkles class="w-4 h-4 text-amber-500" />
             <span>Analisis Presisi & Proyeksi Runway</span>
           </h3>
-          <span class="text-xs text-amber-600 font-extrabold">Invinite Pro</span>
+          <span class="text-xs text-amber-600 font-extrabold">FinRep Pro</span>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -109,7 +109,7 @@
         <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3 shadow-xs">
           <Lock class="w-5 h-5 stroke-[2]" />
         </div>
-        <h4 class="text-base font-black text-content-primary tracking-tight">Fitur Eksklusif Invinite Pro</h4>
+        <h4 class="text-base font-black text-content-primary tracking-tight">Fitur Eksklusif FinRep Pro</h4>
         <p class="text-xs text-content-secondary max-w-xs mt-1 mb-4 leading-relaxed">
           Dapatkan skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas.
         </p>

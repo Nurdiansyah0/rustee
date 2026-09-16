@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Outer shield crest -->
+  <path
+    d="M 200,56 C 236,61 296,69 328,82 C 340,165 336,252 200,376 C 64,252 60,165 72,82 C 104,69 164,61 200,56 Z"
+    fill="none"
+    stroke="#000000"
+    stroke-width="20"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Three growth chart bars -->
+  <rect x="132" y="215" width="22" height="70" rx="5" fill="#000000" />
+  <rect x="166" y="170" width="22" height="115" rx="5" fill="#000000" />
+  <rect x="200" y="125" width="22" height="160" rx="5" fill="#000000" />
+  <line x1="120" y1="290" x2="234" y2="290" stroke="#000000" stroke-width="4" stroke-linecap="round" />
+  <!-- Upward growth arrow -->
+  <path
+    d="M 104,260 C 150,250 254,156 318,92"
+    stroke="#000000"
+    stroke-width="18"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+  <path
+    d="M 348,62 L 296,78 L 314,96 L 332,114 Z"
+    fill="#000000"
+    stroke="#000000"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+</svg>

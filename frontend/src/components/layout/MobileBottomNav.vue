@@ -1,12 +1,12 @@
 <template>
-  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-card/95 backdrop-blur-lg border-t border-border-subtle px-3 pt-1.5 pb-safe shadow-floating select-none">
+  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-card/95 backdrop-blur-lg border-t border-border-subtle px-3 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-floating select-none">
     <div class="flex items-center justify-around max-w-lg mx-auto">
       <!-- Tab 1: Home -->
       <button
         type="button"
         @click="$emit('select-tab', 'home')"
         :class="[
-          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition focus-ring cursor-pointer',
+          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition active:scale-90 focus-ring cursor-pointer',
           activeTab === 'home' ? 'text-brand-default font-bold' : 'text-content-muted hover:text-content-primary'
         ]"
       >
@@ -19,7 +19,7 @@
         type="button"
         @click="$emit('select-tab', 'transactions')"
         :class="[
-          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition focus-ring cursor-pointer',
+          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition active:scale-90 focus-ring cursor-pointer',
           activeTab === 'transactions' ? 'text-brand-default font-bold' : 'text-content-muted hover:text-content-primary'
         ]"
       >
@@ -31,7 +31,7 @@
       <button
         type="button"
         @click="$emit('open-add')"
-        class="-mt-5 w-12 h-12 rounded-2xl bg-brand-default text-content-inverse flex items-center justify-center shadow-lg shadow-brand-default/40 active:scale-95 transition focus-ring cursor-pointer hover:bg-brand-emphasis"
+        class="-mt-5 w-12 h-12 rounded-2xl bg-brand-default text-content-inverse flex items-center justify-center shadow-lg shadow-brand-default/40 active:scale-90 transition focus-ring cursor-pointer hover:bg-brand-emphasis"
         aria-label="Catat Transaksi Baru"
         title="Catat Transaksi Baru"
       >
@@ -43,7 +43,7 @@
         type="button"
         @click="$emit('select-tab', 'analytics')"
         :class="[
-          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition focus-ring cursor-pointer',
+          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition active:scale-90 focus-ring cursor-pointer',
           activeTab === 'analytics' ? 'text-brand-default font-bold' : 'text-content-muted hover:text-content-primary'
         ]"
       >
@@ -56,7 +56,7 @@
         type="button"
         @click="$emit('select-tab', 'profile')"
         :class="[
-          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition focus-ring cursor-pointer',
+          'flex flex-col items-center justify-center py-1 px-2.5 rounded-xl min-w-[56px] min-h-[44px] transition active:scale-90 focus-ring cursor-pointer',
           activeTab === 'profile' ? 'text-brand-default font-bold' : 'text-content-muted hover:text-content-primary'
         ]"
       >

@@ -26,7 +26,7 @@
         </span>
         <span v-else-if="isPremiumActive" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-gradient-to-r from-amber-500/10 to-emerald-500/10 text-brand-default border-brand-border">
           <Sparkles class="w-3 h-3 text-amber-500" />
-          <span>Invinite Pro Aktif</span>
+          <span>FinRep Pro Aktif</span>
         </span>
         <span v-else-if="subscriptionStore.hasUsedTrial" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-surface-subtle text-content-muted border-border-subtle">
           <span>Uji Coba Selesai</span>
@@ -48,7 +48,7 @@
           </span>
         </div>
         <p class="text-content-secondary leading-relaxed">
-          Anda sedang menikmati seluruh fitur Invinite Pro secara gratis. Jika masa uji coba berakhir, akun Anda otomatis kembali ke Free Tier <strong class="text-content-primary">tanpa kehilangan data apapun</strong>.
+          Anda sedang menikmati seluruh fitur FinRep Pro secara gratis. Jika masa uji coba berakhir, akun Anda otomatis kembali ke Free Tier <strong class="text-content-primary">tanpa kehilangan data apapun</strong>.
         </p>
         <button
           type="button"
@@ -87,14 +87,14 @@
           @click="$emit('open-upgrade')"
           class="w-full py-2.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-md shadow-brand-default/20 transition cursor-pointer text-center"
         >
-          Lanjutkan ke Invinite Pro (Rp 5.000 via DANA)
+          Lanjutkan ke FinRep Pro (Rp 5.000 via DANA)
         </button>
       </div>
 
       <!-- State 4: Default Free Tier -->
       <div v-else class="p-5 bg-surface-subtle rounded-xl border border-border-subtle text-xs space-y-3">
         <div>
-          <div class="font-bold text-sm text-content-primary">Buka Potensi Penuh dengan Invinite Pro</div>
+          <div class="font-bold text-sm text-content-primary">Buka Potensi Penuh dengan FinRep Pro</div>
           <div class="mt-1 text-content-secondary leading-relaxed">
             Mulai uji coba 7 hari gratis atau berlangganan hanya Rp 5.000 / bulan untuk analitik presisi perbankan dan proyeksi masa depan.
           </div>
