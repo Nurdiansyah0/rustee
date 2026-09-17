@@ -158,7 +158,7 @@ pub async fn index_html_handler() -> impl IntoResponse {
         );
         headers.insert(
             CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=3600"),
+            HeaderValue::from_static("no-cache, no-store, must-revalidate"),
         );
         return (StatusCode::OK, headers, content);
     }
@@ -183,9 +183,30 @@ pub async fn index_html_handler() -> impl IntoResponse {
     );
     headers.insert(
         CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=3600"),
+        HeaderValue::from_static("no-cache, no-store, must-revalidate"),
     );
     (StatusCode::OK, headers, html.to_string())
+}
+
+pub async fn register_sw_handler() -> impl IntoResponse {
+    let dist_reg_sw = std::env::var("WEB_DIST")
+        .map(|d| format!("{}/registerSW.js", d))
+        .unwrap_or_else(|_| "dist/registerSW.js".to_string());
+
+    let content = tokio::fs::read_to_string(&dist_reg_sw).await.unwrap_or_else(|_| {
+        "if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js',{scope:'/'})})}".to_string()
+    });
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/javascript"),
+    );
+    headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("no-cache, no-store, must-revalidate"),
+    );
+    (StatusCode::OK, headers, content)
 }
 
 pub fn health_router(pool: SqlitePool) -> Router {
@@ -193,7 +214,10 @@ pub fn health_router(pool: SqlitePool) -> Router {
         .route("/health", get(health_handler))
         .route("/ready", get(ready_handler))
         .route("/manifest.json", get(manifest_handler))
+        .route("/manifest.webmanifest", get(manifest_handler))
         .route("/service-worker.js", get(service_worker_handler))
+        .route("/sw.js", get(service_worker_handler))
+        .route("/registerSW.js", get(register_sw_handler))
         .route("/", get(index_html_handler))
         .route("/index.html", get(index_html_handler))
         .with_state(pool)

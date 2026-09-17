@@ -53,7 +53,7 @@
               Mulai langkah pertamamu. Bangun finansial yang lebih tertata.
             </template>
             <template v-else>
-              Selamat datang kembali. Mari lihat perkembangan finansialmu hari ini.
+              Senang melihatmu kembali. Siap cek progres keuanganmu hari ini?
             </template>
           </h2>
           <p class="text-xs text-content-secondary mt-0.5 leading-normal">

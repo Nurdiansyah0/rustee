@@ -61,6 +61,9 @@ export default defineConfig({
       },
       workbox: {
         importScripts: ['/push-worker.js'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // Strict NetworkOnly strategy for all financial API endpoints
@@ -76,12 +79,20 @@ export default defineConfig({
             }
           },
           {
-            // Cache static assets and HTML shell
+            // Always fetch HTML documents over network first to guarantee latest releases
+            urlPattern: ({ request }) => request.destination === 'document',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3
+            }
+          },
+          {
+            // Cache versioned static assets (CSS, JS chunks, images)
             urlPattern: ({ request }) =>
               request.destination === 'style' ||
               request.destination === 'script' ||
-              request.destination === 'image' ||
-              request.destination === 'document',
+              request.destination === 'image',
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'app-shell-cache',
