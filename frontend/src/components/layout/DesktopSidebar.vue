@@ -62,11 +62,11 @@
             <span>Masa Uji Coba</span>
           </div>
           <span class="text-[10px] font-extrabold text-amber-500 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-full tabular-nums">
-            {{ subscriptionStore.daysRemaining ?? 7 }} Hari
+            {{ subscriptionStore.daysRemaining ?? 90 }} Hari
           </span>
         </div>
         <p class="text-[10px] text-content-secondary mt-1 leading-snug">
-          Fitur Pro aktif. Kunci langganan Rp5k/bln sebelum masa uji coba berakhir.
+          Fitur Pro aktif. Kunci langganan Rp10k/bln sebelum masa uji coba berakhir.
         </p>
       </button>
 
@@ -83,7 +83,7 @@
             <span>FinRep Pro</span>
           </div>
           <span class="text-[10px] font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded">
-            Rp5k/bln
+            Rp10k/bln
           </span>
         </div>
         <p class="text-[10px] text-content-secondary mt-0.5 leading-snug">

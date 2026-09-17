@@ -44,7 +44,7 @@
             <span>Masa Uji Coba Pro Aktif</span>
           </div>
           <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px]">
-            {{ subscriptionStore.daysRemaining ?? 7 }} Hari Tersisa
+            {{ subscriptionStore.daysRemaining ?? 90 }} Hari Tersisa
           </span>
         </div>
         <p class="text-content-secondary leading-relaxed">
@@ -56,7 +56,7 @@
           class="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-md transition cursor-pointer text-center text-xs flex items-center justify-center gap-1.5 mt-1"
         >
           <Sparkles class="w-3.5 h-3.5" />
-          <span>Kunci Akses Pro Tetap (Rp 5.000 / bln via DANA)</span>
+          <span>Kunci Akses Pro Tetap (Rp 10.000 / bln via DANA)</span>
         </button>
       </div>
 
@@ -79,7 +79,7 @@
             <span>Masa Uji Coba Selesai — Data 100% Aman</span>
           </div>
           <div class="mt-1 text-content-secondary leading-relaxed">
-            Seluruh data dompet, akun, dan catatan transaksi Anda tetap aman tersimpan tanpa risiko hilang. Lanjutkan akses analitik pro dengan berlangganan Rp 5.000 / bulan.
+            Seluruh data dompet, akun, dan catatan transaksi Anda tetap aman tersimpan tanpa risiko hilang. Lanjutkan akses analitik pro dengan berlangganan mulai Rp 10.000 / bulan.
           </div>
         </div>
         <button
@@ -87,7 +87,7 @@
           @click="$emit('open-upgrade')"
           class="w-full py-2.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-md shadow-brand-default/20 transition cursor-pointer text-center"
         >
-          Lanjutkan ke FinRep Pro (Rp 5.000 via DANA)
+          Lanjutkan ke FinRep Pro (Mulai Rp 10.000 via DANA)
         </button>
       </div>
 
@@ -96,7 +96,7 @@
         <div>
           <div class="font-bold text-sm text-content-primary">Buka Potensi Penuh dengan FinRep Pro</div>
           <div class="mt-1 text-content-secondary leading-relaxed">
-            Mulai uji coba 7 hari gratis atau berlangganan hanya Rp 5.000 / bulan untuk analitik presisi perbankan dan proyeksi masa depan.
+            Mulai uji coba 3 bulan gratis atau berlangganan mulai Rp 10.000 / bulan untuk analitik presisi perbankan dan proyeksi masa depan.
           </div>
         </div>
         <button
@@ -104,7 +104,7 @@
           @click="$emit('open-upgrade')"
           class="w-full py-2.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-md shadow-brand-default/20 transition cursor-pointer text-center"
         >
-          Mulai Uji Coba 7 Hari Gratis / Upgrade (Rp 5.000)
+          Mulai Uji Coba 3 Bulan Gratis / Upgrade (Rp 10.000)
         </button>
       </div>
     </div>

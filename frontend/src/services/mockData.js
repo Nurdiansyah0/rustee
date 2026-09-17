@@ -487,8 +487,8 @@ export function handleMockApiRequest(path, options = {}) {
     };
   }
 
-  // 14. Subscriptions: Trial Activation
-  if (pathname === '/api/v1/subscriptions/trial' && method === 'POST') {
+  // 14. Subscriptions: Trial Activation (Supports both /subscriptions/trial and /subscriptions/trial/activate)
+  if ((pathname === '/api/v1/subscriptions/trial' || pathname === '/api/v1/subscriptions/trial/activate' || pathname === '/api/v1/subscription/trial') && method === 'POST') {
     try {
       const cached = JSON.parse(localStorage.getItem('invinite_auth_user') || '{}');
       cached.subscription_tier = 'premium';
@@ -505,9 +505,23 @@ export function handleMockApiRequest(path, options = {}) {
     return {
       success: true,
       tier: 'premium',
+      status: 'trialing',
       trial_active: true,
-      days_remaining: 7,
-      message: 'Masa uji coba FinRep Pro 7 hari aktif!'
+      days_remaining: 90,
+      message: 'Masa uji coba FinRep Pro 3 bulan (90 hari) aktif!'
+    };
+  }
+
+  // 15. Cursor Delta Synchronization (§25, §26)
+  if (pathname === '/api/v1/sync' && method === 'GET') {
+    const cursor = parseInt(searchParams.get('cursor') || '0', 10);
+    return {
+      cursor: cursor + 1,
+      transactions: [],
+      accounts: [],
+      categories: [],
+      has_more: false,
+      timestamp: new Date().toISOString()
     };
   }
 

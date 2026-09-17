@@ -355,7 +355,7 @@ import {
   MailCheck
 } from 'lucide-vue-next'
 
-const emit = defineEmits(['authenticated'])
+const emit = defineEmits(['authenticated', 'registered'])
 
 const authStore = useAuthStore()
 const authMode = ref('login') // 'login' | 'register' | 'forgot'
@@ -704,10 +704,12 @@ async function handleSubmit() {
   try {
     if (isRegister.value) {
       await authStore.register((form.value.name || '').trim(), email, password)
+      emit('registered', { name: form.value.name, email })
+      emit('authenticated', { isNewUser: true, name: form.value.name })
     } else {
       await authStore.login(email, password)
+      emit('authenticated', { isNewUser: false })
     }
-    emit('authenticated')
   } catch (err) {
     errorMessage.value = sanitizeAuthError(err)
   } finally {

@@ -26,6 +26,11 @@ pnpm-debug.log*
 .vite/
 frontend/.vite/
 
+# Rust Build Artifacts
+target/
+**/*.rs.bk
+*.rs.bk
+
 # SQLite Databases & Ephemeral State
 data/*.db
 data/*.db-shm
@@ -44,6 +49,8 @@ data/*.sqlite-wal
 logs/
 *.log
 /tmp/
+__pycache__/
+*.py[cod]
 
 # OS & Editor Metadata
 .DS_Store

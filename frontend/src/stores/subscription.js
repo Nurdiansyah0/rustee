@@ -7,7 +7,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   // State
   const tier = ref('free')
   const status = ref('free')
-  const priceMonthly = ref(5000)
+  const priceMonthly = ref(10000)
+  const priceAnnual = ref(110000)
   const features = ref([])
   const isUpgradeModalOpen = ref(false)
   const targetLockedFeature = ref(null)
@@ -26,7 +27,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     return features.value.includes(feature)
   }
 
-  const formattedPrice = computed(() => 'Rp 5.000 / bulan')
+  const formattedPrice = computed(() => 'Rp 10.000 / bulan')
+  const formattedAnnualPrice = computed(() => 'Rp 110.000 / tahun')
 
   // Actions
   async function fetchSubscriptionStatus() {
@@ -34,7 +36,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       const res = await api.getSubscriptionStatus()
       tier.value = res?.tier || 'free'
       status.value = res?.status || 'free'
-      priceMonthly.value = res?.price_monthly ?? (res?.tier === 'premium' && res?.status !== 'trialing' ? 5000 : 0)
+      priceMonthly.value = res?.price_monthly ?? (res?.tier === 'premium' && res?.status !== 'trialing' ? 10000 : 0)
+      priceAnnual.value = res?.price_annual ?? 110000
       features.value = res?.features || []
       daysRemaining.value = res?.days_remaining ?? null
       currentPeriodEnd.value = res?.current_period_end ?? null
@@ -57,7 +60,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     checkoutError.value = null
   }
 
-  async function initiateCheckout(provider = 'dana') {
+  async function initiateCheckout(provider = 'dana', plan = 'premium_monthly') {
     checkoutLoading.value = true
     checkoutError.value = null
     try {
@@ -69,7 +72,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
         credentials: 'include',
         body: JSON.stringify({
           provider: provider || 'dana',
-          plan_id: 'premium_monthly',
+          plan: plan || 'premium_monthly',
+          plan_id: plan || 'premium_monthly',
         }),
       })
 
@@ -117,13 +121,36 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     checkoutLoading.value = true
     checkoutError.value = null
     try {
-      const res = await fetch('/api/v1/subscription/trial', {
+      // Try /api/v1/subscriptions/trial/activate first (per v3.1.0 contract)
+      let res = await fetch('/api/v1/subscriptions/trial/activate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
+        body: JSON.stringify({}),
       })
+
+      // Fallback to /api/v1/subscriptions/trial or /api/v1/subscription/trial if 404
+      if (res.status === 404) {
+        res = await fetch('/api/v1/subscriptions/trial', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        })
+      }
+
+      if (res.status === 404) {
+        res = await fetch('/api/v1/subscription/trial', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        })
+      }
 
       if (!res.ok) {
         let errBody = {}
@@ -136,7 +163,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       const data = await res.json()
       tier.value = data?.tier || 'premium'
       status.value = data?.status || 'trialing'
-      daysRemaining.value = data?.days_remaining ?? 7
+      daysRemaining.value = data?.days_remaining ?? 90
 
       await fetchSubscriptionStatus()
 
@@ -163,7 +190,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   function $reset() {
     tier.value = 'free'
     status.value = 'free'
-    priceMonthly.value = 5000
+    priceMonthly.value = 10000
+    priceAnnual.value = 110000
     features.value = []
     isUpgradeModalOpen.value = false
     targetLockedFeature.value = null
@@ -178,6 +206,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     tier,
     status,
     priceMonthly,
+    priceAnnual,
     features,
     isUpgradeModalOpen,
     targetLockedFeature,
@@ -191,6 +220,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     hasUsedTrial,
     canAccess,
     formattedPrice,
+    formattedAnnualPrice,
     // Actions
     fetchSubscriptionStatus,
     openUpgradeModal,

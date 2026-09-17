@@ -102,26 +102,14 @@
       </div>
 
       <!-- Frosted Lock Overlay for Free Tier Users -->
-      <div
+      <FeatureLockOverlay
         v-if="userTier !== 'premium'"
-        class="absolute inset-0 bg-surface-card/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-10 select-none"
-      >
-        <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3 shadow-xs">
-          <Lock class="w-5 h-5 stroke-[2]" />
-        </div>
-        <h4 class="text-base font-black text-content-primary tracking-tight">Fitur Eksklusif FinRep Pro</h4>
-        <p class="text-xs text-content-secondary max-w-xs mt-1 mb-4 leading-relaxed">
-          Dapatkan skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas.
-        </p>
-        <button
-          type="button"
-          @click="$emit('open-upgrade')"
-          class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-default hover:bg-brand-emphasis text-white font-bold text-xs rounded-xl shadow-lg shadow-brand-default/30 transition cursor-pointer active:scale-95"
-        >
-          <Sparkles class="w-3.5 h-3.5 text-amber-300" />
-          <span>Buka Fitur Pro (Rp 5.000 / bln)</span>
-        </button>
-      </div>
+        feature-name="analytics.advanced"
+        title="Fitur Eksklusif FinRep Pro"
+        description="Dapatkan skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas."
+        button-text="Buka Fitur Pro (Rp 10.000 / bln)"
+        @open-upgrade="$emit('open-upgrade')"
+      />
     </div>
   </div>
 </template>
@@ -131,6 +119,7 @@ import { ref, onMounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
 import { useWalletStore } from '@/stores/wallets'
+import FeatureLockOverlay from '@/components/FeatureLockOverlay.vue'
 import { Sparkles, ShieldCheck, Lock } from 'lucide-vue-next'
 
 const walletStore = useWalletStore()

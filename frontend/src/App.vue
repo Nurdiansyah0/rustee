@@ -103,6 +103,14 @@
       @close="subscriptionStore.closeUpgradeModal()"
       @success="handleUpgradeSuccess"
     />
+
+    <!-- Progressive Personalization Onboarding Modal (§3, §4, §6) -->
+    <ProgressiveOnboardingModal
+      :is-open="showOnboardingModal"
+      :initial-name="onboardingInitialName"
+      @completed="handleOnboardingCompleted"
+      @close="showOnboardingModal = false"
+    />
   </div>
 </template>
 
@@ -114,6 +122,8 @@ import { useCategoryStore } from '@/stores/categories'
 import { useTransactionStore } from '@/stores/transactions'
 import { useAnalyticsStore } from '@/stores/analytics'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { useRealtimeStore } from '@/stores/realtime'
+import { syncService } from '@/services/sync'
 
 import DesktopSidebar from '@/components/layout/DesktopSidebar.vue'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
@@ -124,8 +134,9 @@ import HomeView from '@/views/HomeView.vue'
 import TransactionsView from '@/views/TransactionsView.vue'
 import AnalyticsView from '@/views/AnalyticsView.vue'
 import ProfileView from '@/views/ProfileView.vue'
-import AddTransactionModal from '@/views/AddTransactionModal.vue'
+import AddTransactionModal from '@/components/AddTransactionModal.vue'
 import UpgradeModal from '@/components/UpgradeModal.vue'
+import ProgressiveOnboardingModal from '@/components/ProgressiveOnboardingModal.vue'
 
 const authStore = useAuthStore()
 const walletStore = useWalletStore()
@@ -133,9 +144,12 @@ const categoryStore = useCategoryStore()
 const transactionStore = useTransactionStore()
 const analyticsStore = useAnalyticsStore()
 const subscriptionStore = useSubscriptionStore()
+const realtimeStore = useRealtimeStore()
 
 const currentTab = ref('home')
 const showAddModal = ref(false)
+const showOnboardingModal = ref(false)
+const onboardingInitialName = ref('')
 const transactionsViewRef = ref(null)
 const mainScrollRef = ref(null)
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -196,14 +210,30 @@ function cleanupAuthUrlParams() {
   } catch {}
 }
 
-async function handleAuthenticated() {
+async function handleAuthenticated(authEvent = {}) {
   cleanupAuthUrlParams()
+
+  // Initialize Foreground WebSocket connection (§25, §27)
+  realtimeStore.initRealtime()
+
+  // Check if onboarding flow should be presented for newly registered user (§3, §4, §6)
+  if (authEvent?.isNewUser) {
+    onboardingInitialName.value = authEvent.name || authStore.user?.display_name || authStore.user?.name || ''
+    showOnboardingModal.value = true
+  }
+
   await Promise.allSettled([
     walletStore.fetchWallets(),
     categoryStore.fetchCategories(),
     analyticsStore.fetchDashboard(),
-    subscriptionStore.fetchSubscriptionStatus()
+    subscriptionStore.fetchSubscriptionStatus(),
+    syncService.reconcileOnReconnect()
   ])
+}
+
+async function handleOnboardingCompleted() {
+  showOnboardingModal.value = false
+  await handleAuthenticated()
 }
 
 // Reactively respond to cross-tab multi-session login or logout
@@ -215,6 +245,8 @@ watch(
       handleAuthenticated()
     } else if (!isAuth && wasAuth) {
       currentTab.value = 'home'
+      showOnboardingModal.value = false
+      realtimeStore.cleanupRealtime()
     }
   }
 )
@@ -238,6 +270,8 @@ async function handleUpgradeSuccess() {
 }
 
 function handleLogout() {
+  realtimeStore.cleanupRealtime()
+  showOnboardingModal.value = false
   authStore.logout()
   currentTab.value = 'home'
 }
@@ -251,6 +285,8 @@ async function handleOnline() {
   if (authStore.isAuthenticated) {
     const ok = await authStore.checkAuth()
     if (ok) {
+      // Reconcile pending offline mutations and cursor deltas on reconnect (§25, §26)
+      await syncService.reconcileOnReconnect()
       await handleAuthenticated()
     }
   }
@@ -271,5 +307,6 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('online', handleOnline)
   window.removeEventListener('offline', updateOnlineStatus)
+  realtimeStore.cleanupRealtime()
 })
 </script>

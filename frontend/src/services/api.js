@@ -156,13 +156,19 @@ export const api = {
 
   // Subscription
   getSubscriptionStatus: () => request('/api/v1/subscription'),
-  createCheckout: (provider) =>
-    request('/api/v1/subscriptions/checkout', {
+  createCheckout: (data) => {
+    const payload = typeof data === 'string' ? { provider: data } : data;
+    return request('/api/v1/subscriptions/checkout', {
       method: 'POST',
-      body: JSON.stringify({ provider }),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
   activateTrial: () =>
-    request('/api/v1/subscriptions/trial', {
+    request('/api/v1/subscriptions/trial/activate', {
       method: 'POST',
     }),
+
+  // Cursor Delta Sync (§25, §26)
+  getSync: (cursor = 0) =>
+    request(`/api/v1/sync?cursor=${encodeURIComponent(cursor)}`),
 };
