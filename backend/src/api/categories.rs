@@ -20,6 +20,9 @@ pub struct CreateCategoryRequest {
     pub category_type: String,
     pub icon: Option<String>,
     pub color: Option<String>,
+    pub display_name: Option<String>,
+    pub normalized_name: Option<String>,
+    pub metadata: Option<String>,
 }
 
 pub async fn list_categories(
@@ -51,14 +54,26 @@ pub async fn create_category(
         ));
     }
 
+    let name_trimmed = payload.name.trim().to_string();
+    let display_name = payload
+        .display_name
+        .map(|d| d.trim().to_string())
+        .or_else(|| Some(name_trimmed.clone()));
+    let normalized_name = payload
+        .normalized_name
+        .or_else(|| Some(name_trimmed.to_lowercase()));
+
     let new_cat = NewCategory {
         id: uuid::Uuid::new_v4().to_string(),
         user_id: Some(user.user_id),
-        name: payload.name.trim().to_string(),
+        name: name_trimmed,
         category_type: payload.category_type,
         icon: payload.icon,
         color: payload.color,
         is_system: false,
+        display_name,
+        normalized_name,
+        metadata: payload.metadata,
     };
 
     let cat = state.category_repo.create(&new_cat).await?;

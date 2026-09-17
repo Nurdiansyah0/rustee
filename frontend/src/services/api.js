@@ -168,6 +168,19 @@ export const api = {
       method: 'POST',
     }),
 
+  // Personalization & Onboarding (§4, §5)
+  getPersonalization: () => request('/api/v1/users/personalization'),
+  updatePersonalization: (data) =>
+    request('/api/v1/users/personalization', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  submitOnboarding: (data) =>
+    request('/api/v1/users/onboarding', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Cursor Delta Sync (§25, §26)
   getSync: (cursor = 0) =>
     request(`/api/v1/sync?cursor=${encodeURIComponent(cursor)}`),

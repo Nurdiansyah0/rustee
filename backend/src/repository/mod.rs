@@ -7,6 +7,7 @@ pub mod idempotency_repo;
 pub mod ingestion_repo;
 pub mod subscription_repo;
 pub mod transaction_repo;
+pub mod user_preferences_repo;
 pub mod user_repo;
 
 pub use account_repo::{Account, AccountRepository, NewAccount, SqlxAccountRepository};
@@ -30,5 +31,9 @@ pub use subscription_repo::{
 pub use transaction_repo::{
     CashFlowSummary, NewTransaction, SqlxTransactionRepository, TransactionFilter,
     TransactionRecord, TransactionRepository,
+};
+pub use user_preferences_repo::{
+    SqlxUserPreferencesRepository, UpdateUserPreferences, UserPreferences,
+    UserPreferencesRepository,
 };
 pub use user_repo::{NewUser, SqlxUserRepository, User, UserRepository};

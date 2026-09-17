@@ -8,6 +8,9 @@
 
 set -euo pipefail
 
+export NO_PROXY="localhost,127.0.0.1"
+export no_proxy="localhost,127.0.0.1"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${PORT:-8089}"
 BASE_URL="${BASE_URL:-}"
@@ -58,12 +61,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Detect running backend or launch reference server
+# Detect running reference server or launch reference server
 if [[ -z "${BASE_URL}" ]]; then
-    if curl -s -f -m 1 "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
-        BASE_URL="http://127.0.0.1:8080"
-        echo "# Detected running backend on ${BASE_URL}" >&2
-    elif curl -s -f -m 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+    if curl -s -f -m 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
         BASE_URL="http://127.0.0.1:${PORT}"
         echo "# Detected running reference server on ${BASE_URL}" >&2
     else

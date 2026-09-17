@@ -910,6 +910,7 @@ async fn test_production_router_create_app_enforces_rate_limiter() {
         },
         account_repo,
         category_repo,
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
         ledger_service,
         payment_service,
         pool,

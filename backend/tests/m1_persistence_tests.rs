@@ -42,7 +42,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     assert!(pragmas.foreign_keys);
     assert_eq!(pragmas.synchronous, 1); // 1 = NORMAL
 
-    // 2. Verify all 14 tables exist (10 baseline + 4 v3.1.0 support tables)
+    // 2. Verify all 15 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences)
     let table_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%';"
     )
@@ -50,7 +50,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     .await
     .expect("Failed to query tables");
 
-    assert_eq!(table_count, 14, "Expected 14 domain tables after v3.1.0 migration");
+    assert_eq!(table_count, 15, "Expected 15 domain tables after v3.1.0 migration");
 
     // 3. Verify mandatory composite and acceleration indexes
     let required_indexes = [
@@ -76,6 +76,7 @@ async fn test_pool_pragmas_and_migration_execution() {
         "idx_ingestion_user_status",
         "idx_subscription_events_user",
         "idx_device_installations_user",
+        "idx_user_preferences_user",
     ];
 
     for idx_name in required_indexes {
@@ -449,6 +450,9 @@ async fn test_category_system_protection_and_soft_delete() {
             icon: Some("briefcase".to_string()),
             color: Some("#00aa00".to_string()),
             is_system: true,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Failed to create system category");
@@ -463,6 +467,9 @@ async fn test_category_system_protection_and_soft_delete() {
             icon: None,
             color: None,
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Failed to create user category");
@@ -477,6 +484,9 @@ async fn test_category_system_protection_and_soft_delete() {
             icon: None,
             color: None,
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Failed to create user category");

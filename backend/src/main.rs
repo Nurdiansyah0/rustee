@@ -148,10 +148,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         secure_cookie,
     };
 
+    let user_preferences_repo = Arc::new(
+        backend::repository::SqlxUserPreferencesRepository::new(pool.clone()),
+    );
+
     let app_state = AppState {
         auth_state,
         account_repo,
         category_repo,
+        user_preferences_repo,
         ledger_service,
         payment_service,
         pool,

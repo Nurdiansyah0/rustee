@@ -137,6 +137,7 @@ async fn setup_harness() -> TestHarness {
         auth_state,
         account_repo: account_repo.clone(),
         category_repo: category_repo.clone(),
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
         ledger_service,
         payment_service,
         pool: pool.clone(),
@@ -244,6 +245,9 @@ async fn setup_harness() -> TestHarness {
             icon: None,
             color: None,
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("create category");

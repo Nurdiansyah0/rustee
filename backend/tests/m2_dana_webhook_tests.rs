@@ -126,6 +126,7 @@ async fn setup_app() -> TestContext {
         auth_state,
         account_repo,
         category_repo,
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
         ledger_service,
         payment_service,
         pool: pool.clone(),
@@ -275,7 +276,7 @@ async fn test_dana_checkout_session_generation() {
     assert_eq!(json_annual["provider"], "dana");
     assert_eq!(json_annual["plan_id"], "premium_annual");
 
-    // 2. Midtrans checkout backward compatibility
+    // 2. Non-DANA checkout provider (e.g., midtrans) rejected with HTTP 400 (DANA exclusivity)
     let req_mid = Request::builder()
         .method("POST")
         .uri("/api/v1/subscriptions/checkout")
@@ -285,14 +286,7 @@ async fn test_dana_checkout_session_generation() {
         .unwrap();
 
     let resp_mid = ctx.app.clone().oneshot(req_mid).await.unwrap();
-    assert_eq!(resp_mid.status(), StatusCode::OK);
-    let json_mid: Value =
-        serde_json::from_slice(&resp_mid.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(json_mid["provider"], "midtrans");
-    assert!(json_mid["checkout_url"]
-        .as_str()
-        .unwrap()
-        .contains("payment.nurdiansyahlabs.com/midtrans"));
+    assert_eq!(resp_mid.status(), StatusCode::BAD_REQUEST);
 
     // 3. Unsupported provider rejected
     let req_bad = Request::builder()

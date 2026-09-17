@@ -284,47 +284,6 @@
           </div>
         </form>
 
-        <!-- Pilihan Akun & Paket Demo (Sleek, Compact, High-Converting) -->
-        <div v-if="!isForgot" class="pt-2 border-t border-border-subtle space-y-1.5">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-content-secondary">
-              Ingin lihat-lihat dulu? Coba akun demo tanpa daftar:
-            </span>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <!-- Akun Pribadi -->
-            <button
-              type="button"
-              @click="fillDemo('demo@example.com', 'Password123!')"
-              class="p-2.5 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex items-center justify-between group"
-            >
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-content-primary group-hover:text-brand-default transition truncate">
-                  Akun Pribadi
-                </div>
-                <div class="text-[10px] text-content-muted truncate mt-0.5">Keuangan harian tertata</div>
-              </div>
-              <div class="text-[10px] font-bold text-brand-default shrink-0 ml-2">Coba &rarr;</div>
-            </button>
-
-            <!-- FinRep Pro -->
-            <button
-              type="button"
-              @click="fillDemo('premium@example.com', 'Password123!')"
-              class="p-2.5 rounded-xl bg-surface-subtle hover:bg-border-default border border-border-subtle text-left transition cursor-pointer flex items-center justify-between group"
-            >
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-brand-default flex items-center gap-1 truncate">
-                  <span>FinRep Pro</span>
-                  <Sparkles class="w-3 h-3 text-amber-500 shrink-0" />
-                </div>
-                <div class="text-[10px] text-content-muted truncate mt-0.5">Proyeksi laba presisi</div>
-              </div>
-              <div class="text-[10px] font-bold text-brand-default shrink-0 ml-2">Coba &rarr;</div>
-            </button>
-          </div>
-        </div>
 
         <!-- Footer (by Invinite.id) -->
         <div class="flex items-center justify-center lg:justify-end gap-2 pt-2.5 text-xs text-content-muted border-t border-border-subtle mt-1 shrink-0">
@@ -349,7 +308,6 @@ import LiveDashboardPreview from './LiveDashboardPreview.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   AlertCircle,
-  Sparkles,
   ArrowLeft,
   CheckCircle2,
   MailCheck
@@ -460,15 +418,6 @@ function toggleMode() {
 
 function openForgotPassword() {
   setMode('forgot', true)
-}
-
-async function fillDemo(email, password) {
-  setMode('login', false)
-  form.value.email = email
-  form.value.password = password
-  errorMessage.value = ''
-  await nextTick()
-  await handleSubmit()
 }
 
 function validateEmail(email) {

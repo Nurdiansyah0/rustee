@@ -555,48 +555,8 @@ impl PaymentService {
                     plan_id: plan.plan_id().to_string(),
                 })
             }
-            "midtrans" => {
-                let order_id = format!("SUB-{}-{}", user_id_short, ts);
-                let reference_no = format!(
-                    "REF-MID-{}",
-                    uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_uppercase()
-                );
-                let checkout_url = format!(
-                    "https://payment.nurdiansyahlabs.com/midtrans/pay/{}",
-                    order_id
-                );
-                Ok(CheckoutSession {
-                    order_id,
-                    checkout_url,
-                    reference_no,
-                    amount,
-                    currency: "IDR".to_string(),
-                    provider: "midtrans".to_string(),
-                    plan_id: plan.plan_id().to_string(),
-                })
-            }
-            "xendit" => {
-                let order_id = format!("SUB-{}-{}", user_id_short, ts);
-                let reference_no = format!(
-                    "REF-XEN-{}",
-                    uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_uppercase()
-                );
-                let checkout_url = format!(
-                    "https://payment.nurdiansyahlabs.com/xendit/pay/{}",
-                    order_id
-                );
-                Ok(CheckoutSession {
-                    order_id,
-                    checkout_url,
-                    reference_no,
-                    amount,
-                    currency: "IDR".to_string(),
-                    provider: "xendit".to_string(),
-                    plan_id: plan.plan_id().to_string(),
-                })
-            }
             other => Err(PaymentError::UnsupportedProvider(format!(
-                "Unsupported payment provider '{}'.",
+                "Unsupported payment provider '{}'. DANA is the exclusive payment provider.",
                 other
             ))),
         }

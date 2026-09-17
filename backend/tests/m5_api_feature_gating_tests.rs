@@ -118,6 +118,7 @@ mod m5_api_tests {
             auth_state,
             account_repo,
             category_repo,
+            user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
             ledger_service,
             payment_service,
             pool: pool.clone(),

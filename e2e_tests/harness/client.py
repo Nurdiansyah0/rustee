@@ -15,6 +15,9 @@ import hmac
 import hashlib
 from typing import Dict, Any, Optional, Tuple, List
 
+os.environ["no_proxy"] = "localhost,127.0.0.1"
+os.environ["NO_PROXY"] = "localhost,127.0.0.1"
+
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from crypto_keys import sign_dana_payload
 

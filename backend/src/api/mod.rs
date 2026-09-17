@@ -7,6 +7,7 @@ pub mod health;
 pub mod middleware;
 pub mod router;
 pub mod transactions;
+pub mod users;
 pub mod webhooks;
 
 pub use accounts::accounts_router;
@@ -17,12 +18,16 @@ pub use health::health_router;
 pub use middleware::*;
 pub use router::register_ingestion_routes;
 pub use transactions::transactions_router;
+pub use users::users_router;
 pub use webhooks::webhooks_router;
 
 use axum::Router;
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use crate::repository::{account_repo::AccountRepository, category_repo::CategoryRepository};
+use crate::repository::{
+    account_repo::AccountRepository, category_repo::CategoryRepository,
+    user_preferences_repo::UserPreferencesRepository,
+};
 use crate::service::{
     jwt::JwtEngine, ledger_service::LedgerService, payment_service::PaymentService,
 };
@@ -32,6 +37,7 @@ pub struct AppState {
     pub auth_state: AuthState,
     pub account_repo: Arc<dyn AccountRepository>,
     pub category_repo: Arc<dyn CategoryRepository>,
+    pub user_preferences_repo: Arc<dyn UserPreferencesRepository>,
     pub ledger_service: Arc<LedgerService>,
     pub payment_service: Arc<PaymentService>,
     pub pool: SqlitePool,
@@ -93,6 +99,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/accounts", accounts::accounts_router())
         .nest("/categories", categories::categories_router())
         .nest("/transactions", transactions::transactions_router())
+        .nest("/users", users::users_router())
         .merge(analytics::analytics_router())
         .merge(webhooks::webhooks_router());
 

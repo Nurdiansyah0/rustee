@@ -223,6 +223,9 @@ async fn test_adversarial_category_system_protection_and_isolation() {
             icon: Some("utensils".to_string()),
             color: Some("#ff5500".to_string()),
             is_system: true,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Create system category failed");
@@ -237,6 +240,9 @@ async fn test_adversarial_category_system_protection_and_isolation() {
             icon: Some("laptop".to_string()),
             color: Some("#00bb22".to_string()),
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Create Alpha category failed");
@@ -250,6 +256,9 @@ async fn test_adversarial_category_system_protection_and_isolation() {
             icon: Some("lock".to_string()),
             color: Some("#990000".to_string()),
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .expect("Create Bravo category failed");
@@ -555,6 +564,9 @@ async fn test_adversarial_foreign_key_and_cascade_boundaries() {
         icon: None,
         color: None,
         is_system: false,
+        display_name: None,
+        normalized_name: None,
+        metadata: None,
     };
     let err_cat = category_repo.create(&orphan_category).await.unwrap_err();
     assert!(matches!(err_cat, DbError::ForeignKeyViolation(_)));
@@ -583,6 +595,9 @@ async fn test_adversarial_foreign_key_and_cascade_boundaries() {
             icon: None,
             color: None,
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .unwrap();
@@ -853,6 +868,9 @@ async fn test_soft_deleted_category_transaction_ledger_integrity() {
             icon: None,
             color: None,
             is_system: false,
+            display_name: None,
+            normalized_name: None,
+            metadata: None,
         })
         .await
         .unwrap();

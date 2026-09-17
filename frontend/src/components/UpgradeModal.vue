@@ -173,68 +173,34 @@
         <div class="flex-grow border-t border-border-subtle"></div>
       </div>
 
-      <!-- Payment Provider Select (3-Gateway Selector: DANA Direct, Midtrans, Xendit) -->
+      <!-- Payment Provider (DANA Exclusivity §17, §18) -->
       <div class="mb-5">
         <div class="flex items-center justify-between mb-2">
           <label class="text-[11px] font-bold text-content-secondary uppercase tracking-wide">
-            Pilih Gateway Pembayaran
+            Gateway Pembayaran Resmi
           </label>
           <span class="text-[10px] font-bold text-brand-default tabular-nums">
             {{ selectedPlan === 'premium_annual' ? 'Rp 110.000 / thn' : 'Rp 10.000 / bln' }}
           </span>
         </div>
-        <div class="grid grid-cols-3 gap-2">
-          <!-- DANA Direct (Primary) -->
-          <button
-            type="button"
-            @click="selectedProvider = 'dana'"
-            :class="[
-              'p-2.5 rounded-xl border text-center font-medium text-xs transition cursor-pointer relative overflow-hidden flex flex-col items-center justify-center',
-              selectedProvider === 'dana'
-                ? 'border-[#118EEA] bg-[#118EEA]/10 text-[#118EEA] ring-2 ring-[#118EEA]/30'
-                : 'border-border-default hover:bg-surface-subtle text-content-primary'
-            ]"
-          >
-            <span class="absolute top-1 right-1 text-[8px] font-extrabold px-1 py-0.2 rounded bg-[#118EEA] text-white">
-              Utama
-            </span>
-            <div class="font-extrabold text-xs sm:text-sm text-[#118EEA] mt-1">DANA</div>
-            <div class="text-[9px] text-content-muted mt-0.5 leading-tight">Direct Open API</div>
-          </button>
-
-          <!-- Midtrans -->
-          <button
-            type="button"
-            @click="selectedProvider = 'midtrans'"
-            :class="[
-              'p-2.5 rounded-xl border text-center font-medium text-xs transition cursor-pointer flex flex-col items-center justify-center',
-              selectedProvider === 'midtrans'
-                ? 'border-brand-default bg-brand-muted/40 text-brand-default ring-2 ring-brand-default/20'
-                : 'border-border-default hover:bg-surface-subtle text-content-primary'
-            ]"
-          >
-            <div class="font-extrabold text-xs sm:text-sm">Midtrans</div>
-            <div class="text-[9px] text-content-muted mt-0.5 leading-tight">QRIS / GoPay / VA</div>
-          </button>
-
-          <!-- Xendit -->
-          <button
-            type="button"
-            @click="selectedProvider = 'xendit'"
-            :class="[
-              'p-2.5 rounded-xl border text-center font-medium text-xs transition cursor-pointer flex flex-col items-center justify-center',
-              selectedProvider === 'xendit'
-                ? 'border-brand-default bg-brand-muted/40 text-brand-default ring-2 ring-brand-default/20'
-                : 'border-border-default hover:bg-surface-subtle text-content-primary'
-            ]"
-          >
-            <div class="font-extrabold text-xs sm:text-sm">Xendit</div>
-            <div class="text-[9px] text-content-muted mt-0.5 leading-tight">OVO / ShopeePay</div>
-          </button>
+        <div class="p-3 rounded-xl border border-[#118EEA] bg-[#118EEA]/10 text-[#118EEA] flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-[#118EEA] text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+              DANA
+            </div>
+            <div>
+              <div class="font-extrabold text-xs text-content-primary flex items-center gap-1.5">
+                <span>DANA Direct & SNAP</span>
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#118EEA] text-white">Terverifikasi</span>
+              </div>
+              <div class="text-[10px] text-content-muted mt-0.5">RSA-SHA256 Signature • Saldo DANA & QRIS</div>
+            </div>
+          </div>
+          <Check class="w-4 h-4 text-[#118EEA] stroke-[3]" />
         </div>
-        <div class="mt-2.5 text-[10px] text-content-muted flex items-center gap-1.5 px-1">
+        <div class="mt-2 text-[10px] text-content-muted flex items-center gap-1.5 px-1">
           <ShieldCheck class="w-3.5 h-3.5 text-brand-default shrink-0" />
-          <span>Mendukung Direct DANA, QRIS Dinamis & Virtual Account dengan verifikasi instan.</span>
+          <span>Pembayaran instan langsung diverifikasi otomatis via DANA SNAP Webhook.</span>
         </div>
       </div>
 
@@ -246,11 +212,7 @@
         class="w-full py-3.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-lg shadow-brand-default/30 transition disabled:opacity-50 cursor-pointer text-sm flex items-center justify-center gap-2"
       >
         <span v-if="!loading">
-          {{
-            selectedProvider === 'dana'
-              ? `Lanjutkan via DANA (${selectedPlan === 'premium_annual' ? 'Rp 110.000' : 'Rp 10.000'})`
-              : `Lanjutkan Pembayaran (${selectedPlan === 'premium_annual' ? 'Rp 110.000' : 'Rp 10.000'})`
-          }}
+          Lanjutkan via DANA ({{ selectedPlan === 'premium_annual' ? 'Rp 110.000' : 'Rp 10.000' }})
         </span>
         <span v-else class="flex items-center gap-2">
           <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>

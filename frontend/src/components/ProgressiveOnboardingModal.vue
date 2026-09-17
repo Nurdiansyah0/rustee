@@ -191,11 +191,60 @@
               <span>User-Owned Financial Vocabulary (§4)</span>
             </div>
             <h3 class="text-lg sm:text-xl font-black text-content-primary tracking-tight">
-              Tentukan Istilah Kategori Anda
+              Tentukan Sebutan Finansial Anda
             </h3>
             <p class="text-xs text-content-secondary mt-1 leading-relaxed">
-              Anda tidak dipaksa memakai istilah baku. Tentukan dan sesuaikan sebutan pemasukan & pengeluaran yang cocok dengan gaya hidup Anda.
+              Anda memegang kendali penuh atas istilah keuangan Anda. Tentukan sebutan pemasukan utama, pengeluaran utama, serta sesuaikan daftar kategori sesuai kebutuhan.
             </p>
+          </div>
+
+          <!-- Primary Income & Expense Title Inputs (§4) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-surface-sunken rounded-xl border border-border-default">
+            <div>
+              <label class="block text-xs font-bold text-income-default mb-1">
+                Sebutan Pemasukan Utama
+              </label>
+              <input
+                v-model="primaryIncomeTitle"
+                type="text"
+                placeholder="Contoh: Gaji, Freelance"
+                class="w-full px-3 py-2 border border-border-default rounded-lg bg-surface-card text-xs text-content-primary focus:outline-none focus:ring-2 focus:ring-income-default/30"
+              />
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                <button
+                  v-for="sug in ['Gaji', 'Freelance', 'Bisnis', 'Honor']"
+                  :key="sug"
+                  type="button"
+                  @click="primaryIncomeTitle = sug"
+                  class="px-2 py-0.5 text-[10px] font-semibold rounded bg-surface-subtle hover:bg-border-default text-content-secondary cursor-pointer transition"
+                >
+                  {{ sug }}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-expense-default mb-1">
+                Sebutan Pengeluaran Utama
+              </label>
+              <input
+                v-model="primaryExpenseTitle"
+                type="text"
+                placeholder="Contoh: Makan, Belanja"
+                class="w-full px-3 py-2 border border-border-default rounded-lg bg-surface-card text-xs text-content-primary focus:outline-none focus:ring-2 focus:ring-expense-default/30"
+              />
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                <button
+                  v-for="sug in ['Makan & Jajan', 'Kebutuhan Rumah', 'Operasional', 'Belanja']"
+                  :key="sug"
+                  type="button"
+                  @click="primaryExpenseTitle = sug"
+                  class="px-2 py-0.5 text-[10px] font-semibold rounded bg-surface-subtle hover:bg-border-default text-content-secondary cursor-pointer transition"
+                >
+                  {{ sug }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Vocabulary Tabs (Pemasukan vs Pengeluaran) -->
@@ -210,7 +259,7 @@
                   : 'text-content-secondary hover:text-content-primary'
               ]"
             >
-              Pengeluaran ({{ customExpenseCategories.length }})
+              Kategori Pengeluaran ({{ customExpenseCategories.length }})
             </button>
             <button
               type="button"
@@ -222,14 +271,14 @@
                   : 'text-content-secondary hover:text-content-primary'
               ]"
             >
-              Pemasukan ({{ customIncomeCategories.length }})
+              Kategori Pemasukan ({{ customIncomeCategories.length }})
             </button>
           </div>
 
           <!-- Active Categories List -->
           <div>
             <div class="text-[11px] font-bold text-content-muted uppercase tracking-wider mb-2">
-              Kategori Terpilih (Klik untuk Hapus / Edit)
+              Kategori Aktif (Klik X untuk Hapus)
             </div>
             <div class="flex flex-wrap gap-2">
               <div
@@ -292,58 +341,145 @@
           </div>
         </div>
 
-        <!-- ================= STEP 4: PRO VALUE & 3-MONTH TRIAL ================= -->
+        <!-- ================= STEP 4: PILIHAN PAKET BERLANGGANAN (R2 §6, §16, §17) ================= -->
         <div v-else-if="currentStep === 4" class="space-y-4 animate-in fade-in duration-200">
           <div class="text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30">
               <Sparkles class="w-6 h-6" />
             </div>
             <h3 class="text-xl font-black text-content-primary tracking-tight">
-              Buka Potensi Finansial Penuh
+              Pilih Paket Berlangganan Anda
             </h3>
             <p class="text-xs text-content-secondary mt-1 max-w-sm mx-auto leading-relaxed">
-              Sebagai pengguna baru, nikmati akses FinRep Pro selama 3 bulan penuh tanpa biaya di depan.
+              Tentukan paket yang sesuai. Anda selalu dapat mengubah atau meng-upgrade paket kapan saja.
             </p>
           </div>
 
-          <!-- Pro Value Cards -->
-          <div class="p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles class="w-3.5 h-3.5" />
-                Uji Coba Eksklusif
-              </span>
-              <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-400 border border-emerald-500/30">
-                3 Bulan Gratis (90 Hari)
-              </span>
+          <!-- 4 Subscription Plan Options (§6, §16) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- 1. 3-Month Free Trial -->
+            <div
+              @click="selectedPlanOption = 'trial'"
+              :class="[
+                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
+                selectedPlanOption === 'trial'
+                  ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-amber-500/50'
+              ]"
+            >
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                  Rekomendasi
+                </span>
+                <span class="text-xs font-black text-emerald-500">Rp 0</span>
+              </div>
+              <div>
+                <div class="font-extrabold text-xs text-content-primary flex items-center gap-1">
+                  <span>3 Bulan Trial Pro</span>
+                  <Sparkles class="w-3.5 h-3.5 text-amber-500" />
+                </div>
+                <div class="text-[11px] text-content-muted mt-0.5">
+                  90 hari fitur analitik & proyeksi penuh tanpa biaya di depan.
+                </div>
+              </div>
+              <div class="mt-2 text-[10px] text-amber-500 font-bold">
+                Otomatis ke Free Tier setelah 90 hari
+              </div>
             </div>
 
-            <div class="space-y-2 text-xs text-content-secondary">
-              <div class="flex items-start gap-2">
-                <Check class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span><strong class="text-content-primary">Analitik Runway Multi-Bulan</strong>: Prediksi ketahanan kas berdasarkan tren pengeluaran harian.</span>
+            <!-- 2. Continue with Free Tier -->
+            <div
+              @click="selectedPlanOption = 'free'"
+              :class="[
+                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
+                selectedPlanOption === 'free'
+                  ? 'border-brand-default bg-brand-default/10 ring-2 ring-brand-default/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-brand-default/50'
+              ]"
+            >
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-content-secondary border border-border-subtle">
+                  Dasar
+                </span>
+                <span class="text-xs font-black text-content-primary">Rp 0</span>
               </div>
-              <div class="flex items-start gap-2">
-                <Check class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span><strong class="text-content-primary">Skor Kesehatan Finansial</strong>: Evaluasi rasio tabungan dan likuiditas setara standar perbankan.</span>
+              <div>
+                <div class="font-extrabold text-xs text-content-primary">
+                  Continue with Free
+                </div>
+                <div class="text-[11px] text-content-muted mt-0.5">
+                  Pencatatan kas harian, multi-dompet, dan rekonsiliasi data tanpa batas.
+                </div>
               </div>
-              <div class="flex items-start gap-2">
-                <Check class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span><strong class="text-content-primary">Ekspor Laporan Terenkripsi</strong>: Unduh buku kas rapi dalam format CSV dan PDF siap pajak.</span>
+              <div class="mt-2 text-[10px] text-content-secondary font-bold">
+                Gratis selamanya
               </div>
             </div>
 
-            <div class="pt-2 border-t border-amber-500/20 text-[11px] text-content-muted flex items-center justify-between">
-              <span>Rp 0 di depan • Tanpa kartu kredit</span>
-              <span class="text-amber-400 font-bold">Otomatis kembali ke Free Tier</span>
+            <!-- 3. Monthly Premium (Rp 10.000 / bln) -->
+            <div
+              @click="selectedPlanOption = 'monthly'"
+              :class="[
+                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
+                selectedPlanOption === 'monthly'
+                  ? 'border-[#118EEA] bg-[#118EEA]/10 ring-2 ring-[#118EEA]/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-[#118EEA]/50'
+              ]"
+            >
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#118EEA]/20 text-[#118EEA]">
+                  Bulanan
+                </span>
+                <span class="text-xs font-black text-content-primary">Rp 10.000 / bln</span>
+              </div>
+              <div>
+                <div class="font-extrabold text-xs text-content-primary flex items-center gap-1">
+                  <span>Pro Bulanan via DANA</span>
+                </div>
+                <div class="text-[11px] text-content-muted mt-0.5">
+                  Akses analitik runway, skor kesehatan & integrasi DANA instan.
+                </div>
+              </div>
+              <div class="mt-2 text-[10px] text-[#118EEA] font-bold">
+                Pembayaran instan via DANA
+              </div>
+            </div>
+
+            <!-- 4. Annual Premium (Rp 110.000 / thn) -->
+            <div
+              @click="selectedPlanOption = 'annual'"
+              :class="[
+                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
+                selectedPlanOption === 'annual'
+                  ? 'border-[#118EEA] bg-[#118EEA]/10 ring-2 ring-[#118EEA]/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-[#118EEA]/50'
+              ]"
+            >
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
+                  Hemat Rp 10.000
+                </span>
+                <span class="text-xs font-black text-content-primary">Rp 110.000 / thn</span>
+              </div>
+              <div>
+                <div class="font-extrabold text-xs text-content-primary flex items-center gap-1">
+                  <span>Pro Tahunan via DANA</span>
+                </div>
+                <div class="text-[11px] text-content-muted mt-0.5">
+                  12 bulan penuh dengan harga 11 bulan. Ekspor laporan tak terbatas.
+                </div>
+              </div>
+              <div class="mt-2 text-[10px] text-[#118EEA] font-bold">
+                Pembayaran instan via DANA
+              </div>
             </div>
           </div>
 
-          <!-- Value Guarantees -->
+          <!-- Guarantee & Single Gateway Notice -->
           <div class="flex items-center gap-2 p-3 bg-surface-sunken rounded-xl border border-border-default text-xs text-content-secondary">
-            <ShieldCheck class="w-5 h-5 text-brand-default shrink-0" />
+            <ShieldCheck class="w-5 h-5 text-[#118EEA] shrink-0" />
             <div class="text-[11px] leading-snug">
-              Seluruh data transaksi dan dompet Anda <strong>100% aman tersimpan</strong> selamanya, baik di Free Tier maupun Pro.
+              Pembayaran online diproses secara aman menggunakan <strong>DANA Open API & SNAP</strong> resmi dengan enkripsi RSA-SHA256.
             </div>
           </div>
         </div>
@@ -376,24 +512,34 @@
             <ChevronRight class="w-3.5 h-3.5" />
           </button>
 
-          <!-- Step 4: Trial or Free Tier -->
+          <!-- Step 4: Selected Plan CTA -->
           <template v-else>
             <button
               type="button"
-              @click="finishOnboarding(false)"
+              @click="finishOnboarding"
               :disabled="isSubmitting"
-              class="px-3.5 py-2.5 text-content-muted hover:text-content-primary font-bold text-xs rounded-xl transition cursor-pointer disabled:opacity-50"
+              :class="[
+                'px-5 py-2.5 font-bold text-xs rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5',
+                selectedPlanOption === 'trial'
+                  ? 'bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-amber-500/20'
+                  : selectedPlanOption === 'free'
+                  ? 'bg-surface-sunken text-content-primary border border-border-default hover:bg-surface-subtle'
+                  : 'bg-[#118EEA] hover:bg-[#0c7acb] text-white shadow-[#118EEA]/20'
+              ]"
             >
-              Gunakan Free Tier
-            </button>
-            <button
-              type="button"
-              @click="finishOnboarding(true)"
-              :disabled="isSubmitting"
-              class="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <Sparkles class="w-3.5 h-3.5" />
-              <span v-if="!isSubmitting">Aktifkan 3 Bulan Gratis</span>
+              <Sparkles v-if="selectedPlanOption === 'trial'" class="w-3.5 h-3.5" />
+              <Check v-else-if="selectedPlanOption === 'free'" class="w-3.5 h-3.5" />
+              <span v-if="!isSubmitting">
+                {{
+                  selectedPlanOption === 'trial'
+                    ? 'Aktifkan 3 Bulan Gratis (Rp 0)'
+                    : selectedPlanOption === 'free'
+                    ? 'Lanjutkan dengan Free Tier'
+                    : selectedPlanOption === 'annual'
+                    ? 'Lanjutkan via DANA (Rp 110.000 / thn)'
+                    : 'Lanjutkan via DANA (Rp 10.000 / bln)'
+                }}
+              </span>
               <span v-else>Menyiapkan Workspace...</span>
             </button>
           </template>
@@ -481,6 +627,10 @@ function removeWallet(index) {
 }
 
 // ================= STEP 3 STATE =================
+const primaryIncomeTitle = ref('Gaji')
+const primaryExpenseTitle = ref('Makan & Jajan')
+const selectedPlanOption = ref('trial') // 'trial' | 'free' | 'monthly' | 'annual'
+
 const vocabTab = ref('expense')
 const customExpenseCategories = ref([
   'Makan & Minum',
@@ -571,84 +721,115 @@ function handleNextStep() {
 
 /**
  * Commits personalized configuration to backend and initializes personalized workspace.
- * 
- * @param {boolean} activateProTrial - Whether user elected to start 3-month free trial
  */
-async function finishOnboarding(activateProTrial = false) {
+async function finishOnboarding() {
   isSubmitting.value = true
   try {
-    // 1. Sync User-Configured Wallets / Accounts (/api/v1/accounts)
-    for (const wallet of walletsConfig.value) {
-      if (wallet.name?.trim()) {
-        try {
-          await api.createAccount({
-            name: wallet.name.trim(),
-            account_type: wallet.type || 'checking',
-            initial_balance: parseInt(wallet.initial_balance, 10) || 0,
-            currency: 'IDR'
-          })
-        } catch (e) {
-          console.warn('Onboarding account creation fallback', e)
-        }
-      }
-    }
+    const isTrial = selectedPlanOption.value === 'trial'
 
-    // 2. Sync Custom Vocabulary Categories (/api/v1/categories)
-    // Expense categories
-    for (const catName of customExpenseCategories.value) {
-      if (catName?.trim()) {
-        try {
-          await api.createCategory({
+    // 1. Submit atomic onboarding payload to backend (§4, §5, §6)
+    try {
+      await api.submitOnboarding({
+        display_name: userName.value || 'Sobat FinRep',
+        income_title: primaryIncomeTitle.value || 'Gaji',
+        expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
+        financial_goals: selectedGoals.value,
+        wallets: walletsConfig.value.map((wallet) => ({
+          name: wallet.name?.trim() || 'Dompet',
+          account_type: wallet.type || 'checking',
+          initial_balance: parseInt(wallet.initial_balance, 10) || 0
+        })),
+        categories: [
+          ...customExpenseCategories.value.map((catName) => ({
             name: catName.trim(),
             display_name: catName.trim(),
-            category_type: 'expense',
-            icon: 'Tag'
-          })
-        } catch (e) {
-          console.warn('Onboarding category creation fallback', e)
-        }
-      }
-    }
-
-    // Income categories
-    for (const catName of customIncomeCategories.value) {
-      if (catName?.trim()) {
-        try {
-          await api.createCategory({
+            category_type: 'expense'
+          })),
+          ...customIncomeCategories.value.map((catName) => ({
             name: catName.trim(),
             display_name: catName.trim(),
-            category_type: 'income',
-            icon: 'DollarSign'
-          })
-        } catch (e) {
-          console.warn('Onboarding category creation fallback', e)
+            category_type: 'income'
+          }))
+        ],
+        activate_trial: isTrial
+      })
+    } catch (e) {
+      console.warn('Backend onboarding API fallback, creating directly', e)
+      // Fallback: sync accounts & categories directly
+      for (const wallet of walletsConfig.value) {
+        if (wallet.name?.trim()) {
+          try {
+            await api.createAccount({
+              name: wallet.name.trim(),
+              account_type: wallet.type || 'checking',
+              initial_balance: parseInt(wallet.initial_balance, 10) || 0,
+              currency: 'IDR'
+            })
+          } catch {}
         }
+      }
+      for (const catName of customExpenseCategories.value) {
+        if (catName?.trim()) {
+          try {
+            await api.createCategory({
+              name: catName.trim(),
+              display_name: catName.trim(),
+              category_type: 'expense',
+              icon: 'Tag'
+            })
+          } catch {}
+        }
+      }
+      for (const catName of customIncomeCategories.value) {
+        if (catName?.trim()) {
+          try {
+            await api.createCategory({
+              name: catName.trim(),
+              display_name: catName.trim(),
+              category_type: 'income',
+              icon: 'DollarSign'
+            })
+          } catch {}
+        }
+      }
+      if (isTrial) {
+        try {
+          await subscriptionStore.activateTrial()
+        } catch {}
       }
     }
 
-    // 3. If User Opted for 3-Month Pro Trial: Call /api/v1/subscriptions/trial/activate
-    if (activateProTrial) {
+    // 2. If user chose Monthly or Annual paid subscription, initiate DANA checkout
+    if (selectedPlanOption.value === 'monthly' || selectedPlanOption.value === 'annual') {
       try {
-        await subscriptionStore.activateTrial()
+        const planId = selectedPlanOption.value === 'annual' ? 'premium_annual' : 'premium_monthly'
+        const checkoutRes = await subscriptionStore.initiateCheckout('dana', planId)
+        if (checkoutRes?.checkout_url && typeof window !== 'undefined') {
+          window.location.href = checkoutRes.checkout_url
+          return
+        }
       } catch (err) {
-        console.warn('Trial activation error during onboarding', err)
+        console.warn('DANA checkout error during onboarding', err)
       }
     }
 
-    // 4. Mark onboarding finished in local storage & memory
+    // 3. Mark onboarding completed in local storage
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('invinite_onboarding_completed', 'true')
       localStorage.setItem(
         'invinite_user_personalization',
         JSON.stringify({
           display_name: userName.value || 'Sobat FinRep',
+          income_title: primaryIncomeTitle.value || 'Gaji',
+          expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
           goals: selectedGoals.value,
+          plan: selectedPlanOption.value,
           onboarded_at: new Date().toISOString()
         })
       )
     }
 
-    // 5. Refresh all reactive Pinia stores
+    // 4. Refresh Pinia stores
     await Promise.allSettled([
       walletStore.fetchWallets(),
       categoryStore.fetchCategories(),

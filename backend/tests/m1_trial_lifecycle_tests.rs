@@ -116,6 +116,7 @@ mod m1_trial_lifecycle_tests {
             auth_state,
             account_repo,
             category_repo,
+            user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
             ledger_service,
             payment_service,
             pool: pool.clone(),
@@ -521,6 +522,9 @@ mod m1_trial_lifecycle_tests {
                 icon: None,
                 color: None,
                 is_system: false,
+                display_name: None,
+                normalized_name: None,
+                metadata: None,
             })
             .await
             .unwrap();

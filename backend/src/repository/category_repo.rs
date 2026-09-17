@@ -12,12 +12,15 @@ pub struct Category {
     pub icon: Option<String>,
     pub color: Option<String>,
     pub is_system: bool,
+    pub display_name: Option<String>,
+    pub normalized_name: Option<String>,
+    pub metadata: Option<String>,
     pub deleted_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NewCategory {
     pub id: String,
     pub user_id: Option<String>,
@@ -26,6 +29,35 @@ pub struct NewCategory {
     pub icon: Option<String>,
     pub color: Option<String>,
     pub is_system: bool,
+    pub display_name: Option<String>,
+    pub normalized_name: Option<String>,
+    pub metadata: Option<String>,
+}
+
+impl NewCategory {
+    pub fn simple(
+        id: impl Into<String>,
+        user_id: Option<String>,
+        name: impl Into<String>,
+        category_type: impl Into<String>,
+        icon: Option<String>,
+        color: Option<String>,
+        is_system: bool,
+    ) -> Self {
+        let n = name.into();
+        Self {
+            id: id.into(),
+            user_id,
+            display_name: Some(n.clone()),
+            normalized_name: Some(n.to_lowercase()),
+            name: n,
+            category_type: category_type.into(),
+            icon,
+            color,
+            is_system,
+            metadata: None,
+        }
+    }
 }
 
 #[async_trait]
@@ -50,11 +82,20 @@ impl SqlxCategoryRepository {
 impl CategoryRepository for SqlxCategoryRepository {
     async fn create(&self, category: &NewCategory) -> Result<Category, DbError> {
         let now = Utc::now().to_rfc3339();
+        let display_name = category
+            .display_name
+            .clone()
+            .unwrap_or_else(|| category.name.clone());
+        let normalized_name = category
+            .normalized_name
+            .clone()
+            .unwrap_or_else(|| category.name.to_lowercase());
+        let metadata = category.metadata.clone();
 
         sqlx::query(
             r#"
-            INSERT INTO categories (id, user_id, name, category_type, icon, color, is_system, deleted_at, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)
+            INSERT INTO categories (id, user_id, name, category_type, icon, color, is_system, display_name, normalized_name, metadata, deleted_at, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, ?11, ?12)
             "#
         )
         .bind(&category.id)
@@ -64,6 +105,9 @@ impl CategoryRepository for SqlxCategoryRepository {
         .bind(&category.icon)
         .bind(&category.color)
         .bind(if category.is_system { 1 } else { 0 })
+        .bind(&display_name)
+        .bind(&normalized_name)
+        .bind(&metadata)
         .bind(&now)
         .bind(&now)
         .execute(&self.pool)
@@ -78,6 +122,9 @@ impl CategoryRepository for SqlxCategoryRepository {
             icon: category.icon.clone(),
             color: category.color.clone(),
             is_system: category.is_system,
+            display_name: Some(display_name),
+            normalized_name: Some(normalized_name),
+            metadata,
             deleted_at: None,
             created_at: now.clone(),
             updated_at: now,
@@ -87,7 +134,7 @@ impl CategoryRepository for SqlxCategoryRepository {
     async fn find_by_id(&self, user_id: &str, id: &str) -> Result<Option<Category>, DbError> {
         let category = sqlx::query_as::<_, Category>(
             r#"
-            SELECT id, user_id, name, category_type, icon, color, is_system, deleted_at, created_at, updated_at
+            SELECT id, user_id, name, category_type, icon, color, is_system, display_name, normalized_name, metadata, deleted_at, created_at, updated_at
             FROM categories
             WHERE id = ?1 AND (user_id = ?2 OR is_system = 1) AND deleted_at IS NULL
             "#
@@ -104,7 +151,7 @@ impl CategoryRepository for SqlxCategoryRepository {
     async fn list_by_user(&self, user_id: &str) -> Result<Vec<Category>, DbError> {
         let categories = sqlx::query_as::<_, Category>(
             r#"
-            SELECT id, user_id, name, category_type, icon, color, is_system, deleted_at, created_at, updated_at
+            SELECT id, user_id, name, category_type, icon, color, is_system, display_name, normalized_name, metadata, deleted_at, created_at, updated_at
             FROM categories
             WHERE (user_id = ?1 OR is_system = 1) AND deleted_at IS NULL
             ORDER BY is_system DESC, name ASC
