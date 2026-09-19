@@ -1,47 +1,49 @@
 <template>
   <div
-    class="absolute inset-0 bg-surface-card/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 select-none rounded-xl animate-in fade-in duration-200"
+    class="absolute inset-0 bg-surface-card/65 hover:bg-surface-card/55 backdrop-blur-[2px] flex flex-col items-center justify-center p-5 sm:p-6 text-center z-20 select-none rounded-xl transition duration-200 cursor-pointer"
     role="region"
-    :aria-label="title || 'Fitur Terkunci'"
+    :aria-label="computedTitle"
+    @click="handleUpgradeClick"
   >
     <div
-      class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-3 shadow-xs"
+      class="w-12 h-12 rounded-xl bg-brand-default/15 border border-brand-default/25 flex items-center justify-center text-brand-default mb-2.5 shadow-xs transition group-hover:scale-105"
     >
-      <Lock class="w-5 h-5 stroke-[2]" />
+      <Sparkles v-if="!hasUsedTrial" class="w-6 h-6 stroke-[2]" />
+      <Lock v-else class="w-6 h-6 stroke-[2]" />
     </div>
 
     <div
-      v-if="badgeText"
-      class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 text-[10px] font-extrabold uppercase tracking-wider mb-2"
+      class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-default/15 border border-brand-default/25 text-brand-default text-[10px] font-extrabold uppercase tracking-wider mb-2"
     >
       <Sparkles class="w-3 h-3" />
-      <span>{{ badgeText }}</span>
+      <span>{{ computedBadge }}</span>
     </div>
 
-    <h4 class="text-base font-black text-content-primary tracking-tight">
-      {{ title }}
+    <h4 class="text-base sm:text-lg font-black text-content-primary tracking-tight">
+      {{ computedTitle }}
     </h4>
 
-    <p class="text-xs text-content-secondary max-w-xs mt-1.5 mb-4 leading-relaxed">
-      {{ description }}
+    <p class="text-xs text-content-secondary max-w-sm mt-1 mb-3.5 leading-relaxed">
+      {{ computedDescription }}
     </p>
 
     <button
       type="button"
-      @click="handleUpgradeClick"
-      class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-default hover:bg-brand-emphasis active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg shadow-brand-default/30 transition cursor-pointer"
+      @click.stop="handleUpgradeClick"
+      class="inline-flex items-center gap-1.5 px-5 py-2.5 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg shadow-brand-default/25 transition cursor-pointer"
     >
-      <Sparkles class="w-3.5 h-3.5 text-amber-300" />
-      <span>{{ buttonText }}</span>
+      <Sparkles class="w-3.5 h-3.5" />
+      <span>{{ computedButtonText }}</span>
     </button>
 
-    <div class="mt-2.5 text-[11px] text-content-muted">
-      <span>Tersedia uji coba 3 bulan gratis • Tanpa komitmen</span>
+    <div class="mt-2 text-[10px] text-content-muted">
+      <span>{{ hasUsedTrial ? 'Pembayaran instan & resmi via DANA' : 'Tersedia uji coba 3 bulan gratis • Tanpa komitmen' }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { Lock, Sparkles } from 'lucide-vue-next'
 
@@ -50,11 +52,11 @@ const subscriptionStore = useSubscriptionStore()
 const props = defineProps({
   title: {
     type: String,
-    default: 'Fitur Eksklusif FinRep Pro'
+    default: ''
   },
   description: {
     type: String,
-    default: 'Buka skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas.'
+    default: ''
   },
   featureName: {
     type: String,
@@ -62,15 +64,41 @@ const props = defineProps({
   },
   badgeText: {
     type: String,
-    default: 'FinRep Pro'
+    default: ''
   },
   buttonText: {
     type: String,
-    default: 'Buka Fitur Pro (Rp 10.000 / bln)'
+    default: ''
   }
 })
 
 const emit = defineEmits(['upgrade', 'open-upgrade'])
+
+const hasUsedTrial = computed(() => subscriptionStore.hasUsedTrial)
+
+const computedBadge = computed(() => {
+  if (props.badgeText) return props.badgeText
+  return hasUsedTrial.value ? 'Masa Coba Selesai' : '3 Bulan Gratis (90 Hari)'
+})
+
+const computedTitle = computed(() => {
+  if (props.title) return props.title
+  return hasUsedTrial.value ? 'Lanjutkan Akses FinRep Pro' : 'Fitur Eksklusif FinRep Pro'
+})
+
+const computedDescription = computed(() => {
+  if (props.description) return props.description
+  return hasUsedTrial.value
+    ? 'Masa uji coba 3 bulan Anda telah selesai. Aktifkan FinRep Pro mulai Rp 10.000 / bulan via DANA untuk membuka skor kesehatan & runway lengkap.'
+    : 'Buka skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas.'
+})
+
+const computedButtonText = computed(() => {
+  if (props.buttonText) return props.buttonText
+  return hasUsedTrial.value
+    ? 'Berlangganan Pro via DANA (Rp 10.000 / bln)'
+    : 'Mulai Coba 3 Bulan Gratis (Rp 0)'
+})
 
 function handleUpgradeClick() {
   emit('upgrade', props.featureName)

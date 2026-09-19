@@ -54,6 +54,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     targetLockedFeature.value = featureName
     isUpgradeModalOpen.value = true
     checkoutError.value = null
+    fetchSubscriptionStatus().catch(() => {})
   }
 
   function closeUpgradeModal() {

@@ -55,59 +55,128 @@
 
     <!-- Advanced Analytics (Gated Feature Section) -->
     <div class="relative rounded-xl overflow-hidden border border-border-subtle shadow-card">
-      <!-- Section Content -->
-      <div class="p-6 bg-surface-card space-y-4">
+      <!-- Section Content: Pro Real Data (when premium) vs Pro Skeleton (when free) -->
+      <div class="p-5 sm:p-6 bg-surface-card space-y-4">
         <div class="flex items-center justify-between">
           <h3 class="text-xs font-bold text-content-primary uppercase tracking-wider flex items-center gap-2">
-            <Sparkles class="w-4 h-4 text-amber-500" />
+            <Sparkles class="w-4 h-4 text-brand-default" />
             <span>Analisis Presisi & Proyeksi Runway</span>
           </h3>
-          <span class="text-xs text-amber-600 font-extrabold">FinRep Pro</span>
+          <span class="text-xs text-brand-default font-extrabold flex items-center gap-1.5">
+            <span v-if="userTier === 'premium'" class="w-1.5 h-1.5 rounded-full bg-brand-default"></span>
+            <span v-else class="w-1.5 h-1.5 rounded-full bg-brand-default animate-pulse"></span>
+            <span>FinRep Pro</span>
+          </span>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle">
-            <div class="text-xs text-content-secondary font-medium">Skor Kesehatan Finansial</div>
-            <div class="text-2xl font-black text-brand-default mt-1 tabular-nums">
-              {{ advancedData?.financial_health_score || 85 }}/100
+        <!-- Premium Real Data State -->
+        <template v-if="userTier === 'premium'">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle">
+              <div class="text-xs text-content-secondary font-medium">Skor Kesehatan Finansial</div>
+              <div class="text-2xl font-black text-brand-default mt-1 tabular-nums">
+                {{ advancedData?.financial_health_score || 85 }}/100
+              </div>
+              <div class="text-[11px] text-income-default mt-1 font-semibold flex items-center gap-1">
+                <ShieldCheck class="w-3.5 h-3.5" />
+                <span>Sangat Baik</span>
+              </div>
             </div>
-            <div class="text-[11px] text-income-default mt-1 font-semibold flex items-center gap-1">
-              <ShieldCheck class="w-3.5 h-3.5" />
-              <span>Sangat Baik</span>
+
+            <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle">
+              <div class="text-xs text-content-secondary font-medium">Tren Arus Kas</div>
+              <div class="text-xl font-black text-brand-default mt-1 capitalize">
+                {{ advancedData?.monthly_trend || 'Positif' }}
+              </div>
+              <div class="text-[11px] text-content-muted mt-1 font-medium">Stabil 30 hari terakhir</div>
             </div>
           </div>
 
-          <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle">
-            <div class="text-xs text-content-secondary font-medium">Tren Arus Kas</div>
-            <div class="text-xl font-black text-brand-default mt-1 capitalize">
-              {{ advancedData?.monthly_trend || 'Positif' }}
+          <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle space-y-2">
+            <div class="flex justify-between text-xs font-bold text-content-primary">
+              <span>Proyeksi Ketahanan Dana Darurat (Runway)</span>
+              <span class="text-brand-default tabular-nums">6.2 Bulan</span>
             </div>
-            <div class="text-[11px] text-content-muted mt-1 font-medium">Stabil 30 hari terakhir</div>
+            <div class="w-full bg-border-default h-2 rounded-full overflow-hidden">
+              <div class="bg-brand-default h-full w-[65%] rounded-full transition-all duration-500"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-content-muted font-medium">
+              <span>Cadangan saat ini: 6.2 Bulan</span>
+              <span>Target ideal: 12 Bulan</span>
+            </div>
           </div>
-        </div>
+        </template>
 
-        <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle space-y-2">
-          <div class="flex justify-between text-xs font-bold text-content-primary">
-            <span>Proyeksi Ketahanan Dana Darurat (Runway)</span>
-            <span class="text-brand-default tabular-nums">6.2 Bulan</span>
+        <!-- Free Tier: Pro Skeleton Preview -->
+        <template v-else>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
+            <!-- Skeleton Card 1: Health Score -->
+            <div class="p-4 bg-surface-subtle/80 rounded-xl border border-border-subtle space-y-2.5">
+              <div class="flex items-center justify-between">
+                <div class="text-xs text-content-secondary font-medium">Skor Kesehatan Finansial</div>
+                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-default/15 text-brand-default">Pro</span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-2xl font-black text-brand-default/60 tabular-nums">85<span class="text-sm font-normal text-content-muted">/100</span></div>
+                <div class="h-3 w-16 bg-surface-card rounded"></div>
+              </div>
+              <div class="flex items-center gap-1.5 pt-0.5">
+                <ShieldCheck class="w-3.5 h-3.5 text-income-default/50" />
+                <span class="text-[11px] text-income-default/70 font-semibold">Analisis Rasio Tabungan</span>
+              </div>
+            </div>
+
+            <!-- Skeleton Card 2: Cash Flow Trend -->
+            <div class="p-4 bg-surface-subtle/80 rounded-xl border border-border-subtle space-y-2.5">
+              <div class="flex items-center justify-between">
+                <div class="text-xs text-content-secondary font-medium">Tren Arus Kas & AI</div>
+                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-default/15 text-brand-default">Pro</span>
+              </div>
+              <div class="text-xl font-black text-brand-default/60">Positif & Terukur</div>
+              <div class="text-[11px] text-content-muted font-medium flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-brand-default/40"></span>
+                <span>Proyeksi prediktif 30–90 hari</span>
+              </div>
+            </div>
           </div>
-          <div class="w-full bg-border-default h-2 rounded-full overflow-hidden">
-            <div class="bg-brand-default h-full w-[65%] rounded-full transition-all duration-500"></div>
+
+          <!-- Skeleton Card 3: Emergency Runway Meter -->
+          <div class="p-4 bg-surface-subtle/80 rounded-xl border border-border-subtle space-y-2.5 animate-pulse">
+            <div class="flex justify-between items-center text-xs font-bold text-content-primary">
+              <span>Proyeksi Ketahanan Dana Darurat (Runway)</span>
+              <span class="text-brand-default font-black tabular-nums">~6 - 12 Bulan</span>
+            </div>
+            <div class="w-full bg-border-default/70 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-brand-default to-brand-emphasis h-full w-[65%] rounded-full opacity-60"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-content-muted font-medium">
+              <span>Simulasi runway berbasis pengeluaran</span>
+              <span>Target ideal: 12 Bulan</span>
+            </div>
           </div>
-          <div class="flex justify-between text-[11px] text-content-muted font-medium">
-            <span>Cadangan saat ini: 6.2 Bulan</span>
-            <span>Target ideal: 12 Bulan</span>
+
+          <!-- Skeleton Card 4: Category Smart Budgeting Preview -->
+          <div class="p-3.5 bg-surface-subtle/60 rounded-xl border border-border-subtle flex items-center justify-between animate-pulse">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-brand-default/10 text-brand-default flex items-center justify-center shrink-0">
+                <Sparkles class="w-4 h-4" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-content-primary truncate">Alokasi Budget & Early Warning Overbudget</div>
+                <div class="text-[10px] text-content-muted truncate">Notifikasi pintar sebelum pengeluaran bulanan terlampaui</div>
+              </div>
+            </div>
+            <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-brand-default/15 text-brand-default shrink-0 ml-2">
+              FinRep Pro
+            </span>
           </div>
-        </div>
+        </template>
       </div>
 
-      <!-- Frosted Lock Overlay for Free Tier Users -->
+      <!-- Frosted Lock Overlay for Free Tier Users (Visually Revealing the Pro Skeleton) -->
       <FeatureLockOverlay
         v-if="userTier !== 'premium'"
         feature-name="analytics.advanced"
-        title="Fitur Eksklusif FinRep Pro"
-        description="Dapatkan skor kesehatan finansial perbankan, proyeksi runway multi-bulan, dan optimasi anggaran cerdas."
-        button-text="Buka Fitur Pro (Rp 10.000 / bln)"
         @open-upgrade="$emit('open-upgrade')"
       />
     </div>
