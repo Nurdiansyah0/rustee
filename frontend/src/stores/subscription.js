@@ -7,6 +7,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   // State
   const tier = ref('free')
   const status = ref('free')
+  const hasUsedTrialState = ref(false)
   const priceMonthly = ref(10000)
   const priceAnnual = ref(110000)
   const features = ref([])
@@ -20,7 +21,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   // Getters
   const isPremium = computed(() => tier.value === 'premium')
   const isTrialing = computed(() => status.value === 'trialing')
-  const hasUsedTrial = computed(() => status.value === 'trial_expired' || status.value === 'expired')
+  const hasUsedTrial = computed(() => hasUsedTrialState.value || status.value === 'trial_expired')
 
   function canAccess(feature) {
     if (isPremium.value) return true
@@ -36,6 +37,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       const res = await api.getSubscriptionStatus()
       tier.value = res?.tier || 'free'
       status.value = res?.status || 'free'
+      hasUsedTrialState.value = Boolean(res?.has_used_trial || res?.status === 'trial_expired')
       priceMonthly.value = res?.price_monthly ?? (res?.tier === 'premium' && res?.status !== 'trialing' ? 10000 : 0)
       priceAnnual.value = res?.price_annual ?? 110000
       features.value = res?.features || []
@@ -163,6 +165,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       const data = await res.json()
       tier.value = data?.tier || 'premium'
       status.value = data?.status || 'trialing'
+      hasUsedTrialState.value = true
       daysRemaining.value = data?.days_remaining ?? 90
 
       await fetchSubscriptionStatus()
@@ -190,6 +193,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   function $reset() {
     tier.value = 'free'
     status.value = 'free'
+    hasUsedTrialState.value = false
     priceMonthly.value = 10000
     priceAnnual.value = 110000
     features.value = []

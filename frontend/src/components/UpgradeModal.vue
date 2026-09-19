@@ -2,68 +2,71 @@
   <div
     v-if="isOpen"
     @click.self="$emit('close')"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none animate-in fade-in duration-200"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
     role="dialog"
     aria-modal="true"
     aria-labelledby="upgrade-modal-title"
+    aria-describedby="upgrade-modal-desc"
   >
     <div
-      class="relative w-full max-w-md p-6 max-h-[90vh] overflow-y-auto bg-surface-card rounded-2xl shadow-2xl border border-border-subtle animate-in fade-in zoom-in-95 duration-200 scroll-native"
+      ref="modalRef"
+      class="relative w-full max-w-md p-4 sm:p-6 max-h-[90dvh] overflow-y-auto bg-surface-card rounded-2xl shadow-2xl border border-border-subtle animate-in fade-in zoom-in-95 duration-200 scroll-native"
     >
-      <!-- Close button -->
+      <!-- Close button with focus ref -->
       <button
+        ref="closeButtonRef"
         type="button"
         @click="$emit('close')"
-        class="absolute top-4 right-4 p-2 text-content-muted hover:text-content-primary rounded-full hover:bg-surface-subtle transition cursor-pointer z-10"
+        class="absolute top-3 sm:top-4 right-3 sm:right-4 p-2 text-content-muted hover:text-content-primary rounded-full hover:bg-surface-subtle transition cursor-pointer z-10"
         aria-label="Tutup modal"
       >
         <X class="w-5 h-5 stroke-[2]" />
       </button>
 
-      <!-- Header -->
-      <div class="text-center mb-5">
-        <div class="inline-flex items-center justify-center w-12 h-12 mb-2.5 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30 shadow-xs">
+      <!-- Header with compact vertical spacing -->
+      <div class="text-center mb-4">
+        <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30 shadow-xs">
           <Sparkles class="w-6 h-6 stroke-[2]" />
         </div>
         <h2 id="upgrade-modal-title" class="text-2xl font-black text-content-primary tracking-tight">
           Upgrade ke FinRep Pro
         </h2>
-        <p class="text-xs text-content-secondary mt-1">
+        <p id="upgrade-modal-desc" class="text-xs text-content-secondary mt-1 max-w-sm mx-auto leading-relaxed">
           Buka analitik presisi perbankan, proyeksi runway, dan automasi finansial cerdas
         </p>
       </div>
 
       <!-- Active Trial Alert Banner -->
-      <div v-if="isTrialing" class="mb-5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
+      <div v-if="isTrialing" class="mb-4 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
         <div class="flex items-center gap-2 text-amber-500 font-bold mb-1">
           <Clock class="w-4 h-4 shrink-0 animate-pulse" />
           <span>Masa Uji Coba Pro Aktif</span>
         </div>
         <p class="text-content-secondary text-[11px] leading-relaxed">
-          Tersisa <strong class="text-amber-400 font-bold">{{ daysRemaining ?? 90 }} hari</strong>. Kunci akses tanpa jeda dengan berlangganan mulai Rp 10.000 / bulan. Seluruh data keuangan Anda dijamin 100% aman.
+          Tersisa <strong class="text-amber-400 font-bold">{{ daysRemaining ?? 90 }} hari</strong>. Kunci akses tanpa jeda dengan berlangganan mulai Rp 10.000 / bulan. Data keuangan Anda tetap tersimpan di akun Anda dan tidak terhapus saat masa trial berakhir.
         </p>
       </div>
 
-      <!-- Trial Expired Alert Banner (Zero data loss reassurance) -->
-      <div v-else-if="hasUsedTrial" class="mb-5 p-4 rounded-xl bg-surface-subtle border border-border-default text-xs">
+      <!-- Trial Expired Alert Banner (Verifiable data retention reassurance) -->
+      <div v-else-if="hasUsedTrial" class="mb-4 p-3.5 rounded-xl bg-surface-subtle border border-border-default text-xs">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2 text-content-primary font-bold">
             <ShieldCheck class="w-4 h-4 text-brand-default shrink-0" />
             <span>Masa Uji Coba Selesai</span>
           </div>
           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-card border border-border-subtle text-content-muted">
-            Data Tersimpan 100%
+            Data Tersimpan di Akun
           </span>
         </div>
         <p class="text-content-secondary text-[11px] leading-relaxed">
-          Masa uji coba 3 bulan telah berakhir. Seluruh data keuangan & catatan transaksi Anda tetap aman tersimpan di akun Free Tier. Aktifkan FinRep Pro mulai Rp 10.000 / bulan untuk membuka kembali analitik runway & laporan penuh.
+          Masa uji coba 3 bulan telah berakhir. Seluruh data transaksi Anda tetap tersimpan di akun Free Tier tanpa terhapus. Aktifkan FinRep Pro mulai Rp 10.000 / bulan untuk membuka kembali analitik runway & laporan penuh.
         </p>
       </div>
 
       <!-- 3-Month Free Trial Promotion Card (Only shown if NOT trialing and NOT already used trial) -->
       <div
         v-else-if="!isPremium"
-        class="mb-5 p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 relative overflow-hidden"
+        class="mb-4 p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 relative overflow-hidden"
       >
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -89,15 +92,22 @@
         </button>
       </div>
 
-      <!-- Plan Duration Selector (Bulanan vs Tahunan) -->
+      <!-- Plan Duration Selector with Semantic ARIA Radiogroup -->
       <div class="mb-4">
         <label class="block text-[11px] font-bold text-content-secondary uppercase tracking-wide mb-2">
           Pilihan Paket Berlangganan
         </label>
-        <div class="grid grid-cols-2 gap-2">
+        <div
+          role="radiogroup"
+          aria-label="Pilihan Paket Berlangganan"
+          class="grid grid-cols-2 gap-2"
+        >
           <!-- Monthly Plan -->
           <button
             type="button"
+            role="radio"
+            :aria-checked="selectedPlan === 'premium_monthly'"
+            :aria-pressed="selectedPlan === 'premium_monthly'"
             @click="selectedPlan = 'premium_monthly'"
             :class="[
               'p-3 rounded-xl border text-left transition cursor-pointer relative',
@@ -116,6 +126,9 @@
           <!-- Annual Plan -->
           <button
             type="button"
+            role="radio"
+            :aria-checked="selectedPlan === 'premium_annual'"
+            :aria-pressed="selectedPlan === 'premium_annual'"
             @click="selectedPlan = 'premium_annual'"
             :class="[
               'p-3 rounded-xl border text-left transition cursor-pointer relative overflow-hidden',
@@ -137,7 +150,7 @@
       </div>
 
       <!-- Feature list -->
-      <div class="space-y-2 mb-5 text-xs text-content-secondary">
+      <div class="space-y-2 mb-4 text-xs text-content-secondary">
         <div class="flex items-center gap-2.5">
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
@@ -165,25 +178,25 @@
       </div>
 
       <!-- Divider -->
-      <div class="relative flex py-2 items-center mb-4">
+      <div class="relative flex py-2 items-center mb-3">
         <div class="flex-grow border-t border-border-subtle"></div>
         <span class="flex-shrink mx-3 text-[10px] font-bold text-content-muted uppercase tracking-wider">
-          {{ isTrialing ? 'Langganan Tetap' : 'Pilihan Gateway Pembayaran' }}
+          Metode Pembayaran Resmi
         </span>
         <div class="flex-grow border-t border-border-subtle"></div>
       </div>
 
-      <!-- Payment Provider (DANA Exclusivity §17, §18) -->
-      <div class="mb-5">
-        <div class="flex items-center justify-between mb-2">
-          <label class="text-[11px] font-bold text-content-secondary uppercase tracking-wide">
-            Gateway Pembayaran Resmi
-          </label>
+      <!-- Payment Provider Information (Informative, non-pseudo-radio card) -->
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[11px] font-bold text-content-secondary uppercase tracking-wide">
+            Metode Pembayaran Tersedia
+          </span>
           <span class="text-[10px] font-bold text-brand-default tabular-nums">
             {{ selectedPlan === 'premium_annual' ? 'Rp 110.000 / thn' : 'Rp 10.000 / bln' }}
           </span>
         </div>
-        <div class="p-3 rounded-xl border border-[#118EEA] bg-[#118EEA]/10 text-[#118EEA] flex items-center justify-between">
+        <div class="p-3 rounded-xl border border-[#118EEA]/30 bg-[#118EEA]/5 flex items-center justify-between">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-[#118EEA] text-white font-extrabold text-xs flex items-center justify-center shrink-0">
               DANA
@@ -191,16 +204,18 @@
             <div>
               <div class="font-extrabold text-xs text-content-primary flex items-center gap-1.5">
                 <span>DANA Direct & SNAP</span>
-                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#118EEA] text-white">Terverifikasi</span>
+                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#118EEA]/20 text-[#118EEA] border border-[#118EEA]/30">Terverifikasi</span>
               </div>
-              <div class="text-[10px] text-content-muted mt-0.5">RSA-SHA256 Signature • Saldo DANA & QRIS</div>
+              <div class="text-[10px] text-content-muted mt-0.5">Saldo DANA & QRIS • Verifikasi Server Asimetris</div>
             </div>
           </div>
-          <Check class="w-4 h-4 text-[#118EEA] stroke-[3]" />
+          <span class="text-[10px] font-semibold text-content-muted bg-surface-subtle px-2 py-0.5 rounded border border-border-subtle">
+            Otomatis
+          </span>
         </div>
         <div class="mt-2 text-[10px] text-content-muted flex items-center gap-1.5 px-1">
           <ShieldCheck class="w-3.5 h-3.5 text-brand-default shrink-0" />
-          <span>Pembayaran instan langsung diverifikasi otomatis via DANA SNAP Webhook.</span>
+          <span>Transaksi diverifikasi server secara otomatis melalui webhook resmi DANA.</span>
         </div>
       </div>
 
@@ -228,7 +243,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { X, Sparkles, Check, Clock, ShieldCheck } from 'lucide-vue-next'
 
@@ -238,20 +253,66 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'success'])
 
+const modalRef = ref(null)
+const closeButtonRef = ref(null)
+let previousActiveElement = null
+
+function getFocusableElements() {
+  if (!modalRef.value) return []
+  return Array.from(
+    modalRef.value.querySelectorAll(
+      'button:not([disabled]), [href]:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  )
+}
+
 function handleKeyDown(e) {
-  if (e.key === 'Escape' && props.isOpen) {
+  if (!props.isOpen) return
+
+  if (e.key === 'Escape') {
+    e.preventDefault()
     e.stopPropagation()
     emit('close')
+    return
+  }
+
+  if (e.key === 'Tab') {
+    const focusable = getFocusableElements()
+    if (focusable.length === 0) return
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
   }
 }
 
 watch(
   () => props.isOpen,
-  (open) => {
+  async (open) => {
     if (open) {
+      previousActiveElement = document.activeElement
       window.addEventListener('keydown', handleKeyDown)
+      await nextTick()
+      if (closeButtonRef.value?.focus) {
+        closeButtonRef.value.focus()
+      }
     } else {
       window.removeEventListener('keydown', handleKeyDown)
+      if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+        previousActiveElement.focus()
+        previousActiveElement = null
+      }
     }
   },
   { immediate: true }
@@ -259,6 +320,9 @@ watch(
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
+  if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+    previousActiveElement.focus()
+  }
 })
 
 const subscriptionStore = useSubscriptionStore()
@@ -272,14 +336,11 @@ const error = ref('')
 const isPremium = computed(() => subscriptionStore.isPremium)
 const isTrialing = computed(() => subscriptionStore.isTrialing)
 const daysRemaining = computed(() => subscriptionStore.daysRemaining)
-const hasUsedTrial = computed(
-  () =>
-    subscriptionStore.hasUsedTrial ||
-    subscriptionStore.status === 'trial_expired' ||
-    subscriptionStore.status === 'expired'
-)
+const hasUsedTrial = computed(() => subscriptionStore.hasUsedTrial)
 
 async function handleActivateTrial() {
+  if (trialLoading.value || loading.value) return
+
   trialLoading.value = true
   error.value = ''
   try {
@@ -294,14 +355,17 @@ async function handleActivateTrial() {
 }
 
 async function handleCheckout() {
+  if (loading.value || trialLoading.value) return
+
   loading.value = true
   error.value = ''
   try {
     const res = await subscriptionStore.initiateCheckout(selectedProvider.value, selectedPlan.value)
-    if (res?.checkout_url) {
-      emit('success', res)
-      emit('close')
+    if (!res?.checkout_url) {
+      throw new Error('Payment gateway tidak mengembalikan URL checkout.')
     }
+    emit('success', res)
+    emit('close')
   } catch (err) {
     error.value = err.detail || err.message || 'Gagal memulai checkout. Silakan coba lagi.'
   } finally {

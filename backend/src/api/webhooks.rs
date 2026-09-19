@@ -201,6 +201,7 @@ pub async fn get_subscription_status(
             "is_premium": is_pro,
             "days_remaining": days_remaining,
             "remaining_days": days_remaining,
+            "has_used_trial": user_trial.as_ref().map(|u| u.has_used_trial).unwrap_or(false),
             "trial_ends_at": trial_ends_at,
             "current_period_end": current_period_end,
             "plan_id": plan_id,
