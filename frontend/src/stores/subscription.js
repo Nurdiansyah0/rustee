@@ -91,8 +91,14 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       const data = await res.json()
       if (data?.checkout_url) {
         if (typeof window !== 'undefined') {
+          const isDev = window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname.startsWith('192.168.') ||
+            window.location.hostname.startsWith('10.')
+          
           const opened = window.open(data.checkout_url, '_blank')
-          if (!opened && provider === 'dana') {
+          // Only redirect current window in live production when popup blocked
+          if (!opened && !isDev && provider === 'dana') {
             window.location.href = data.checkout_url
           }
         }
@@ -114,6 +120,48 @@ export const useSubscriptionStore = defineStore('subscription', () => {
       return data
     } catch (err) {
       checkoutError.value = err.message || 'Gagal memulai proses pembayaran.'
+      throw err
+    } finally {
+      checkoutLoading.value = false
+    }
+  }
+
+  async function simulatePayment(planId = 'premium_monthly') {
+    checkoutLoading.value = true
+    checkoutError.value = null
+    try {
+      const res = await fetch('/api/v1/subscriptions/simulate-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ plan_id: planId }),
+      })
+
+      if (!res.ok) {
+        let errBody = {}
+        try {
+          errBody = await res.json()
+        } catch {}
+        throw new Error(errBody.detail || errBody.message || 'Gagal mensimulasikan pembayaran.')
+      }
+
+      const data = await res.json()
+      await fetchSubscriptionStatus()
+      try {
+        const authStore = useAuthStore()
+        if (typeof authStore.fetchUser === 'function') {
+          await authStore.fetchUser()
+        }
+        if (typeof authStore.checkAuth === 'function') {
+          await authStore.checkAuth()
+        }
+      } catch {}
+      closeUpgradeModal()
+      return data
+    } catch (err) {
+      checkoutError.value = err.message || 'Gagal simulasi pembayaran.'
       throw err
     } finally {
       checkoutLoading.value = false
@@ -231,6 +279,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     openUpgradeModal,
     closeUpgradeModal,
     initiateCheckout,
+    simulatePayment,
     activateTrial,
     $reset,
   }

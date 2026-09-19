@@ -241,6 +241,18 @@
         </span>
       </button>
 
+      <!-- Sandbox Mode Simulation Helper (Dev / Test only) -->
+      <button
+        v-if="isDev"
+        type="button"
+        @click="handleSimulatePayment"
+        :disabled="loading || trialLoading"
+        class="w-full mt-2 py-2.5 px-3 bg-surface-sunken hover:bg-surface-subtle active:bg-surface-subtle border border-brand-default/40 text-brand-default text-xs font-semibold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+      >
+        <Sparkles class="w-3.5 h-3.5" />
+        <span>Simulasikan Pembayaran DANA Sukses (Mode Uji Coba)</span>
+      </button>
+
       <div v-if="error" class="mt-3 text-xs text-center text-expense-default font-medium">
         {{ error }}
       </div>
@@ -357,6 +369,29 @@ async function handleActivateTrial() {
     error.value = err.detail || err.message || 'Gagal mengaktifkan masa uji coba.'
   } finally {
     trialLoading.value = false
+  }
+}
+
+const isDev = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname.startsWith('192.168.') ||
+  window.location.hostname.startsWith('10.')
+)
+
+async function handleSimulatePayment() {
+  if (loading.value || trialLoading.value) return
+
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await subscriptionStore.simulatePayment(selectedPlan.value)
+    emit('success', res)
+    emit('close')
+  } catch (err) {
+    error.value = err.detail || err.message || 'Gagal simulasi pembayaran.'
+  } finally {
+    loading.value = false
   }
 }
 

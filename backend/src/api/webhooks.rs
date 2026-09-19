@@ -349,6 +349,60 @@ pub async fn dana_disburse_notify_handler(
     )
 }
 
+/// Sandbox simulation endpoint to activate paid DANA subscription in dev environments.
+pub async fn simulate_payment_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, AppError> {
+    let plan_id = payload
+        .get("plan_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("premium_monthly");
+
+    let (days, amount) = if plan_id == "premium_annual" {
+        (365, PREMIUM_ANNUAL_PRICE)
+    } else {
+        (30, PREMIUM_MONTHLY_PRICE)
+    };
+
+    let now = Utc::now();
+    let end_period = (now + chrono::Duration::days(days)).to_rfc3339();
+    let start_period = now.to_rfc3339();
+
+    let sub_id = format!("sub_dana_{}", user.user_id);
+    let sub = crate::repository::subscription_repo::NewSubscription {
+        id: sub_id,
+        user_id: user.user_id.clone(),
+        provider: "dana".to_string(),
+        provider_subscription_id: Some(format!("SIM-DANA-{}", uuid::Uuid::new_v4())),
+        plan_id: plan_id.to_string(),
+        status: "active".to_string(),
+        amount: crate::domain::money::Rupiah(amount),
+        current_period_start: start_period,
+        current_period_end: end_period,
+        cancel_at_period_end: false,
+    };
+
+    state.payment_service.subscription_repo.upsert_subscription(&sub).await?;
+    state.payment_service.user_repo.update_tier(&user.user_id, "premium").await?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(serde_json::json!({
+            "success": true,
+            "tier": "premium",
+            "status": "active",
+            "plan_id": plan_id,
+            "message": "Pembayaran simulasi DANA berhasil dikonfirmasi! FinRep Pro aktif."
+        })),
+    ))
+}
+
 pub fn webhooks_router() -> Router<AppState> {
     Router::new()
         .route("/webhooks/midtrans", post(midtrans_webhook_handler))
@@ -363,5 +417,6 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/subscriptions/trial/activate", post(trial_handler))
         .route("/subscription/trial", post(trial_handler))
         .route("/subscription/trial/activate", post(trial_handler))
+        .route("/subscriptions/simulate-payment", post(simulate_payment_handler))
 }
 

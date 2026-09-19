@@ -861,21 +861,7 @@ async function finishOnboarding() {
       }
     }
 
-    // 2. If user chose Monthly or Annual paid subscription, initiate DANA checkout
-    if (selectedPlanOption.value === 'monthly' || selectedPlanOption.value === 'annual') {
-      try {
-        const planId = selectedPlanOption.value === 'annual' ? 'premium_annual' : 'premium_monthly'
-        const checkoutRes = await subscriptionStore.initiateCheckout('dana', planId)
-        if (checkoutRes?.checkout_url && typeof window !== 'undefined') {
-          window.location.href = checkoutRes.checkout_url
-          return
-        }
-      } catch (err) {
-        console.warn('DANA checkout error during onboarding', err)
-      }
-    }
-
-    // 3. Mark onboarding completed in local storage
+    // 2. Mark onboarding completed in local storage
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('invinite_onboarding_completed', 'true')
       localStorage.setItem(
@@ -891,6 +877,16 @@ async function finishOnboarding() {
           onboarded_at: new Date().toISOString()
         })
       )
+    }
+
+    // 3. If user chose Monthly or Annual paid subscription, initiate DANA checkout in background/new tab
+    if (selectedPlanOption.value === 'monthly' || selectedPlanOption.value === 'annual') {
+      try {
+        const planId = selectedPlanOption.value === 'annual' ? 'premium_annual' : 'premium_monthly'
+        await subscriptionStore.initiateCheckout('dana', planId)
+      } catch (err) {
+        console.warn('DANA checkout notice during onboarding', err)
+      }
     }
 
     // 4. Refresh Pinia stores
