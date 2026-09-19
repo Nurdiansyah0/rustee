@@ -513,6 +513,37 @@ export function handleMockApiRequest(path, options = {}) {
     };
   }
 
+  // 14b. Subscription: Simulate Payment (§19)
+  if (
+    (pathname === '/api/v1/subscriptions/simulate-payment' ||
+      pathname === '/api/v1/subscription/simulate-payment') &&
+    method === 'POST'
+  ) {
+    const body = JSON.parse(options.body || '{}');
+    const planId = body.plan_id || 'premium_monthly';
+    try {
+      const cached = JSON.parse(localStorage.getItem('invinite_auth_user') || '{}');
+      cached.subscription_tier = 'premium';
+      cached.permissions = [
+        'accounts.view',
+        'transactions.create',
+        'analytics.advanced',
+        'export.csv',
+        'export.pdf',
+        'multi.wallets',
+        'budget.custom'
+      ];
+      localStorage.setItem('invinite_auth_user', JSON.stringify(cached));
+    } catch {}
+    return {
+      success: true,
+      tier: 'premium',
+      status: 'active',
+      plan_id: planId,
+      message: 'Pembayaran simulasi DANA berhasil dikonfirmasi! FinRep Pro aktif.'
+    };
+  }
+
   // 15. Cursor Delta Synchronization (§25, §26)
   if (pathname === '/api/v1/sync' && method === 'GET') {
     const cursor = parseInt(searchParams.get('cursor') || '0', 10);

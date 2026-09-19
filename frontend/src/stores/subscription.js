@@ -279,6 +279,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     openUpgradeModal,
     closeUpgradeModal,
     initiateCheckout,
+    simulate: simulatePayment,
     simulatePayment,
     activateTrial,
     $reset,
