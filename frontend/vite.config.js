@@ -14,7 +14,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: false
+        enabled: true
       },
       includeAssets: ['favicon.ico', 'favicon.svg', 'safari-pinned-tab.svg', 'icons/*.png', 'push-worker.js'],
       manifest: {

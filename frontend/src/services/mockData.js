@@ -215,6 +215,7 @@ export function handleMockApiRequest(path, options = {}) {
   const db = loadDatabase();
   const url = new URL(path, 'http://localhost');
   const pathname = url.pathname;
+  const searchParams = url.searchParams;
 
   // 1. Auth: Login
   if (pathname === '/api/v1/auth/login' && method === 'POST') {

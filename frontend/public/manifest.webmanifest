@@ -1,0 +1,42 @@
+{
+  "id": "/",
+  "name": "FinRep — Satu Dasbor Finansial, Keputusan Lebih Presisi",
+  "short_name": "FinRep",
+  "description": "FinRep — Satu Dasbor Finansial, Keputusan Lebih Presisi. Platform Manajemen Keuangan Personal & Bisnis.",
+  "theme_color": "#059669",
+  "background_color": "#09090B",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "start_url": "/",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Catat Transaksi",
+      "short_name": "Tambah",
+      "description": "Buka form pencatatan transaksi cepat",
+      "url": "/?action=add",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

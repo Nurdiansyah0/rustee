@@ -188,25 +188,10 @@ class CursorDeltaSyncService {
     const currentCursor = explicitCursor !== null ? String(explicitCursor) : this.getCursor();
 
     try {
-      const response = await fetch(`/api/v1/sync?cursor=${encodeURIComponent(currentCursor)}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'private, no-store',
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        // If 404 or backend unavailable, fallback gracefully to mock handler
-        const fallback = await api.getSync(currentCursor);
-        if (fallback?.cursor) {
-          this.setCursor(fallback.cursor);
-        }
-        return fallback;
+      const delta = await api.getSync(currentCursor);
+      if (!delta) {
+        return null;
       }
-
-      const delta = await response.json();
 
       // 1. Advance cursor
       if (delta.cursor !== undefined) {

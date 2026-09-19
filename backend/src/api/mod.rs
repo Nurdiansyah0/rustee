@@ -6,9 +6,11 @@ pub mod handlers;
 pub mod health;
 pub mod middleware;
 pub mod router;
+pub mod sync;
 pub mod transactions;
 pub mod users;
 pub mod webhooks;
+pub mod ws;
 
 pub use accounts::accounts_router;
 pub use analytics::analytics_router;
@@ -100,6 +102,8 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/categories", categories::categories_router())
         .nest("/transactions", transactions::transactions_router())
         .nest("/users", users::users_router())
+        .route("/sync", axum::routing::get(sync::sync_handler))
+        .route("/ws", axum::routing::get(ws::ws_handler))
         .merge(analytics::analytics_router())
         .merge(webhooks::webhooks_router());
 
@@ -108,6 +112,7 @@ pub fn create_app(state: AppState) -> Router {
 
     Router::new()
         .merge(health_router)
+        .route("/ws", axum::routing::get(ws::ws_handler))
         .route("/payment/success", axum::routing::get(payment_success_handler))
         .nest("/api/v1/auth", auth_router)
         .nest("/api/v1", protected_router)
