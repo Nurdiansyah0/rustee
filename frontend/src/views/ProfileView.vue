@@ -109,6 +109,33 @@
       </div>
     </div>
 
+    <!-- User-Owned Financial Vocabulary (§4, §6) -->
+    <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Kosakata Finansial Saya</h3>
+        <button
+          type="button"
+          @click="$emit('open-onboarding')"
+          class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-brand-default/10 text-brand-default hover:bg-brand-default hover:text-white border border-brand-default/20 transition cursor-pointer"
+        >
+          Ubah / Sesuaikan
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-1">
+        <div class="p-3 bg-surface-subtle rounded-xl border border-border-subtle">
+          <div class="text-[10px] font-semibold text-income-default uppercase tracking-wider">Pemasukan Utama</div>
+          <div class="text-sm font-bold text-content-primary mt-1">{{ authStore.incomeTitle }}</div>
+          <div class="text-[10px] text-content-muted mt-0.5">Label arus kas masuk</div>
+        </div>
+        <div class="p-3 bg-surface-subtle rounded-xl border border-border-subtle">
+          <div class="text-[10px] font-semibold text-expense-default uppercase tracking-wider">Pengeluaran Utama</div>
+          <div class="text-sm font-bold text-content-primary mt-1">{{ authStore.expenseTitle }}</div>
+          <div class="text-[10px] text-content-muted mt-0.5">Label arus kas keluar</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Security & Device Info -->
     <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-3">
       <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Keamanan & Layanan</h3>
@@ -187,7 +214,7 @@ const props = defineProps({
   userTier: String
 })
 
-const emit = defineEmits(['open-upgrade', 'logout'])
+const emit = defineEmits(['open-upgrade', 'open-onboarding', 'logout'])
 
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()

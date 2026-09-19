@@ -550,7 +550,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
@@ -587,6 +587,27 @@ const stepTitles = [
 
 // ================= STEP 1 STATE =================
 const userName = ref(props.initialName || authStore.user?.display_name || authStore.user?.name || '')
+
+watch(
+  () => props.isOpen,
+  (open) => {
+    if (open) {
+      currentStep.value = 1
+      if (props.initialName || authStore.displayName) {
+        userName.value = props.initialName || authStore.displayName || ''
+      }
+    }
+  }
+)
+
+watch(
+  () => props.initialName,
+  (name) => {
+    if (name) {
+      userName.value = name
+    }
+  }
+)
 const goalOptions = [
   { id: 'emergency', title: 'Dana Darurat 6 Bulan', desc: 'Membangun cadangan dana darurat aman' },
   { id: 'debt_free', title: 'Bebas Hutang & Cicilan', desc: 'Melunasi kewajiban finansial secara disiplin' },
@@ -729,7 +750,7 @@ async function finishOnboarding() {
 
     // 1. Submit atomic onboarding payload to backend (§4, §5, §6)
     try {
-      await api.submitOnboarding({
+      const res = await api.submitOnboarding({
         display_name: userName.value || 'Sobat FinRep',
         income_title: primaryIncomeTitle.value || 'Gaji',
         expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
@@ -753,8 +774,27 @@ async function finishOnboarding() {
         ],
         activate_trial: isTrial
       })
+
+      if (res?.personalization) {
+        authStore.setPersonalization(res.personalization)
+      } else {
+        authStore.setPersonalization({
+          display_name: userName.value || 'Sobat FinRep',
+          income_title: primaryIncomeTitle.value || 'Gaji',
+          expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
+          financial_goals: selectedGoals.value,
+          onboarding_completed: true
+        })
+      }
     } catch (e) {
       console.warn('Backend onboarding API fallback, creating directly', e)
+      authStore.setPersonalization({
+        display_name: userName.value || 'Sobat FinRep',
+        income_title: primaryIncomeTitle.value || 'Gaji',
+        expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
+        financial_goals: selectedGoals.value,
+        onboarding_completed: true
+      })
       // Fallback: sync accounts & categories directly
       for (const wallet of walletsConfig.value) {
         if (wallet.name?.trim()) {
@@ -823,7 +863,9 @@ async function finishOnboarding() {
           income_title: primaryIncomeTitle.value || 'Gaji',
           expense_title: primaryExpenseTitle.value || 'Makan & Jajan',
           goals: selectedGoals.value,
+          financial_goals: selectedGoals.value,
           plan: selectedPlanOption.value,
+          onboarding_completed: true,
           onboarded_at: new Date().toISOString()
         })
       )
@@ -835,6 +877,7 @@ async function finishOnboarding() {
       categoryStore.fetchCategories(),
       analyticsStore.fetchDashboard(),
       subscriptionStore.fetchSubscriptionStatus(),
+      authStore.fetchPersonalization(),
       authStore.checkAuth()
     ])
 

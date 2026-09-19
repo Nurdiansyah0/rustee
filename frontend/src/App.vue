@@ -63,6 +63,7 @@
                 :user="authStore.user"
                 :user-tier="authStore.isPremium ? 'premium' : 'free'"
                 @open-upgrade="subscriptionStore.openUpgradeModal()"
+                @open-onboarding="openPersonalizationModal"
                 @logout="handleLogout"
               />
             </Transition>
@@ -210,25 +211,40 @@ function cleanupAuthUrlParams() {
   } catch {}
 }
 
+function openPersonalizationModal() {
+  onboardingInitialName.value = authStore.displayName || authStore.user?.display_name || authStore.user?.name || ''
+  showOnboardingModal.value = true
+}
+
 async function handleAuthenticated(authEvent = {}) {
   cleanupAuthUrlParams()
 
   // Initialize Foreground WebSocket connection (§25, §27)
   realtimeStore.initRealtime()
 
-  // Check if onboarding flow should be presented for newly registered user (§3, §4, §6)
-  if (authEvent?.isNewUser) {
-    onboardingInitialName.value = authEvent.name || authStore.user?.display_name || authStore.user?.name || ''
+  // 1. Immediately present onboarding modal if new user registration was signaled
+  const isNew = Boolean(authEvent?.isNewUser || authStore.isJustRegistered)
+  if (isNew) {
+    onboardingInitialName.value = authEvent?.name || authStore.user?.display_name || authStore.user?.name || ''
     showOnboardingModal.value = true
+    authStore.isJustRegistered = false
   }
 
+  // 2. Fetch authoritative user states and personalization
   await Promise.allSettled([
+    authStore.fetchPersonalization(),
     walletStore.fetchWallets(),
     categoryStore.fetchCategories(),
     analyticsStore.fetchDashboard(),
     subscriptionStore.fetchSubscriptionStatus(),
     syncService.reconcileOnReconnect()
   ])
+
+  // 3. Fallback: If authenticated user hasn't completed onboarding yet, enforce personalization step
+  if (!authStore.isOnboarded) {
+    onboardingInitialName.value = authEvent?.name || authStore.displayName || authStore.user?.display_name || authStore.user?.name || ''
+    showOnboardingModal.value = true
+  }
 }
 
 async function handleOnboardingCompleted() {
@@ -242,7 +258,7 @@ watch(
   (isAuth, wasAuth) => {
     if (isAuth && !wasAuth) {
       cleanupAuthUrlParams()
-      handleAuthenticated()
+      handleAuthenticated({ isNewUser: authStore.isJustRegistered })
     } else if (!isAuth && wasAuth) {
       currentTab.value = 'home'
       showOnboardingModal.value = false

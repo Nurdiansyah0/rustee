@@ -525,6 +525,74 @@ export function handleMockApiRequest(path, options = {}) {
     };
   }
 
+  // 16. Personalization: GET
+  if (pathname === '/api/v1/users/personalization' && method === 'GET') {
+    let cachedPers = null;
+    try {
+      cachedPers = JSON.parse(localStorage.getItem('invinite_user_personalization') || 'null');
+    } catch {}
+    if (cachedPers) {
+      return {
+        user_id: 'usr_mock',
+        display_name: cachedPers.display_name || 'Pengguna FinRep',
+        income_title: cachedPers.income_title || 'Pemasukan',
+        expense_title: cachedPers.expense_title || 'Pengeluaran',
+        financial_goals: cachedPers.financial_goals || cachedPers.goals || [],
+        onboarding_completed: Boolean(cachedPers.onboarding_completed),
+        updated_at: new Date().toISOString()
+      };
+    }
+    return {
+      user_id: 'usr_mock',
+      display_name: 'Pengguna Baru',
+      income_title: null,
+      expense_title: null,
+      financial_goals: [],
+      onboarding_completed: false,
+      updated_at: null
+    };
+  }
+
+  // 17. Personalization: PUT
+  if (pathname === '/api/v1/users/personalization' && method === 'PUT') {
+    const body = JSON.parse(options.body || '{}');
+    const updated = {
+      user_id: 'usr_mock',
+      display_name: body.display_name || 'Pengguna FinRep',
+      income_title: body.income_title || 'Pemasukan',
+      expense_title: body.expense_title || 'Pengeluaran',
+      financial_goals: body.financial_goals || [],
+      onboarding_completed: body.onboarding_completed !== undefined ? Boolean(body.onboarding_completed) : true,
+      updated_at: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem('invinite_user_personalization', JSON.stringify(updated));
+    } catch {}
+    return updated;
+  }
+
+  // 18. Onboarding: POST
+  if (pathname === '/api/v1/users/onboarding' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const pers = {
+      user_id: 'usr_mock',
+      display_name: body.display_name || 'Pengguna FinRep',
+      income_title: body.income_title || 'Gaji',
+      expense_title: body.expense_title || 'Makan & Jajan',
+      financial_goals: body.financial_goals || [],
+      onboarding_completed: true,
+      updated_at: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem('invinite_user_personalization', JSON.stringify(pers));
+    } catch {}
+    return {
+      success: true,
+      message: 'Onboarding berhasil diselesaikan',
+      personalization: pers
+    };
+  }
+
   // Fallback
   return { success: true };
 }

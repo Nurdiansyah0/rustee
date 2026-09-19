@@ -8,6 +8,7 @@ import { useAnalyticsStore } from './analytics'
 import { useSubscriptionStore } from './subscription'
 
 const CACHED_USER_KEY = 'invinite_auth_user'
+const CACHED_PERSONALIZATION_KEY = 'invinite_user_personalization'
 
 function loadCachedUser() {
   try {
@@ -35,11 +36,39 @@ function saveCachedUser(userData) {
   }
 }
 
+function loadCachedPersonalization() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(CACHED_PERSONALIZATION_KEY)
+      return raw ? JSON.parse(raw) : null
+    }
+  } catch {
+    // Ignore parse error
+  }
+  return null
+}
+
+function saveCachedPersonalization(data) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      if (data) {
+        localStorage.setItem(CACHED_PERSONALIZATION_KEY, JSON.stringify(data))
+      } else {
+        localStorage.removeItem(CACHED_PERSONALIZATION_KEY)
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   // State
   const initialCached = loadCachedUser()
   const user = ref(initialCached)
   const permissions = ref(initialCached?.permissions || [])
+  const personalization = ref(loadCachedPersonalization())
+  const isJustRegistered = ref(false)
   const loading = ref(false)
   const error = ref(null)
   const initialized = ref(Boolean(initialCached))
@@ -51,7 +80,25 @@ export const useAuthStore = defineStore('auth', () => {
     return tier === 'premium'
   })
   const displayName = computed(() => {
-    return user.value?.display_name || user.value?.name || user.value?.email?.split('@')[0] || 'Pengguna'
+    return (
+      personalization.value?.display_name?.trim() ||
+      user.value?.display_name ||
+      user.value?.name ||
+      user.value?.email?.split('@')[0] ||
+      'Pengguna'
+    )
+  })
+  const incomeTitle = computed(() => {
+    return personalization.value?.income_title?.trim() || 'Pemasukan'
+  })
+  const expenseTitle = computed(() => {
+    return personalization.value?.expense_title?.trim() || 'Pengeluaran'
+  })
+  const userGoals = computed(() => {
+    return personalization.value?.financial_goals || personalization.value?.goals || []
+  })
+  const isOnboarded = computed(() => {
+    return Boolean(personalization.value?.onboarding_completed)
   })
   const initials = computed(() => {
     const name = displayName.value || 'U'
@@ -62,6 +109,49 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Actions
+  function setPersonalization(prefs) {
+    if (!prefs) return
+    personalization.value = {
+      ...(personalization.value || {}),
+      ...prefs
+    }
+    saveCachedPersonalization(personalization.value)
+  }
+
+  async function fetchPersonalization() {
+    try {
+      const prefs = await api.getPersonalization()
+      if (prefs) {
+        personalization.value = {
+          ...(personalization.value || {}),
+          ...prefs
+        }
+        saveCachedPersonalization(personalization.value)
+      }
+      return prefs
+    } catch (err) {
+      console.warn('Failed to fetch user personalization:', err)
+      return null
+    }
+  }
+
+  async function updatePersonalization(data) {
+    try {
+      const updated = await api.updatePersonalization(data)
+      if (updated) {
+        personalization.value = {
+          ...(personalization.value || {}),
+          ...updated
+        }
+        saveCachedPersonalization(personalization.value)
+      }
+      return updated
+    } catch (err) {
+      console.error('Failed to update personalization:', err)
+      throw err
+    }
+  }
+
   async function checkAuth() {
     try {
       const me = await api.getMe()
@@ -69,6 +159,8 @@ export const useAuthStore = defineStore('auth', () => {
       permissions.value = me.permissions || []
       saveCachedUser(me)
       initialized.value = true
+      // Fetch user financial vocabulary & preferences
+      fetchPersonalization().catch(() => {})
       return true
     } catch (err) {
       // 1. Explicit 401 Unauthorized from backend -> session is definitely expired
@@ -113,6 +205,7 @@ export const useAuthStore = defineStore('auth', () => {
         permissions.value = res.user.permissions || []
         saveCachedUser(res.user)
         initialized.value = true
+        fetchPersonalization().catch(() => {})
         return true
       }
       const ok = await checkAuth()
@@ -130,13 +223,23 @@ export const useAuthStore = defineStore('auth', () => {
   async function register(name, email, password) {
     loading.value = true
     error.value = null
+    isJustRegistered.value = true
     try {
       const res = await api.register(name, email, password)
       if (res?.user) {
         user.value = res.user
         permissions.value = res.user.permissions || []
+        personalization.value = {
+          display_name: name,
+          income_title: null,
+          expense_title: null,
+          financial_goals: [],
+          onboarding_completed: false
+        }
         saveCachedUser(res.user)
+        saveCachedPersonalization(personalization.value)
         initialized.value = true
+        fetchPersonalization().catch(() => {})
         return true
       }
       const ok = await checkAuth()
@@ -144,6 +247,7 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Gagal menginisialisasi sesi setelah pendaftaran.')
       }
     } catch (err) {
+      isJustRegistered.value = false
       error.value = err.detail || err.message || 'Registrasi gagal.'
       throw err
     } finally {
@@ -170,10 +274,13 @@ export const useAuthStore = defineStore('auth', () => {
   function $reset() {
     user.value = null
     permissions.value = []
+    personalization.value = null
+    isJustRegistered.value = false
     loading.value = false
     error.value = null
     initialized.value = true
     saveCachedUser(null)
+    saveCachedPersonalization(null)
   }
 
   // Synchronize authentication status across multiple browser tabs
@@ -194,6 +301,16 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = null
           permissions.value = []
         }
+      } else if (event.key === CACHED_PERSONALIZATION_KEY) {
+        if (event.newValue) {
+          try {
+            personalization.value = JSON.parse(event.newValue)
+          } catch {
+            personalization.value = null
+          }
+        } else {
+          personalization.value = null
+        }
       }
     })
   }
@@ -202,6 +319,8 @@ export const useAuthStore = defineStore('auth', () => {
     // State
     user,
     permissions,
+    personalization,
+    isJustRegistered,
     loading,
     error,
     initialized,
@@ -209,6 +328,10 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isPremium,
     displayName,
+    incomeTitle,
+    expenseTitle,
+    userGoals,
+    isOnboarded,
     initials,
     hasPermission,
     // Actions
@@ -216,6 +339,9 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
+    setPersonalization,
+    fetchPersonalization,
+    updatePersonalization,
     $reset,
   }
 })
