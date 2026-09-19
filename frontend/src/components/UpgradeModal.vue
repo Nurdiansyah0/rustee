@@ -12,7 +12,7 @@
       ref="modalRef"
       class="relative w-full max-w-md p-4 sm:p-6 max-h-[90dvh] overflow-y-auto bg-surface-card rounded-2xl shadow-2xl border border-border-subtle animate-in fade-in zoom-in-95 duration-200 scroll-native"
     >
-      <!-- Close button with focus ref -->
+      <!-- Close button -->
       <button
         ref="closeButtonRef"
         type="button"
@@ -23,86 +23,86 @@
         <X class="w-5 h-5 stroke-[2]" />
       </button>
 
-      <!-- Header with compact vertical spacing -->
+      <!-- Header -->
       <div class="text-center mb-4">
-        <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30 shadow-xs">
+        <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-brand-default/20 to-brand-default/5 rounded-xl text-brand-default border border-brand-default/25 shadow-xs">
           <Sparkles class="w-6 h-6 stroke-[2]" />
         </div>
         <h2 id="upgrade-modal-title" class="text-2xl font-black text-content-primary tracking-tight">
-          Upgrade ke FinRep Pro
+          Yuk, upgrade ke FinRep Pro
         </h2>
         <p id="upgrade-modal-desc" class="text-xs text-content-secondary mt-1 max-w-sm mx-auto leading-relaxed">
-          Buka analitik presisi perbankan, proyeksi runway, dan automasi finansial cerdas
+          Biar kamu bisa lihat lebih jelas ke mana uangmu pergi, seberapa jauh runway-mu, dan dapatkan insight yang lebih pintar.
         </p>
       </div>
 
-      <!-- Active Trial Alert Banner -->
-      <div v-if="isTrialing" class="mb-4 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
-        <div class="flex items-center gap-2 text-amber-500 font-bold mb-1">
+      <!-- Active Trial Alert -->
+      <div v-if="isTrialing" class="mb-4 p-3.5 rounded-xl bg-brand-default/10 border border-brand-default/25 text-xs">
+        <div class="flex items-center gap-2 text-brand-default font-bold mb-1">
           <Clock class="w-4 h-4 shrink-0 animate-pulse" />
-          <span>Masa Uji Coba Pro Aktif</span>
+          <span>Masih dalam masa coba Pro</span>
         </div>
         <p class="text-content-secondary text-[11px] leading-relaxed">
-          Tersisa <strong class="text-amber-400 font-bold">{{ daysRemaining ?? 90 }} hari</strong>. Kunci akses tanpa jeda dengan berlangganan mulai Rp 10.000 / bulan. Data keuangan Anda tetap tersimpan di akun Anda dan tidak terhapus saat masa trial berakhir.
+          Kamu masih punya <strong class="text-brand-default font-bold">{{ daysRemaining ?? 90 }} hari</strong> lagi. Kalau suka, kamu bisa lanjut berlangganan mulai Rp 10.000/bulan biar aksesnya nggak terputus. Data kamu tetap aman di akun, nggak akan hilang.
         </p>
       </div>
 
-      <!-- Trial Expired Alert Banner (Verifiable data retention reassurance) -->
+      <!-- Trial Expired Alert -->
       <div v-else-if="hasUsedTrial" class="mb-4 p-3.5 rounded-xl bg-surface-subtle border border-border-default text-xs">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2 text-content-primary font-bold">
             <ShieldCheck class="w-4 h-4 text-brand-default shrink-0" />
-            <span>Masa Uji Coba Selesai</span>
+            <span>Masa coba sudah selesai</span>
           </div>
           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-card border border-border-subtle text-content-muted">
-            Data Tersimpan di Akun
+            Data kamu aman
           </span>
         </div>
         <p class="text-content-secondary text-[11px] leading-relaxed">
-          Masa uji coba 3 bulan telah berakhir. Seluruh data transaksi Anda tetap tersimpan di akun Free Tier tanpa terhapus. Aktifkan FinRep Pro mulai Rp 10.000 / bulan untuk membuka kembali analitik runway & laporan penuh.
+          3 bulan coba-cobanya sudah habis. Tenang, semua transaksi kamu tetap tersimpan di akun Free. Kalau mau buka lagi analitik runway & laporan lengkap, kamu bisa aktifkan FinRep Pro mulai Rp 10.000/bulan.
         </p>
       </div>
 
-      <!-- 3-Month Free Trial Promotion Card (Only shown if NOT trialing and NOT already used trial) -->
+      <!-- 3-Month Free Trial Promotion Card -->
       <div
         v-else-if="!isPremium"
-        class="mb-4 p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-emerald-500/15 to-emerald-500/10 border border-amber-500/30 relative overflow-hidden"
+        class="mb-4 p-4 rounded-xl bg-gradient-to-br from-brand-default/15 via-brand-default/10 to-surface-subtle border border-brand-default/25 relative overflow-hidden"
       >
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-black text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="text-xs font-black text-brand-default uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles class="w-3.5 h-3.5" />
             Coba Dulu, Bayar Nanti
           </span>
-          <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-400 border border-emerald-500/30">
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-default/15 text-brand-default border border-brand-default/25">
             3 Bulan Gratis (90 Hari)
           </span>
         </div>
         <p class="text-xs text-content-secondary leading-relaxed mb-3.5">
-          Nikmati seluruh analitik lanjutan & proyeksi runway selama 3 bulan penuh tanpa biaya di depan. Tanpa kartu kredit, aktif instan.
+          Nikmati semua fitur FinRep Pro selama 3 bulan penuh secara gratis. Tanpa perlu kartu kredit, langsung aktif seketika.
         </p>
         <button
           type="button"
           @click="handleActivateTrial"
           :disabled="trialLoading || loading"
-          class="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-md shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer text-xs flex items-center justify-center gap-2"
+          class="w-full py-3 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis active:scale-[0.98] text-white font-bold rounded-xl shadow-md shadow-brand-default/20 transition disabled:opacity-50 cursor-pointer text-xs flex items-center justify-center gap-2"
         >
           <Sparkles class="w-4 h-4" />
-          <span v-if="!trialLoading">Mulai Uji Coba 3 Bulan Gratis (Rp 0)</span>
-          <span v-else>Mengaktifkan Akses Pro...</span>
+          <span v-if="!trialLoading">Mulai coba 3 bulan gratis</span>
+          <span v-else>Sedang mengaktifkan...</span>
         </button>
       </div>
 
-      <!-- Plan Duration Selector with Semantic ARIA Radiogroup -->
+      <!-- Plan Selector -->
       <div class="mb-4">
         <label class="block text-[11px] font-bold text-content-secondary uppercase tracking-wide mb-2">
-          Pilihan Paket Berlangganan
+          Pilih paket yang cocok buat kamu
         </label>
         <div
           role="radiogroup"
           aria-label="Pilihan Paket Berlangganan"
           class="grid grid-cols-2 gap-2"
         >
-          <!-- Monthly Plan -->
+          <!-- Monthly -->
           <button
             type="button"
             role="radio"
@@ -116,14 +116,14 @@
                 : 'border-border-default hover:bg-surface-subtle bg-surface-sunken'
             ]"
           >
-            <div class="text-[10px] font-bold text-content-muted uppercase">Paket Bulanan</div>
+            <div class="text-[10px] font-bold text-content-muted uppercase">Bulanan</div>
             <div class="text-sm font-black text-content-primary mt-0.5 tabular-nums">
               Rp 10.000 <span class="text-[10px] font-normal text-content-secondary">/ bln</span>
             </div>
-            <div class="text-[10px] text-content-muted mt-0.5">Fleksibel setiap bulan</div>
+            <div class="text-[10px] text-content-muted mt-0.5">Bisa berhenti kapan saja</div>
           </button>
 
-          <!-- Annual Plan -->
+          <!-- Annual -->
           <button
             type="button"
             role="radio"
@@ -137,43 +137,43 @@
                 : 'border-border-default hover:bg-surface-subtle bg-surface-sunken'
             ]"
           >
-            <span class="absolute top-1.5 right-1.5 text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-500 text-black uppercase">
+            <span class="absolute top-1.5 right-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-default text-white uppercase tracking-wider">
               Hemat 8%
             </span>
-            <div class="text-[10px] font-bold text-content-muted uppercase">Paket Tahunan</div>
+            <div class="text-[10px] font-bold text-content-muted uppercase">Tahunan</div>
             <div class="text-sm font-black text-content-primary mt-0.5 tabular-nums">
               Rp 110.000 <span class="text-[10px] font-normal text-content-secondary">/ thn</span>
             </div>
-            <div class="text-[10px] text-emerald-500 font-semibold mt-0.5">Setara ~Rp 9.166/bln</div>
+            <div class="text-[10px] text-brand-default font-semibold mt-0.5">Hanya ~Rp 9.166/bulan</div>
           </button>
         </div>
       </div>
 
-      <!-- Feature list -->
+      <!-- Feature list (lebih personal) -->
       <div class="space-y-2 mb-4 text-xs text-content-secondary">
         <div class="flex items-center gap-2.5">
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
-          <span class="text-content-primary font-medium">Analitik pengeluaran mendalam & proyeksi runway multi-bulan</span>
+          <span class="text-content-primary font-medium">Lihat pola pengeluaranmu & proyeksi runway beberapa bulan ke depan</span>
         </div>
         <div class="flex items-center gap-2.5">
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
-          <span class="text-content-primary font-medium">Skor kesehatan finansial & pemantauan rasio tabungan</span>
+          <span class="text-content-primary font-medium">Skor kesehatan finansial + pantau rasio tabunganmu</span>
         </div>
         <div class="flex items-center gap-2.5">
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
-          <span class="text-content-primary font-medium">Budgeting per kategori fleksibel & peringatan overbudget</span>
+          <span class="text-content-primary font-medium">Budget per kategori + notifikasi kalau hampir overbudget</span>
         </div>
         <div class="flex items-center gap-2.5">
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
-          <span class="text-content-primary font-medium">Ekspor laporan buku kas terenkripsi (CSV & PDF)</span>
+          <span class="text-content-primary font-medium">Ekspor laporan buku kas (CSV & PDF) yang terenkripsi</span>
         </div>
       </div>
 
@@ -181,32 +181,32 @@
       <div class="relative flex py-2 items-center mb-3">
         <div class="flex-grow border-t border-border-subtle"></div>
         <span class="flex-shrink mx-3 text-[10px] font-bold text-content-muted uppercase tracking-wider">
-          Metode Pembayaran Resmi
+          Cara bayar
         </span>
         <div class="flex-grow border-t border-border-subtle"></div>
       </div>
 
-      <!-- Payment Provider Information (Informative, non-pseudo-radio card) -->
+      <!-- Payment info -->
       <div class="mb-4">
         <div class="flex items-center justify-between mb-1.5">
           <span class="text-[11px] font-bold text-content-secondary uppercase tracking-wide">
-            Metode Pembayaran Tersedia
+            Metode pembayaran
           </span>
           <span class="text-[10px] font-bold text-brand-default tabular-nums">
             {{ selectedPlan === 'premium_annual' ? 'Rp 110.000 / thn' : 'Rp 10.000 / bln' }}
           </span>
         </div>
-        <div class="p-3 rounded-xl border border-[#118EEA]/30 bg-[#118EEA]/5 flex items-center justify-between">
+        <div class="p-3 rounded-xl border border-border-default bg-surface-sunken flex items-center justify-between">
           <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-[#118EEA] text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+            <div class="w-8 h-8 rounded-lg bg-[#118EEA] text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-xs">
               DANA
             </div>
             <div>
               <div class="font-extrabold text-xs text-content-primary flex items-center gap-1.5">
                 <span>DANA Direct & SNAP</span>
-                <span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#118EEA]/20 text-[#118EEA] border border-[#118EEA]/30">Terverifikasi</span>
+                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-default/10 text-brand-default border border-brand-default/20">Terverifikasi</span>
               </div>
-              <div class="text-[10px] text-content-muted mt-0.5">Saldo DANA & QRIS • Verifikasi Server Asimetris</div>
+              <div class="text-[10px] text-content-muted mt-0.5">Saldo DANA & QRIS • Verifikasi otomatis</div>
             </div>
           </div>
           <span class="text-[10px] font-semibold text-content-muted bg-surface-subtle px-2 py-0.5 rounded border border-border-subtle">
@@ -215,11 +215,11 @@
         </div>
         <div class="mt-2 text-[10px] text-content-muted flex items-center gap-1.5 px-1">
           <ShieldCheck class="w-3.5 h-3.5 text-brand-default shrink-0" />
-          <span>Transaksi diverifikasi server secara otomatis melalui webhook resmi DANA.</span>
+          <span>Pembayaran diverifikasi langsung lewat sistem DANA yang resmi.</span>
         </div>
       </div>
 
-      <!-- Submit CTA -->
+      <!-- CTA -->
       <button
         type="button"
         @click="handleCheckout"
@@ -227,11 +227,11 @@
         class="w-full py-3.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-lg shadow-brand-default/30 transition disabled:opacity-50 cursor-pointer text-sm flex items-center justify-center gap-2"
       >
         <span v-if="!loading">
-          Lanjutkan via DANA ({{ selectedPlan === 'premium_annual' ? 'Rp 110.000' : 'Rp 10.000' }})
+          Lanjut bayar via DANA ({{ selectedPlan === 'premium_annual' ? 'Rp 110.000' : 'Rp 10.000' }})
         </span>
         <span v-else class="flex items-center gap-2">
           <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-          <span>Menghubungkan ke Payment Gateway...</span>
+          <span>Menghubungkan ke DANA...</span>
         </span>
       </button>
 
