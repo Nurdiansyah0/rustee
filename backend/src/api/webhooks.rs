@@ -16,7 +16,9 @@ use crate::api::auth::make_auth_cookie;
 use crate::api::middleware::auth_extractor::{AuthenticatedUser, HasJwtEngine};
 use crate::api::AppState;
 use crate::error::AppError;
-use crate::service::payment_service::{MidtransNotification, XenditNotification};
+use crate::service::payment_service::{
+    PaymentError, PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE,
+};
 
 pub const CACHE_CONTROL_VALUE: &str = "private, no-store, must-revalidate";
 
@@ -26,61 +28,28 @@ pub struct CheckoutRequest {
     pub plan_id: Option<String>,
 }
 
+/// Webhook handler for Midtrans — disabled; DANA is the exclusive payment provider.
+/// Rejects with HTTP 400 Bad Request (UnsupportedProvider).
 pub async fn midtrans_webhook_handler(
-    State(state): State<AppState>,
-    body_bytes: Bytes,
-) -> Result<impl IntoResponse, AppError> {
-    let payload_str = std::str::from_utf8(&body_bytes).map_err(|e| {
-        AppError::BadRequest(format!("Invalid UTF-8 payload: {}", e), "INVALID_PAYLOAD")
-    })?;
-
-    let notification: MidtransNotification = serde_json::from_str(payload_str).map_err(|e| {
-        AppError::BadRequest(
-            format!("Invalid Midtrans JSON payload: {}", e),
-            "INVALID_PAYLOAD",
-        )
-    })?;
-
-    let result = state
-        .payment_service
-        .handle_midtrans_webhook(notification, payload_str)
-        .await?;
-
-    let mut headers = HeaderMap::new();
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
-    Ok((StatusCode::OK, headers, Json(result)))
+    _headers: HeaderMap,
+    _body_bytes: Bytes,
+) -> Result<StatusCode, AppError> {
+    Err(PaymentError::UnsupportedProvider(
+        "Unsupported payment provider 'midtrans'. DANA is the exclusive payment provider.".to_string(),
+    ).into())
 }
 
+/// Webhook handler for Xendit — disabled; DANA is the exclusive payment provider.
+/// Rejects with HTTP 400 Bad Request (UnsupportedProvider).
 pub async fn xendit_webhook_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    body_bytes: Bytes,
-) -> Result<impl IntoResponse, AppError> {
-    let token = headers
-        .get("x-callback-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-
-    let payload_str = std::str::from_utf8(&body_bytes).map_err(|e| {
-        AppError::BadRequest(format!("Invalid UTF-8 payload: {}", e), "INVALID_PAYLOAD")
-    })?;
-
-    let notification: XenditNotification = serde_json::from_str(payload_str).map_err(|e| {
-        AppError::BadRequest(
-            format!("Invalid Xendit JSON payload: {}", e),
-            "INVALID_PAYLOAD",
-        )
-    })?;
-
-    let result = state
-        .payment_service
-        .handle_xendit_webhook(token, notification, payload_str)
-        .await?;
-
-    let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
-    Ok((StatusCode::OK, resp_headers, Json(result)))
+    _headers: HeaderMap,
+    _body_bytes: Bytes,
+) -> Result<StatusCode, AppError> {
+    Err(PaymentError::UnsupportedProvider(
+        "Unsupported payment provider 'xendit'. DANA is the exclusive payment provider.".to_string(),
+    ).into())
 }
+
 
 pub async fn get_subscription_status(
     user: AuthenticatedUser,
@@ -185,7 +154,7 @@ pub async fn get_subscription_status(
         } else if s.status == "active" {
             is_pro = true;
             status = "active";
-            amount = if s.amount.0 > 0 { s.amount.0 } else { 10000 };
+            amount = if s.amount.0 > 0 { s.amount.0 } else { PREMIUM_MONTHLY_PRICE };
         } else {
             status = s.status.as_str();
             is_pro = false;
@@ -206,8 +175,8 @@ pub async fn get_subscription_status(
             "current_period_end": current_period_end,
             "plan_id": plan_id,
             "amount": amount,
-            "price_monthly": if status == "trialing" { 0 } else if is_pro { 10000 } else { 0 },
-            "price_annual": 110000,
+            "price_monthly": if status == "trialing" { 0 } else if is_pro { PREMIUM_MONTHLY_PRICE } else { 0 },
+            "price_annual": PREMIUM_ANNUAL_PRICE,
             "subscription": sub,
             "features": if is_pro {
                 vec!["transactions.basic", "analytics.basic", "analytics.advanced", "budgeting", "reports.advanced"]
@@ -389,6 +358,10 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/subscription", get(get_subscription_status))
         .route("/subscriptions/status", get(get_subscription_status))
         .route("/subscriptions/checkout", post(checkout_handler))
+        .route("/subscription/checkout", post(checkout_handler))
         .route("/subscriptions/trial", post(trial_handler))
+        .route("/subscriptions/trial/activate", post(trial_handler))
         .route("/subscription/trial", post(trial_handler))
+        .route("/subscription/trial/activate", post(trial_handler))
 }
+

@@ -66,6 +66,8 @@ pub struct OnboardingWallet {
     pub name: String,
     pub account_type: Option<String>,
     pub initial_balance: Option<i64>,
+    pub color: Option<String>,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,6 +76,8 @@ pub struct OnboardingCategory {
     pub category_type: String, // 'income' | 'expense'
     pub display_name: Option<String>,
     pub icon: Option<String>,
+    pub color: Option<String>,
+    pub metadata: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,7 +101,14 @@ pub async fn get_personalization(
         .await?;
 
     let mut resp: PersonalizationResponse = prefs.into();
-    resp.user_id = user.user_id;
+    resp.user_id = user.user_id.clone();
+
+    // If display_name is not yet set in preferences, fall back to registered display_name
+    if resp.display_name.is_none() {
+        if let Ok(u) = state.auth_state.auth_service.get_me(&user.user_id).await {
+            resp.display_name = Some(u.user.display_name);
+        }
+    }
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
@@ -150,8 +161,8 @@ pub async fn onboarding_handler(
                     account_type: w.account_type.unwrap_or_else(|| "checking".to_string()),
                     currency: Some("IDR".to_string()),
                     initial_balance: crate::domain::Rupiah::new(w.initial_balance.unwrap_or(0)),
-                    color: None,
-                    icon: None,
+                    color: w.color,
+                    icon: w.icon,
                 };
                 let _ = state.account_repo.create(&new_acc).await;
             }
@@ -170,11 +181,11 @@ pub async fn onboarding_handler(
                     name: name_trim.to_string(),
                     category_type: c.category_type,
                     icon: c.icon,
-                    color: None,
+                    color: c.color,
                     is_system: false,
                     display_name: Some(disp),
                     normalized_name: Some(name_trim.to_lowercase()),
-                    metadata: None,
+                    metadata: c.metadata,
                 };
                 let _ = state.category_repo.create(&new_cat).await;
             }

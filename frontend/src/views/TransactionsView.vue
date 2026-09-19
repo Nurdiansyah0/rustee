@@ -44,12 +44,7 @@
       <!-- Compact Filter Chips -->
       <div class="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none select-none shrink-0">
         <button
-          v-for="tab in [
-            { id: '', label: 'Semua' },
-            { id: 'income', label: 'Masuk' },
-            { id: 'expense', label: 'Keluar' },
-            { id: 'transfer', label: 'Transfer' }
-          ]"
+          v-for="tab in filterTabs"
           :key="tab.id"
           type="button"
           @click="setFilter(tab.id)"
@@ -175,6 +170,7 @@ import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
 import { formatFinancialDate } from '@/utils/datetime'
 import { useWalletStore } from '@/stores/wallets'
+import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui'
 import {
   Plus,
@@ -190,6 +186,18 @@ import {
 const emit = defineEmits(['open-add', 'refresh'])
 
 const walletStore = useWalletStore()
+const authStore = useAuthStore()
+
+const incomeTitle = computed(() => authStore.incomeTitle || 'Masuk')
+const expenseTitle = computed(() => authStore.expenseTitle || 'Keluar')
+
+const filterTabs = computed(() => [
+  { id: '', label: 'Semua' },
+  { id: 'income', label: incomeTitle.value },
+  { id: 'expense', label: expenseTitle.value },
+  { id: 'transfer', label: 'Transfer' }
+])
+
 const transactions = ref([])
 const meta = ref(null)
 const page = ref(1)

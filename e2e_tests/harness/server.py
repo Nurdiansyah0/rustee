@@ -26,6 +26,10 @@ Implements all 55 features:
 
 import sys
 import os
+
+os.environ["no_proxy"] = "localhost,127.0.0.1"
+os.environ["NO_PROXY"] = "localhost,127.0.0.1"
+
 import time
 import json
 import uuid
@@ -427,6 +431,10 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/ws":
             upgrade = self.headers.get("Upgrade", "")
             if "websocket" in upgrade.lower():
+                user_id = self.get_auth_user_id()
+                if not user_id:
+                    self.send_rfc7807(401, "Unauthorized", "Authentication required for WebSocket connection", "UNAUTHORIZED")
+                    return
                 self.send_json(200, {"status": "websocket_endpoint_ready", "supported_events": ["TransactionCreated", "BalanceChanged", "SyncHint"]})
             else:
                 self.send_rfc7807(400, "Bad Request", "Expected WebSocket Upgrade header", "UPGRADE_REQUIRED")
@@ -437,7 +445,26 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             self.send_json(200, {
                 "bridge_version": "1.0",
                 "notification_service": "supported",
-                "trusted_origin": "https://api.nurdiansyahlabs.com"
+                "trusted_origin": "https://api.nurdiansyahlabs.com",
+                "hardware_acceleration": True,
+                "safe_area_configured": True,
+                "backend_authoritative": True,
+                "capabilities": ["check_permissions", "haptic_feedback", "sync", "secure_storage"],
+                "approved_packages": ["com.bca", "id.dana", "com.gojek.app", "com.mandiri.livin"],
+                "battery_policy": "observe_saver",
+                "sync_throttle_interval_sec": 900
+            })
+            return
+
+        if path in ["/api/v1/subscriptions/plans", "/api/v1/plans"]:
+            self.send_json(200, {
+                "plans": [
+                    {"id": "free", "name": "Free", "amount": 0, "currency": "IDR", "interval": "forever"},
+                    {"id": "trial_3_months", "name": "3-Month Trial", "amount": 0, "currency": "IDR", "duration_days": 90},
+                    {"id": "premium_monthly", "name": "Monthly Premium", "amount": 10000, "currency": "IDR", "interval": "month"},
+                    {"id": "premium_annual", "name": "Annual Premium", "amount": 110000, "currency": "IDR", "interval": "year"}
+                ],
+                "exclusive_provider": "dana"
             })
             return
 
@@ -486,21 +513,43 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
 
-            features = ["transactions.basic", "accounts.basic"]
-            if is_premium or sub_status == "trialing":
+            is_pro = is_premium or (sub_status == "trialing")
+            features = ["transactions.basic", "accounts.basic", "analytics.basic"]
+            if is_pro:
                 features.extend(["analytics.advanced", "budgeting", "reports.advanced", "auto_transaction_ingestion"])
 
             self.send_json(200, {
                 "user_id": user_id,
                 "tier": user["tier"],
                 "status": sub_status,
-                "is_premium": is_premium,
+                "is_premium": is_pro,
                 "has_used_trial": bool(user["has_used_trial"]),
                 "trial_started_at": user["trial_started_at"],
                 "trial_ends_at": user["trial_ends_at"],
                 "days_remaining": days_remaining,
+                "remaining_days": days_remaining,
+                "price_monthly": 10000 if (user["tier"] == "premium" and sub_status != "trialing") else 0,
+                "price_annual": 110000,
+                "plans": {
+                    "free": {"amount": 0, "interval": "forever"},
+                    "premium_monthly": {"amount": 10000, "interval": "month"},
+                    "premium_annual": {"amount": 110000, "interval": "year"}
+                },
+                "exclusive_provider": "dana",
                 "features": features
             })
+            return
+
+        # Audit Logs Query
+        if path in ["/api/v1/audit/logs", "/api/v1/audit"]:
+            with get_db() as conn:
+                cur = conn.execute(
+                    "SELECT * FROM audit_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+                    (user_id,)
+                )
+                rows = cur.fetchall()
+                logs = [dict(r) for r in rows]
+                self.send_json(200, {"logs": logs, "count": len(logs)})
             return
 
         # 3. Multi-Wallet Accounts (§14, §15)
@@ -586,7 +635,9 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                 net_cash_flow = income - expenses
                 self.send_json(200, {
                     "total_income": income,
+                    "income": income,
                     "total_expenses": expenses,
+                    "expenses": expenses,
                     "net_cash_flow": net_cash_flow,
                     "currency": "IDR"
                 })
@@ -603,15 +654,15 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                     GROUP BY c.id
                 """, (user_id, user_id))
                 rows = cur.fetchall()
-                items = [dict(r) for r in rows]
-                self.send_json(200, {"categories": items})
+                categories = [dict(r) for r in rows]
+                self.send_json(200, {"categories": categories, "count": len(categories)})
             return
 
-        # 8. Server-Side Feature Gating (§9, §19, REQ-SEC-10)
+        # 8. Server-Side Feature Gating (§9, REQ-SEC-10)
         # Locked features strictly return HTTP 403 FEATURE_LOCKED for non-premium users
         if path in ["/api/v1/analytics/advanced", "/api/v1/reports/advanced", "/api/v1/budgets"]:
             if not is_premium:
-                self.send_rfc7807(403, "Forbidden", "Fitur ini memerlukan langganan Premium aktif atau uji coba 3 bulan.", "FEATURE_LOCKED")
+                self.send_rfc7807(403, "Forbidden", "Fitur ini memerlukan langganan Premium", "FEATURE_LOCKED")
                 return
 
             if path == "/api/v1/analytics/advanced":
@@ -646,7 +697,7 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             with get_db() as conn:
                 cur = conn.execute("SELECT * FROM transaction_candidates WHERE user_id = ? AND status = 'pending' ORDER BY created_at DESC", (user_id,))
                 candidates = [dict(r) for r in cur.fetchall()]
-                self.send_json(200, {"candidates": candidates, "count": len(candidates)})
+                self.send_json(200, candidates)
             return
 
         # 10. Cursor Delta Sync (§25, §26)
@@ -770,12 +821,24 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
 
         # 4. DANA Open API Webhook (§19, REQ-SEC-08, REQ-SEC-09)
         if path == "/api/v1/webhooks/dana":
-            sig = self.headers.get("X-SIGNATURE", "")
-            timestamp = self.headers.get("X-TIMESTAMP", "")
-            partner_id = self.headers.get("X-PARTNER-ID", "")
-            event_id = self.headers.get("X-EXTERNAL-ID", "") or (body.get("event_id") if body else "")
+            sig = self.headers.get("X-SIGNATURE") or self.headers.get("x-signature") or ""
+            timestamp = self.headers.get("X-TIMESTAMP") or self.headers.get("x-timestamp") or ""
+            partner_id = self.headers.get("X-PARTNER-ID") or self.headers.get("x-partner-id") or ""
+            event_id = self.headers.get("X-EXTERNAL-ID") or self.headers.get("x-external-id") or (body.get("event_id") if isinstance(body, dict) else "")
 
-            if not sig or not event_id:
+            if not raw_str or not raw_str.strip():
+                self.send_rfc7807(400, "Bad Request", "Empty webhook payload body", "EMPTY_PAYLOAD")
+                return
+
+            if not timestamp:
+                self.send_rfc7807(401, "Unauthorized", "Missing X-TIMESTAMP header", "MISSING_TIMESTAMP")
+                return
+
+            if not event_id:
+                self.send_rfc7807(401, "Unauthorized", "Missing X-EXTERNAL-ID header or event ID", "MISSING_EVENT_ID")
+                return
+
+            if not sig:
                 self.send_rfc7807(401, "Unauthorized", "Missing signature or event ID", "UNAUTHORIZED_WEBHOOK")
                 return
 
@@ -801,11 +864,12 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                 )
 
                 # Process subscription update
-                user_id_target = body.get("user_id")
+                user_id_target = body.get("user_id") if isinstance(body, dict) else None
+                amount_paid = body.get("amount", 10000) if isinstance(body, dict) else 10000
                 if user_id_target:
                     conn.execute("UPDATE users SET tier = 'active', updated_at = ? WHERE id = ?", (utc_now_iso(), user_id_target))
                     conn.commit()
-                    self.log_audit(user_id_target, "DANA_PAYMENT_SUCCESS", "subscription", event_id, f"Activated via DANA event {event_id}")
+                    self.log_audit(user_id_target, "DANA_PAYMENT_SUCCESS", "subscription", event_id, f"Activated via DANA event {event_id} (amount: {amount_paid})")
 
             self.send_json(200, {"responseCode": "2005600", "responseMessage": "Successful"})
             return
@@ -1035,7 +1099,7 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             return
 
         # 9. 3-Month Premium Trial Activation (§8, REQ-SEC-04)
-        if path == "/api/v1/subscriptions/trial/activate":
+        if path in ["/api/v1/subscriptions/trial", "/api/v1/subscriptions/trial/activate"]:
             if user["has_used_trial"]:
                 self.send_rfc7807(409, "Conflict", "Akun ini telah menggunakan uji coba 3 bulan sebelumnya.", "TRIAL_ALREADY_USED")
                 return
@@ -1066,29 +1130,55 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
 
         # 10. Commercial Subscriptions Checkout (§7, §19, REQ-SEC-06, REQ-SEC-07)
         if path == "/api/v1/subscriptions/checkout":
-            plan = body.get("plan", "premium_monthly") if body else "premium_monthly"
+            plan = (body.get("plan") or body.get("plan_id") or "premium_monthly") if body else "premium_monthly"
             provider = body.get("provider", "dana") if body else "dana"
+
+            if provider.lower() != "dana":
+                self.send_rfc7807(400, "Bad Request", f"Unsupported payment provider '{provider}'. DANA is the exclusive payment provider.", "UNSUPPORTED_PROVIDER")
+                return
 
             if plan not in ["premium_monthly", "premium_annual"]:
                 self.send_rfc7807(400, "Bad Request", "Invalid plan. Choose 'premium_monthly' or 'premium_annual'", "INVALID_PLAN")
                 return
 
             amount = 10000 if plan == "premium_monthly" else 110000
-            order_id = f"ORD-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+
+            if body and "amount" in body:
+                client_amt = body.get("amount")
+                if isinstance(client_amt, (int, float)) and client_amt <= 0:
+                    self.send_rfc7807(400, "Bad Request", "Amount must be greater than 0", "INVALID_AMOUNT")
+                    return
+                if client_amt != amount:
+                    self.send_rfc7807(400, "Bad Request", "Pricing is locked to official plan rate", "INVALID_AMOUNT")
+                    return
+
+            order_id = f"ORD-DANA-{user_id[:8]}-{int(time.time())}"
             checkout_url = f"https://m.dana.id/d/checkout?orderId={order_id}&amount={amount}"
 
             self.log_audit(user_id, "CHECKOUT_INITIATED", "order", order_id, f"Plan: {plan}, Amount: {amount}")
             self.send_json(200, {
                 "order_id": order_id,
                 "checkout_url": checkout_url,
+                "reference_no": f"REF-DANA-{uuid.uuid4().hex[:12].upper()}",
                 "amount": amount,
                 "currency": "IDR",
                 "plan": plan,
-                "provider": provider
+                "plan_id": plan,
+                "provider": "dana"
             })
             return
 
-        # 11. Ingestion Pipeline: Notification (§20, §21, §24, REQ-INGEST-01 to REQ-INGEST-05)
+        if path in ["/api/v1/subscriptions/free", "/api/v1/subscriptions/select-free"]:
+            self.log_audit(user_id, "PLAN_SELECTED_FREE", "subscription", user_id, "User selected Free plan")
+            self.send_json(200, {
+                "status": "free",
+                "tier": "free",
+                "is_premium": False,
+                "message": "Continuing with Free plan"
+            })
+            return
+
+        # 11a. Ingestion Pipeline: Notification (§20, §21, §24, REQ-INGEST-01 to REQ-INGEST-05)
         if path == "/api/v1/ingestion/notification":
             if not is_premium:
                 self.send_rfc7807(403, "Forbidden", "Fitur otomatisasi transaksi memerlukan Premium", "FEATURE_LOCKED")
@@ -1133,24 +1223,169 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                     self.send_json(200, {
                         "event_id": event_id,
                         "status": "duplicate",
+                        "source": "notification",
                         "confidence": confidence,
                         "transaction_id": None
                     })
                     return
 
-                cid = str(uuid.uuid4())
-                conn.execute(
-                    "INSERT INTO transaction_candidates (id, user_id, source, provider, amount, direction, occurred_at, merchant, confidence, status, created_at) VALUES (?, ?, 'notification', ?, ?, ?, ?, ?, ?, 'pending', ?)",
-                    (cid, user_id, pkg, amount, direction, now_iso, merchant, confidence, now_iso)
-                )
-                conn.commit()
+                if amount > 0:
+                    cid = str(uuid.uuid4())
+                    conn.execute(
+                        "INSERT INTO transaction_candidates (id, user_id, source, provider, amount, direction, occurred_at, merchant, confidence, status, created_at) VALUES (?, ?, 'notification', ?, ?, ?, ?, ?, ?, 'pending', ?)",
+                        (cid, user_id, pkg, amount, direction, now_iso, merchant, confidence, now_iso)
+                    )
+                    conn.commit()
+                else:
+                    cid = None
 
             self.send_json(200, {
                 "event_id": event_id,
                 "candidate_id": cid,
-                "status": "auto_created" if confidence == "HIGH" else "requires_confirmation",
+                "source": "notification",
+                "status": "auto_created" if confidence == "HIGH" else ("requires_confirmation" if amount > 0 else "ignored"),
                 "confidence": confidence,
                 "amount": amount
+            })
+            return
+
+        # 11b. Ingestion Pipeline: SMS (§20, §22, §24)
+        if path == "/api/v1/ingestion/sms":
+            if not is_premium:
+                self.send_rfc7807(403, "Forbidden", "Fitur otomatisasi transaksi memerlukan Premium", "FEATURE_LOCKED")
+                return
+
+            if not body or "text" not in body:
+                self.send_rfc7807(400, "Bad Request", "Missing SMS text", "BAD_REQUEST")
+                return
+
+            text = body["text"]
+            sender = body.get("sender", "SMS-BANK")
+            event_id = str(uuid.uuid4())
+
+            amt_match = re.search(r"Rp\s*([\d\.,]+)", text, re.IGNORECASE)
+            amount = 0
+            if amt_match:
+                cleaned = amt_match.group(1).replace(".", "").replace(",", "")
+                amount = int(cleaned)
+
+            direction = "income" if any(k in text.lower() for k in ["masuk", "berhasil diterima", "credit", "kredit"]) else "expense"
+            merchant = "Bank SMS"
+            if "ke " in text:
+                merchant = text.split("ke ")[-1].split()[0]
+
+            confidence = "HIGH" if amount > 0 and any(b in sender.upper() for b in ["BCA", "BRI", "BNI", "MANDIRI", "DANA"]) else "MEDIUM"
+            if amount == 0:
+                confidence = "LOW"
+
+            now_iso = utc_now_iso()
+            with get_db() as conn:
+                cur = conn.execute(
+                    "SELECT * FROM transaction_candidates WHERE user_id = ? AND amount = ? AND direction = ?",
+                    (user_id, amount, direction)
+                )
+                dup = cur.fetchone()
+                if dup:
+                    self.send_json(200, {
+                        "event_id": event_id,
+                        "status": "duplicate",
+                        "source": "sms",
+                        "confidence": confidence,
+                        "transaction_id": None
+                    })
+                    return
+
+                if amount > 0:
+                    cid = str(uuid.uuid4())
+                    conn.execute(
+                        "INSERT INTO transaction_candidates (id, user_id, source, provider, amount, direction, occurred_at, merchant, confidence, status, created_at) VALUES (?, ?, 'sms', ?, ?, ?, ?, ?, ?, 'pending', ?)",
+                        (cid, user_id, sender, amount, direction, now_iso, merchant, confidence, now_iso)
+                    )
+                    conn.commit()
+                else:
+                    cid = None
+
+            self.send_json(200, {
+                "event_id": event_id,
+                "candidate_id": cid,
+                "status": "auto_created" if confidence == "HIGH" else ("requires_confirmation" if amount > 0 else "ignored"),
+                "confidence": confidence,
+                "amount": amount,
+                "direction": direction,
+                "source": "sms",
+                "sender": sender
+            })
+            return
+
+        # 11c. Ingestion Pipeline: Gmail (§20, §23, §24)
+        if path == "/api/v1/ingestion/gmail":
+            if not is_premium:
+                self.send_rfc7807(403, "Forbidden", "Fitur otomatisasi transaksi memerlukan Premium", "FEATURE_LOCKED")
+                return
+
+            if not body or ("snippet" not in body and "subject" not in body):
+                self.send_rfc7807(400, "Bad Request", "Missing email snippet or subject", "BAD_REQUEST")
+                return
+
+            snippet = body.get("snippet", "")
+            subject = body.get("subject", "")
+            msg_id = body.get("message_id", str(uuid.uuid4()))
+            full_text = f"{subject} {snippet}"
+            event_id = str(uuid.uuid4())
+
+            amt_match = re.search(r"Rp\s*([\d\.,]+)", full_text, re.IGNORECASE)
+            amount = 0
+            if amt_match:
+                cleaned = amt_match.group(1).replace(".", "").replace(",", "")
+                amount = int(cleaned)
+
+            direction = "income" if any(k in full_text.lower() for k in ["masuk", "berhasil diterima", "credit", "kredit"]) else "expense"
+            merchant = "Gmail Merchant"
+            if "ke " in full_text:
+                merchant = full_text.split("ke ")[-1].split()[0]
+
+            confidence = "HIGH" if amount > 0 and any(b in full_text.upper() for b in ["PLN", "BCA", "DANA", "GOPAY", "SHOPEEPAY", "TOKOPEDIA", "INVOICE"]) else "MEDIUM"
+            if amount == 0:
+                confidence = "LOW"
+
+            now_iso = utc_now_iso()
+            with get_db() as conn:
+                cur = conn.execute(
+                    "SELECT * FROM transaction_candidates WHERE user_id = ? AND (provider = ? OR (amount = ? AND direction = ?))",
+                    (user_id, msg_id, amount, direction)
+                )
+                dup = cur.fetchone()
+                if dup:
+                    self.send_json(200, {
+                        "event_id": event_id,
+                        "status": "duplicate",
+                        "source": "gmail",
+                        "confidence": confidence,
+                        "message_id": msg_id,
+                        "transaction_id": None
+                    })
+                    return
+
+                if amount > 0:
+                    cid = str(uuid.uuid4())
+                    conn.execute(
+                        "INSERT INTO transaction_candidates (id, user_id, source, provider, amount, direction, occurred_at, merchant, confidence, status, created_at) VALUES (?, ?, 'gmail', ?, ?, ?, ?, ?, ?, 'pending', ?)",
+                        (cid, user_id, msg_id, amount, direction, now_iso, merchant, confidence, now_iso)
+                    )
+                    conn.commit()
+                else:
+                    cid = None
+
+            self.send_json(200, {
+                "event_id": event_id,
+                "candidate_id": cid,
+                "status": "auto_created" if confidence == "HIGH" else ("requires_confirmation" if amount > 0 else "ignored"),
+                "confidence": confidence,
+                "amount": amount,
+                "source": "gmail",
+                "message_id": msg_id,
+                "subject": subject,
+                "snippet": snippet
             })
             return
 
@@ -1205,9 +1440,39 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
 
         self.send_rfc7807(404, "Not Found", f"POST endpoint '{path}' not found", "NOT_FOUND")
 
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        body = self.read_json_body()
+
+        if path.startswith("/api/v1/audit"):
+            self.send_rfc7807(405, "Method Not Allowed", "Audit logs are append-only and immutable", "IMMUTABLE_LOG")
+            return
+
+        user_id = self.get_auth_user_id()
+        if not user_id:
+            self.send_rfc7807(401, "Unauthorized", "Authentication required", "UNAUTHORIZED")
+            return
+
+        if path in ["/api/v1/users/profile", "/api/v1/profile", "/api/v1/user/preferences"]:
+            display_name = body.get("display_name") if body else None
+            if display_name:
+                with get_db() as conn:
+                    conn.execute("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?", (display_name, utc_now_iso(), user_id))
+                    conn.commit()
+            self.send_json(200, {"status": "updated", "display_name": display_name})
+            return
+
+        self.send_rfc7807(404, "Not Found", f"PUT endpoint '{path}' not found", "NOT_FOUND")
+
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path.startswith("/api/v1/audit"):
+            self.send_rfc7807(405, "Method Not Allowed", "Audit logs cannot be deleted; logs are append-only", "IMMUTABLE_LOG")
+            return
+
         user_id = self.get_auth_user_id()
         if not user_id:
             self.send_rfc7807(401, "Unauthorized", "Authentication required", "UNAUTHORIZED")

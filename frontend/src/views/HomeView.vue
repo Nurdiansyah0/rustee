@@ -172,7 +172,7 @@
             <div class="min-w-0">
               <div class="flex items-center gap-1.5 text-content-muted">
                 <span class="w-1.5 h-1.5 rounded-full bg-income-default shrink-0" aria-hidden="true"></span>
-                <span class="truncate">Pemasukan</span>
+                <span class="truncate">{{ incomeTitle }}</span>
                 <span v-if="computedCashFlow.income_count !== undefined" class="text-[10px] text-content-muted tabular-nums">({{ computedCashFlow.income_count }})</span>
               </div>
               <div class="font-semibold text-content-primary mt-0.5 tabular-nums truncate">
@@ -182,7 +182,7 @@
             <div class="min-w-0">
               <div class="flex items-center gap-1.5 text-content-muted">
                 <span class="w-1.5 h-1.5 rounded-full bg-expense-default shrink-0" aria-hidden="true"></span>
-                <span class="truncate">Pengeluaran</span>
+                <span class="truncate">{{ expenseTitle }}</span>
                 <span v-if="computedCashFlow.expense_count !== undefined" class="text-[10px] text-content-muted tabular-nums">({{ computedCashFlow.expense_count }})</span>
               </div>
               <div class="font-semibold text-content-primary mt-0.5 tabular-nums truncate">
@@ -282,6 +282,7 @@
 import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
 import { formatFinancialDate } from '@/utils/datetime'
+import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallets'
 import { useAnalyticsStore } from '@/stores/analytics'
 import {
@@ -309,8 +310,12 @@ const props = defineProps({
 
 defineEmits(['nav', 'open-add'])
 
+const authStore = useAuthStore()
 const walletStore = useWalletStore()
 const analyticsStore = useAnalyticsStore()
+
+const incomeTitle = computed(() => authStore.incomeTitle || 'Pemasukan')
+const expenseTitle = computed(() => authStore.expenseTitle || 'Pengeluaran')
 
 const isHideBalance = computed(() => walletStore.hideBalance)
 

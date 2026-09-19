@@ -37,7 +37,7 @@ import org.json.JSONObject
  */
 class InviniteBridge(
     private val activity: Activity,
-    private val webView: WebView,
+    private val webView: WebView? = null,
     private val secureStorage: SecureStorage
 ) {
 
@@ -58,7 +58,7 @@ class InviniteBridge(
 
         /**
          * Validates whether a given URL is within the authorized origins whitelist.
-         * Enforces scheme, host, and port constraints.
+         * Enforces scheme, host, userinfo, and port constraints.
          */
         fun isAuthorizedOrigin(url: String?): Boolean {
             if (url.isNullOrBlank()) return false
@@ -74,12 +74,22 @@ class InviniteBridge(
                 val scheme = uri.scheme?.lowercase() ?: return false
                 val host = uri.host?.lowercase() ?: return false
 
+                // Disallow userinfo to prevent phishing/credential spoofing
+                if (uri.userInfo != null) {
+                    return false
+                }
+
                 if (scheme != "https" && scheme != "http") {
                     return false
                 }
 
                 // In production, remote hosts MUST use HTTPS
                 if (scheme == "http" && host != "localhost" && host != "127.0.0.1" && host != "10.0.2.2") {
+                    return false
+                }
+
+                // For remote production hosts, only standard HTTPS port (443 or -1) is allowed
+                if (scheme == "https" && uri.port != -1 && uri.port != 443) {
                     return false
                 }
 
@@ -90,16 +100,32 @@ class InviniteBridge(
         }
     }
 
+    @Volatile
+    private var trackedUrl: String? = null
+
     /**
-     * Checks if current WebView URL is from an authorized origin.
+     * Updates the currently validated active URL (called on page load / navigation).
      */
-    private fun validateOrigin(): Boolean {
-        var currentUrl: String? = null
-        activity.runOnUiThread {
-            currentUrl = webView.url
+    fun setCurrentUrl(url: String?) {
+        trackedUrl = url
+    }
+
+    /**
+     * Resolves the current URL from tracking or directly from WebView.
+     */
+    fun getCurrentUrl(): String? {
+        return trackedUrl ?: try {
+            webView?.url
+        } catch (e: Exception) {
+            null
         }
-        // If webView.url cannot be obtained immediately synchronously, use fallback read or url
-        val url = webView.url ?: currentUrl
+    }
+
+    /**
+     * Checks if current active URL is from an authorized origin.
+     */
+    fun validateOrigin(): Boolean {
+        val url = getCurrentUrl()
         val authorized = isAuthorizedOrigin(url)
         if (!authorized) {
             Log.w(TAG, "Security Alert: Rejected bridge call from unauthorized origin: $url")
@@ -158,7 +184,11 @@ class InviniteBridge(
                     }.toString()
                 }
                 "schedule_sync" -> {
-                    BackgroundSyncWorker.scheduleOneTimeSync(activity.applicationContext)
+                    try {
+                        BackgroundSyncWorker.scheduleOneTimeSync(activity.applicationContext)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "WorkManager sync scheduling caught: ${e.message}")
+                    }
                     JSONObject().apply {
                         put("action", action)
                         put("status", "scheduled")
@@ -205,6 +235,7 @@ class InviniteBridge(
         val hasNetwork = isNetworkConnected()
 
         return JSONObject().apply {
+            put("action", "check_permissions")
             put("notifications", hasNotificationPost)
             put("notification_listener", hasNotificationListener)
             put("network", hasNetwork)

@@ -5,9 +5,9 @@
 //! - Missing or invalid signature rejection with HTTP 401 Unauthorized: {"responseCode": "4015600", "responseMessage": "Unauthorized: Invalid Signature"}
 //! - Idempotent deduplication preventing replay attacks (HTTP 200 without duplicate days or audit logs)
 //! - Atomic subscription settlement from Free tier to Active Premium (+30 days)
-//! - Atomic subscription settlement from 7-day Trialing tier to Active Premium (+30 days)
+//! - Atomic subscription settlement from 90-day Trialing tier to Active Premium (+30 days)
 //! - Cumulative subscription extension (+30 days added to existing active period end)
-//! - DANA checkout session generation for Rp 5.000 / month with order ID, checkout URL, reference number
+//! - DANA checkout session generation for Rp 10.000 / month (and Rp 110.000 / year) with order ID, checkout URL, reference number
 //! - Immutable audit log trail verification ("subscription_activated", provider "dana")
 
 use axum::{
@@ -288,6 +288,18 @@ async fn test_dana_checkout_session_generation() {
     let resp_mid = ctx.app.clone().oneshot(req_mid).await.unwrap();
     assert_eq!(resp_mid.status(), StatusCode::BAD_REQUEST);
 
+    // 2b. Non-DANA checkout provider (xendit) rejected with HTTP 400 (DANA exclusivity)
+    let req_xen = Request::builder()
+        .method("POST")
+        .uri("/api/v1/subscriptions/checkout")
+        .header(COOKIE, format!("auth_token={}", token))
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"provider": "xendit"}"#))
+        .unwrap();
+
+    let resp_xen = ctx.app.clone().oneshot(req_xen).await.unwrap();
+    assert_eq!(resp_xen.status(), StatusCode::BAD_REQUEST);
+
     // 3. Unsupported provider rejected
     let req_bad = Request::builder()
         .method("POST")
@@ -299,6 +311,46 @@ async fn test_dana_checkout_session_generation() {
 
     let resp_bad = ctx.app.clone().oneshot(req_bad).await.unwrap();
     assert_eq!(resp_bad.status(), StatusCode::BAD_REQUEST);
+
+    // 4. Non-DANA webhook endpoints rejected with HTTP 400 Bad Request
+    let req_mid_wh = Request::builder()
+        .method("POST")
+        .uri("/api/v1/webhooks/midtrans")
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"order_id": "test"}"#))
+        .unwrap();
+    let resp_mid_wh = ctx.app.clone().oneshot(req_mid_wh).await.unwrap();
+    assert_eq!(resp_mid_wh.status(), StatusCode::BAD_REQUEST);
+
+    let req_xen_wh = Request::builder()
+        .method("POST")
+        .uri("/api/v1/webhooks/xendit")
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"id": "test"}"#))
+        .unwrap();
+    let resp_xen_wh = ctx.app.clone().oneshot(req_xen_wh).await.unwrap();
+    assert_eq!(resp_xen_wh.status(), StatusCode::BAD_REQUEST);
+
+    // 5. Route alias: POST /api/v1/subscriptions/trial/activate activates 90-day trial
+    let user_trial_id = create_test_user(&ctx, "trial_alias@dana.com", "free").await;
+    let (trial_token, _) = ctx
+        .jwt_engine
+        .generate_token(&user_trial_id, "trial_alias@dana.com", "user", "free")
+        .unwrap();
+    let req_trial_act = Request::builder()
+        .method("POST")
+        .uri("/api/v1/subscriptions/trial/activate")
+        .header(COOKIE, format!("auth_token={}", trial_token))
+        .body(Body::empty())
+        .unwrap();
+    let resp_trial_act = ctx.app.clone().oneshot(req_trial_act).await.unwrap();
+    assert_eq!(resp_trial_act.status(), StatusCode::OK);
+    let trial_json: Value =
+        serde_json::from_slice(&resp_trial_act.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(trial_json["status"], "trialing");
+    assert_eq!(trial_json["tier"], "premium");
+    assert_eq!(trial_json["days_remaining"], 90);
+    assert_eq!(trial_json["remaining_days"], 90);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +372,7 @@ async fn test_dana_webhook_valid_signature_settlement_from_free() {
         "latestTransactionStatus": "00",
         "transactionStatusDesc": "Successful",
         "amount": {
-            "value": "5000.00",
+            "value": "10000.00",
             "currency": "IDR"
         },
         "additionalInfo": {
@@ -373,7 +425,7 @@ async fn test_dana_webhook_valid_signature_settlement_from_free() {
         .unwrap();
     assert_eq!(sub.status, "active");
     assert_eq!(sub.provider, "dana");
-    assert_eq!(sub.amount.0, 5000);
+    assert_eq!(sub.amount.0, 10000);
 
     let start_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_start).unwrap();
     let end_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_end).unwrap();
@@ -392,7 +444,7 @@ async fn test_dana_webhook_valid_signature_settlement_from_free() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Webhook Settlement From 7-Day Trialing State
+// 4. Webhook Settlement From 90-Day Trialing State
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -402,7 +454,7 @@ async fn test_dana_webhook_settlement_from_trialing() {
 
     // Set user up in trialing state
     let now = Utc::now();
-    let trial_end = now + Duration::days(7);
+    let trial_end = now + Duration::days(90);
     let now_str = now.to_rfc3339();
     let trial_end_str = trial_end.to_rfc3339();
 
@@ -422,7 +474,7 @@ async fn test_dana_webhook_settlement_from_trialing() {
             user_id: user_id.clone(),
             provider: "trial".to_string(),
             provider_subscription_id: Some("trial-sub".to_string()),
-            plan_id: "premium_trial_7d".to_string(),
+            plan_id: "premium_trial_90d".to_string(),
             status: "trialing".to_string(),
             amount: Rupiah(0),
             current_period_start: now_str.clone(),
@@ -440,7 +492,7 @@ async fn test_dana_webhook_settlement_from_trialing() {
         "latestTransactionStatus": "00",
         "transactionStatusDesc": "Successful",
         "amount": {
-            "value": "5000.00",
+            "value": "10000.00",
             "currency": "IDR"
         },
         "additionalInfo": {
@@ -483,7 +535,7 @@ async fn test_dana_webhook_settlement_from_trialing() {
     assert_eq!(sub.status, "active");
     assert_eq!(sub.provider, "dana");
     assert_eq!(sub.plan_id, "premium_monthly");
-    assert_eq!(sub.amount.0, 5000);
+    assert_eq!(sub.amount.0, 10000);
 
     // Should have 30 days from settlement time
     let start_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_start).unwrap();
@@ -511,7 +563,7 @@ async fn test_dana_webhook_extension_for_already_active_subscriber() {
             provider_subscription_id: Some("prev_order".to_string()),
             plan_id: "premium_monthly".to_string(),
             status: "active".to_string(),
-            amount: Rupiah(5000),
+            amount: Rupiah(10000),
             current_period_start: now.to_rfc3339(),
             current_period_end: initial_end.to_rfc3339(),
             cancel_at_period_end: false,
@@ -527,7 +579,7 @@ async fn test_dana_webhook_extension_for_already_active_subscriber() {
         "latestTransactionStatus": "00",
         "transactionStatusDesc": "Successful",
         "amount": {
-            "value": "5000.00",
+            "value": "10000.00",
             "currency": "IDR"
         },
         "additionalInfo": {
@@ -591,7 +643,7 @@ async fn test_dana_webhook_invalid_signature_rejected_401() {
         "originalReferenceNo": "20260913tamper01",
         "latestTransactionStatus": "00",
         "transactionStatusDesc": "Successful",
-        "amount": { "value": "5000.00", "currency": "IDR" },
+        "amount": { "value": "10000.00", "currency": "IDR" },
         "additionalInfo": { "userId": user_id }
     })
     .to_string();
@@ -623,7 +675,7 @@ async fn test_dana_webhook_invalid_signature_rejected_401() {
     )
     .unwrap();
 
-    let tampered_payload = payload.replace("5000.00", "1000.00");
+    let tampered_payload = payload.replace("10000.00", "1000.00");
     let req_tampered_body = Request::builder()
         .method("POST")
         .uri("/api/v1/webhooks/dana")
@@ -725,7 +777,7 @@ async fn test_dana_webhook_idempotency_replay_protection() {
         "originalReferenceNo": event_ref,
         "latestTransactionStatus": "00",
         "transactionStatusDesc": "Successful",
-        "amount": { "value": "5000.00", "currency": "IDR" },
+        "amount": { "value": "10000.00", "currency": "IDR" },
         "additionalInfo": { "userId": user_id }
     })
     .to_string();
@@ -915,7 +967,7 @@ async fn test_dana_webhook_annual_settlement_and_subscription_events() {
     let end_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_end).unwrap();
     let days_extended = (end_dt - start_dt).num_days();
     assert!(
-        days_extended >= 364 && days_extended <= 366,
+        (364..=366).contains(&days_extended),
         "Annual subscription should be extended ~365 days, got {}",
         days_extended
     );

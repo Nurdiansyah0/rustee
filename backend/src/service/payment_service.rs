@@ -508,7 +508,8 @@ impl PaymentService {
         checkout_url.ok_or_else(|| format!("DANA API did not return a checkout URL: {}", json))
     }
 
-    /// Generates a checkout session for DANA, Midtrans, or Xendit with plan-aware amounts.
+    /// Generates a checkout session exclusively for DANA with plan-aware amounts (Rp10.000 / month, Rp110.000 / year).
+    /// Rejects any non-DANA provider (like "midtrans" or "xendit") with UnsupportedProvider.
     pub async fn create_checkout_session_async(
         &self,
         user_id: &str,

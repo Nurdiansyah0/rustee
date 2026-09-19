@@ -160,10 +160,10 @@
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-content-muted">Rp</span>
                   <input
-                    v-model="acc.initial_balance"
-                    type="number"
-                    min="0"
-                    step="1000"
+                    :value="formatBalanceDisplay(acc.initial_balance)"
+                    @input="handleBalanceInput($event, acc)"
+                    type="text"
+                    inputmode="numeric"
                     placeholder="0"
                     class="w-full pl-9 pr-3 py-2 border border-border-default rounded-lg bg-surface-card text-xs text-content-primary tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-default/30"
                   />
@@ -557,6 +557,7 @@ import { useWalletStore } from '@/stores/wallets'
 import { useCategoryStore } from '@/stores/categories'
 import { useAnalyticsStore } from '@/stores/analytics'
 import { useSubscriptionStore } from '@/stores/subscription'
+import { formatIntegerRupiah, parseIDR } from '@/utils/currency'
 import { Check, Plus, X, Sparkles, ShieldCheck, ChevronRight } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -632,6 +633,29 @@ const walletsConfig = ref([
   { name: 'E-Wallet (GoPay/DANA)', type: 'e_wallet', initial_balance: 250000 },
   { name: 'Uang Tunai (Cash)', type: 'cash', initial_balance: 100000 }
 ])
+
+function formatBalanceDisplay(val) {
+  if (val === undefined || val === null || val === '') return '0'
+  const num = parseIDR(val)
+  return formatIntegerRupiah(num)
+}
+
+function handleBalanceInput(e, acc) {
+  const input = e.target
+  const cursorStart = input.selectionStart || 0
+  const prevLen = input.value.length
+
+  const raw = input.value
+  const num = parseIDR(raw)
+  acc.initial_balance = num
+
+  const formatted = num === 0 && (raw === '' || raw === '0') ? raw : formatIntegerRupiah(num)
+  input.value = formatted
+
+  const newLen = formatted.length
+  const newPos = Math.max(0, cursorStart + (newLen - prevLen))
+  input.setSelectionRange(newPos, newPos)
+}
 
 function addWalletSlot() {
   walletsConfig.value.push({
@@ -758,7 +782,7 @@ async function finishOnboarding() {
         wallets: walletsConfig.value.map((wallet) => ({
           name: wallet.name?.trim() || 'Dompet',
           account_type: wallet.type || 'checking',
-          initial_balance: parseInt(wallet.initial_balance, 10) || 0
+          initial_balance: parseIDR(wallet.initial_balance)
         })),
         categories: [
           ...customExpenseCategories.value.map((catName) => ({
@@ -802,7 +826,7 @@ async function finishOnboarding() {
             await api.createAccount({
               name: wallet.name.trim(),
               account_type: wallet.type || 'checking',
-              initial_balance: parseInt(wallet.initial_balance, 10) || 0,
+              initial_balance: parseIDR(wallet.initial_balance),
               currency: 'IDR'
             })
           } catch {}

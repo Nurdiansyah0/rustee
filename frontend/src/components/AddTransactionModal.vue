@@ -31,11 +31,7 @@
       <!-- Type Selector Tabs -->
       <div class="flex p-1 mb-4 bg-surface-subtle rounded-xl border border-border-subtle" role="tablist">
         <button
-          v-for="t in [
-            { id: 'expense', label: 'Pengeluaran' },
-            { id: 'income', label: 'Pemasukan' },
-            { id: 'transfer', label: 'Transfer' }
-          ]"
+          v-for="t in typeTabs"
           :key="t.id"
           type="button"
           role="tab"
@@ -146,7 +142,7 @@
             id="tx-description-pos"
             v-model="description"
             type="text"
-            placeholder="Contoh: Makan siang, kopi santai, transport kantor"
+            :placeholder="'Contoh: ' + (txType === 'income' ? incomeTitle + ', bonus' : txType === 'expense' ? expenseTitle + ', kopi' : 'transfer antar rekening')"
             class="w-full px-3.5 py-2.5 border border-border-default rounded-xl bg-surface-sunken text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-default/30"
           />
         </div>
@@ -200,9 +196,20 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR, parseIDR } from '@/utils/currency'
 import { useWalletStore } from '@/stores/wallets'
+import { useAuthStore } from '@/stores/auth'
 import { X, Delete } from 'lucide-vue-next'
 
 const walletStore = useWalletStore()
+const authStore = useAuthStore()
+
+const incomeTitle = computed(() => authStore.incomeTitle || 'Pemasukan')
+const expenseTitle = computed(() => authStore.expenseTitle || 'Pengeluaran')
+
+const typeTabs = computed(() => [
+  { id: 'expense', label: expenseTitle.value },
+  { id: 'income', label: incomeTitle.value },
+  { id: 'transfer', label: 'Transfer' }
+])
 
 const props = defineProps({
   isOpen: Boolean,
@@ -367,7 +374,7 @@ async function submitTransaction() {
       amount,
       transaction_date: new Date().toISOString(),
       date: new Date().toISOString(),
-      description: description.value || (txType.value === 'transfer' ? 'Transfer Saldo' : 'Transaksi Harian'),
+      description: description.value || (txType.value === 'transfer' ? 'Transfer Saldo' : txType.value === 'income' ? incomeTitle.value : expenseTitle.value),
     }
 
     await api.createTransaction(payload)

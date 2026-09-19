@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
 
         // 7. Load Initial Target Application URL
         val targetUrl = determineInitialUrl()
+        inviniteBridge.setCurrentUrl(targetUrl)
         Log.i(TAG, "Loading target application URL: $targetUrl")
         webView.loadUrl(targetUrl)
     }
@@ -128,6 +129,10 @@ class MainActivity : AppCompatActivity() {
         // Security constraints
         settings.allowFileAccess = false
         settings.allowContentAccess = false
+        @Suppress("DEPRECATION")
+        settings.allowFileAccessFromFileURLs = false
+        @Suppress("DEPRECATION")
+        settings.allowUniversalAccessFromFileURLs = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
@@ -193,12 +198,14 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             super.onPageStarted(view, url, favicon)
+            inviniteBridge.setCurrentUrl(url)
             progressBar.visibility = View.VISIBLE
             progressBar.progress = 10
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
+            inviniteBridge.setCurrentUrl(url)
             progressBar.visibility = View.GONE
         }
     }

@@ -144,4 +144,84 @@ class NotificationListenerTest {
         assertFalse(json.has("imei"))
         assertFalse(json.has("phone_number"))
     }
+
+    @Test
+    fun testAllTargetFinancialAppsCoverage() {
+        val requiredInstitutions = listOf(
+            "com.bca", // BCA
+            "com.bankmandiri.livin", // Mandiri
+            "id.co.bri.brimo", // BRI
+            "id.co.bni.mbanking", // BNI
+            "id.dana", // DANA
+            "com.gojek.app", // GoPay
+            "ovo.id", // OVO
+            "com.shopee.id" // ShopeePay
+        )
+
+        for (pkg in requiredInstitutions) {
+            assertTrue("Expected authorized package $pkg to be covered", NotificationListener.isTargetPackage(pkg))
+        }
+    }
+
+    @Test
+    fun testWhitespaceAndTrimSanitization() {
+        val canonical = NotificationListener.extractCanonical(
+            packageName = "id.co.bri.brimo",
+            title = "   BRImo Notifikasi   ",
+            text = "  Transaksi Berhasil Rp 100.000  ",
+            bigText = null,
+            timestamp = 1773715700000L
+        )
+
+        assertNotNull(canonical)
+        assertEquals("BRImo Notifikasi", canonical?.title)
+        assertEquals("Transaksi Berhasil Rp 100.000", canonical?.text)
+    }
+
+    @Test
+    fun testZeroTimestampFallbackToCurrentTime() {
+        val before = System.currentTimeMillis()
+        val canonical = NotificationListener.extractCanonical(
+            packageName = "id.co.bni.mbanking",
+            title = "BNI Mobile Banking",
+            text = "Debit Rp 50.000",
+            bigText = null,
+            timestamp = 0L
+        )
+        val after = System.currentTimeMillis()
+
+        assertNotNull(canonical)
+        assertTrue(canonical!!.postedAt >= before)
+        assertTrue(canonical.postedAt <= after)
+    }
+
+    @Test
+    fun testNullTitleWithValidTextSucceeds() {
+        val canonical = NotificationListener.extractCanonical(
+            packageName = "ovo.id",
+            title = null,
+            text = "OVO Cash berhasil ditambahkan Rp 20.000",
+            bigText = null,
+            timestamp = 1773715800000L
+        )
+
+        assertNotNull(canonical)
+        assertEquals("", canonical?.title)
+        assertEquals("OVO Cash berhasil ditambahkan Rp 20.000", canonical?.text)
+    }
+
+    @Test
+    fun testNullTextWithValidTitleSucceeds() {
+        val canonical = NotificationListener.extractCanonical(
+            packageName = "com.shopee.id",
+            title = "ShopeePay Berhasil",
+            text = null,
+            bigText = null,
+            timestamp = 1773715900000L
+        )
+
+        assertNotNull(canonical)
+        assertEquals("ShopeePay Berhasil", canonical?.title)
+        assertEquals("", canonical?.text)
+    }
 }

@@ -179,33 +179,33 @@ impl CanonicalTransactionCandidate {
             return false;
         }
 
-        // 4. External reference match (if both exist and are non-empty)
+        // 4. External reference check (if both exist and are non-empty)
         if let (Some(ref1), Some(ref2)) = (&self.external_reference, &other.external_reference) {
-            if !ref1.is_empty()
-                && !ref2.is_empty()
-                && (ref1.eq_ignore_ascii_case(ref2)
+            if !ref1.is_empty() && !ref2.is_empty() {
+                let matches = ref1.eq_ignore_ascii_case(ref2)
                     || ref1.contains(ref2)
-                    || ref2.contains(ref1))
-            {
+                    || ref2.contains(ref1);
+                if !matches {
+                    return false;
+                }
                 return true;
             }
         }
 
-        // 5. Merchant match
-        match (&self.merchant, &other.merchant) {
-            (Some(m1), Some(m2)) => {
-                let n1 = normalize_merchant_name(m1);
-                let n2 = normalize_merchant_name(m2);
-                if !n1.is_empty() && !n2.is_empty() && (n1 == n2 || n1.contains(&n2) || n2.contains(&n1)) {
-                    return true;
+        // 5. Merchant check (if both exist and are non-empty)
+        if let (Some(m1), Some(m2)) = (&self.merchant, &other.merchant) {
+            let n1 = normalize_merchant_name(m1);
+            let n2 = normalize_merchant_name(m2);
+            if !n1.is_empty() && !n2.is_empty() {
+                if !(n1 == n2 || n1.contains(&n2) || n2.contains(&n1)) {
+                    return false;
                 }
+                return true;
             }
-            // If neither has external reference and both have no merchant, exact amount + provider + time window is a strong duplicate signal
-            (None, None) => return true,
-            _ => {}
         }
 
-        // If external reference is present on one and matches provider + amount + time window, consider it duplicate
+        // 6. Cross-source fallback: if amount, direction, provider, and time window (±300s) match
+        // and there is no conflicting merchant or reference, treat as duplicate.
         true
     }
 }
@@ -981,5 +981,63 @@ mod tests {
         let hash = compute_payload_hash(raw);
         assert_eq!(hash.len(), 64);
         assert_eq!(hash, compute_payload_hash(raw));
+    }
+
+    #[test]
+    fn test_cross_source_deduplication_different_merchants_not_duplicate() {
+        let now = Utc::now().to_rfc3339();
+        let c1 = CanonicalTransactionCandidate {
+            candidate_id: "c1".to_string(),
+            event_id: "e1".to_string(),
+            transaction_id: None,
+            amount: Rupiah::new(50000),
+            currency: "IDR".to_string(),
+            direction: TransactionDirection::Expense,
+            occurred_at: now.clone(),
+            provider: "bca".to_string(),
+            merchant: Some("Kopi Kenangan".to_string()),
+            account_id: Some("acc1".to_string()),
+            category_id: None,
+            source: IngestionSource::Notification,
+            external_reference: None,
+            confidence: ConfidenceLevel::HIGH,
+            requires_confirmation: false,
+        };
+
+        let mut c2 = c1.clone();
+        c2.candidate_id = "c2".to_string();
+        c2.merchant = Some("Indomaret".to_string());
+        c2.source = IngestionSource::Sms;
+
+        assert!(!c1.is_duplicate_of(&c2, 300));
+    }
+
+    #[test]
+    fn test_cross_source_deduplication_different_references_not_duplicate() {
+        let now = Utc::now().to_rfc3339();
+        let c1 = CanonicalTransactionCandidate {
+            candidate_id: "c1".to_string(),
+            event_id: "e1".to_string(),
+            transaction_id: None,
+            amount: Rupiah::new(50000),
+            currency: "IDR".to_string(),
+            direction: TransactionDirection::Expense,
+            occurred_at: now.clone(),
+            provider: "bca".to_string(),
+            merchant: Some("Kopi Kenangan".to_string()),
+            account_id: Some("acc1".to_string()),
+            category_id: None,
+            source: IngestionSource::Notification,
+            external_reference: Some("REF-1111".to_string()),
+            confidence: ConfidenceLevel::HIGH,
+            requires_confirmation: false,
+        };
+
+        let mut c2 = c1.clone();
+        c2.candidate_id = "c2".to_string();
+        c2.external_reference = Some("REF-9999".to_string());
+        c2.source = IngestionSource::Sms;
+
+        assert!(!c1.is_duplicate_of(&c2, 300));
     }
 }

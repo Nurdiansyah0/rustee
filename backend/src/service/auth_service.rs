@@ -195,10 +195,11 @@ impl AuthService {
 
         for (name, cat_type, color, icon) in starter_categories {
             let cat_id = format!("cat_{}", Uuid::new_v4());
+            let norm_name = name.to_lowercase();
             sqlx::query(
                 r#"
-                INSERT INTO categories (id, user_id, name, category_type, icon, color, is_system, deleted_at, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, NULL, ?7, ?7)
+                INSERT INTO categories (id, user_id, name, category_type, icon, color, is_system, display_name, normalized_name, metadata, deleted_at, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, NULL, NULL, ?9, ?9)
                 "#,
             )
             .bind(&cat_id)
@@ -207,6 +208,8 @@ impl AuthService {
             .bind(cat_type)
             .bind(icon)
             .bind(color)
+            .bind(name)
+            .bind(&norm_name)
             .bind(&now)
             .execute(&mut *tx)
             .await?;

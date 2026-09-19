@@ -15,5 +15,7 @@ pub use ledger_service::{
 };
 pub use payment_service::{
     MidtransNotification, PaymentConfig, PaymentError, PaymentService, WebhookProcessingResult,
-    XenditNotification,
+    XenditNotification, PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE, TRIAL_DURATION_DAYS,
+    SubscriptionPlan, SubscriptionStatus,
 };
+

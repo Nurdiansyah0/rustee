@@ -19,10 +19,17 @@ class ArchitectureInvariantTest {
         "calculate_balance",
         "calculate_interest",
         "double_entry_ledger",
+        "net_cash_flow",
+        "reconcile_ledger",
+        "financial_reconciliation",
+        "subscription_authority",
+        "grant_subscription",
+        "activate_premium",
         "CREATE TABLE transactions",
         "CREATE TABLE accounts",
         "CREATE TABLE ledger",
         "Room.databaseBuilder",
+        "RoomDatabase",
         "grantPremiumAccess",
         "override_subscription_tier",
         "bypass_feature_gate"
@@ -64,5 +71,30 @@ class ArchitectureInvariantTest {
             assertTrue("Required component $fileName must exist", file.exists())
             assertTrue("Component $fileName must not be empty", file.length() > 0)
         }
+    }
+
+    @Test
+    fun testManifestSecurityDeclarations() {
+        val manifestFile = File("src/main/AndroidManifest.xml")
+        assertTrue("AndroidManifest.xml must exist", manifestFile.exists())
+        val content = manifestFile.readText()
+
+        assertTrue("Manifest must enable hardware acceleration", content.contains("android:hardwareAccelerated=\"true\""))
+        assertTrue("Manifest must disable insecure allowBackup", content.contains("android:allowBackup=\"false\""))
+        assertTrue("Manifest must require INTERNET", content.contains("android.permission.INTERNET"))
+        assertTrue("Manifest must declare NotificationListener service", content.contains("NotificationListener"))
+        assertTrue("Manifest must protect NotificationListener with BIND_NOTIFICATION_LISTENER_SERVICE", content.contains("android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"))
+    }
+
+    @Test
+    fun testWebViewSecurityConfigurationInvariants() {
+        val mainActivityFile = File("src/main/kotlin/com/invinite/pwa/MainActivity.kt")
+        assertTrue("MainActivity.kt must exist", mainActivityFile.exists())
+        val content = mainActivityFile.readText()
+
+        assertTrue("WebView must disable file access", content.contains("settings.allowFileAccess = false"))
+        assertTrue("WebView must disable content access", content.contains("settings.allowContentAccess = false"))
+        assertTrue("WebView must block mixed content", content.contains("WebSettings.MIXED_CONTENT_NEVER_ALLOW"))
+        assertTrue("WebView must support Edge-to-Edge", content.contains("WindowCompat.setDecorFitsSystemWindows(window, false)"))
     }
 }

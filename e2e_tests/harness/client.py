@@ -227,14 +227,24 @@ class ApiClient:
     def subscription_status(self) -> ApiResponse:
         return self.get("/api/v1/subscription")
 
+    def get_subscription_plans(self) -> ApiResponse:
+        return self.get("/api/v1/subscriptions/plans")
+
+    def continue_free(self) -> ApiResponse:
+        return self.post("/api/v1/subscriptions/free", {})
+
     def activate_trial(self) -> ApiResponse:
         return self.post("/api/v1/subscriptions/trial/activate", {})
 
     def checkout(self, plan: str = "premium_monthly", provider: str = "dana") -> ApiResponse:
         return self.post("/api/v1/subscriptions/checkout", {
             "plan": plan,
+            "plan_id": plan,
             "provider": provider
         })
+
+    def get_audit_logs(self) -> ApiResponse:
+        return self.get("/api/v1/audit/logs")
 
     def send_dana_webhook(self, event_id: str, order_id: str, user_id: str, amount: int = 10000,
                            tampered: bool = False, custom_sig: Optional[str] = None) -> ApiResponse:

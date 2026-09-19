@@ -60,11 +60,27 @@ impl NewCategory {
     }
 }
 
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+pub struct UpdateCategory {
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub normalized_name: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub metadata: Option<String>,
+}
+
 #[async_trait]
 pub trait CategoryRepository: Send + Sync {
     async fn create(&self, category: &NewCategory) -> Result<Category, DbError>;
     async fn find_by_id(&self, user_id: &str, id: &str) -> Result<Option<Category>, DbError>;
     async fn list_by_user(&self, user_id: &str) -> Result<Vec<Category>, DbError>;
+    async fn update(
+        &self,
+        user_id: &str,
+        id: &str,
+        update: &UpdateCategory,
+    ) -> Result<Category, DbError>;
     async fn soft_delete(&self, user_id: &str, id: &str) -> Result<(), DbError>;
 }
 
@@ -163,6 +179,70 @@ impl CategoryRepository for SqlxCategoryRepository {
         .map_err(DbError::from_sqlx)?;
 
         Ok(categories)
+    }
+
+    async fn update(
+        &self,
+        user_id: &str,
+        id: &str,
+        update: &UpdateCategory,
+    ) -> Result<Category, DbError> {
+        let existing = self
+            .find_by_id(user_id, id)
+            .await?
+            .ok_or(DbError::NotFound)?;
+        if existing.is_system {
+            return Err(DbError::CannotDeleteSystemEntity);
+        }
+        let now = Utc::now().to_rfc3339();
+        let name = update.name.clone().unwrap_or(existing.name);
+        let display_name = update
+            .display_name
+            .clone()
+            .or_else(|| existing.display_name.clone());
+        let normalized_name = update
+            .normalized_name
+            .clone()
+            .or_else(|| Some(name.to_lowercase()));
+        let icon = update.icon.clone().or_else(|| existing.icon.clone());
+        let color = update.color.clone().or_else(|| existing.color.clone());
+        let metadata = update.metadata.clone().or_else(|| existing.metadata.clone());
+
+        sqlx::query(
+            r#"
+            UPDATE categories
+            SET name = ?1, display_name = ?2, normalized_name = ?3, icon = ?4, color = ?5, metadata = ?6, updated_at = ?7
+            WHERE id = ?8 AND user_id = ?9 AND is_system = 0 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(&name)
+        .bind(&display_name)
+        .bind(&normalized_name)
+        .bind(&icon)
+        .bind(&color)
+        .bind(&metadata)
+        .bind(&now)
+        .bind(id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .map_err(DbError::from_sqlx)?;
+
+        Ok(Category {
+            id: existing.id,
+            user_id: existing.user_id,
+            name,
+            category_type: existing.category_type,
+            icon,
+            color,
+            is_system: false,
+            display_name,
+            normalized_name,
+            metadata,
+            deleted_at: None,
+            created_at: existing.created_at,
+            updated_at: now,
+        })
     }
 
     async fn soft_delete(&self, user_id: &str, id: &str) -> Result<(), DbError> {

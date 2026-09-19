@@ -27,7 +27,7 @@
         <div class="p-3 sm:p-4 bg-income-muted/50 rounded-xl border border-income-border/50 min-w-0 flex flex-col justify-between">
           <div class="text-[11px] text-income-default font-semibold flex items-center gap-1 min-w-0">
             <span class="w-1.5 h-1.5 rounded-full bg-income-default shrink-0"></span>
-            <span class="truncate">Total Pemasukan</span>
+            <span class="truncate">Total {{ incomeTitle }}</span>
           </div>
           <div class="text-sm sm:text-base md:text-lg lg:text-xl font-bold sm:font-extrabold lg:font-black text-income-default mt-1 sm:mt-1.5 tabular-nums tracking-tight leading-tight">
             {{ walletStore.hideBalance ? '••••••••' : formatIDR(basicData?.cash_flow?.total_income || 0) }}
@@ -37,7 +37,7 @@
         <div class="p-3 sm:p-4 bg-expense-muted/50 rounded-xl border border-expense-border/50 min-w-0 flex flex-col justify-between">
           <div class="text-[11px] text-expense-default font-semibold flex items-center gap-1 min-w-0">
             <span class="w-1.5 h-1.5 rounded-full bg-expense-default shrink-0"></span>
-            <span class="truncate">Total Pengeluaran</span>
+            <span class="truncate">Total {{ expenseTitle }}</span>
           </div>
           <div class="text-sm sm:text-base md:text-lg lg:text-xl font-bold sm:font-extrabold lg:font-black text-expense-default mt-1 sm:mt-1.5 tabular-nums tracking-tight leading-tight">
             {{ walletStore.hideBalance ? '••••••••' : formatIDR(basicData?.cash_flow?.total_expenses || 0) }}
@@ -115,14 +115,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
 import { useWalletStore } from '@/stores/wallets'
+import { useAuthStore } from '@/stores/auth'
 import FeatureLockOverlay from '@/components/FeatureLockOverlay.vue'
 import { Sparkles, ShieldCheck, Lock } from 'lucide-vue-next'
 
 const walletStore = useWalletStore()
+const authStore = useAuthStore()
+
+const incomeTitle = computed(() => authStore.incomeTitle || 'Pemasukan')
+const expenseTitle = computed(() => authStore.expenseTitle || 'Pengeluaran')
 
 const props = defineProps({
   userTier: {

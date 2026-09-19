@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     http::{header::CACHE_CONTROL, HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
-    routing::{delete, get},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::api::middleware::auth_extractor::AuthenticatedUser;
 use crate::api::AppState;
 use crate::error::AppError;
-use crate::repository::category_repo::{Category, NewCategory};
+use crate::repository::category_repo::{Category, NewCategory, UpdateCategory};
 
 pub const CACHE_CONTROL_VALUE: &str = "private, no-store, must-revalidate";
 
@@ -25,6 +25,16 @@ pub struct CreateCategoryRequest {
     pub metadata: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateCategoryRequest {
+    pub name: Option<String>,
+    pub display_name: Option<String>,
+    pub normalized_name: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub metadata: Option<String>,
+}
+
 pub async fn list_categories(
     user: AuthenticatedUser,
     State(state): State<AppState>,
@@ -33,6 +43,21 @@ pub async fn list_categories(
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
     Ok((StatusCode::OK, headers, Json(categories)))
+}
+
+pub async fn get_category(
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    let category = state
+        .category_repo
+        .find_by_id(&user.user_id, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Category not found".to_string(), "NOT_FOUND"))?;
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+    Ok((StatusCode::OK, headers, Json(category)))
 }
 
 pub async fn create_category(
@@ -82,6 +107,29 @@ pub async fn create_category(
     Ok((StatusCode::CREATED, headers, Json(cat)))
 }
 
+pub async fn update_category(
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(payload): Json<UpdateCategoryRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let update = UpdateCategory {
+        name: payload.name.map(|n| n.trim().to_string()),
+        display_name: payload.display_name.map(|d| d.trim().to_string()),
+        normalized_name: payload.normalized_name,
+        icon: payload.icon,
+        color: payload.color,
+        metadata: payload.metadata,
+    };
+    let cat = state
+        .category_repo
+        .update(&user.user_id, &id, &update)
+        .await?;
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+    Ok((StatusCode::OK, headers, Json(cat)))
+}
+
 pub async fn delete_category(
     user: AuthenticatedUser,
     State(state): State<AppState>,
@@ -96,5 +144,10 @@ pub async fn delete_category(
 pub fn categories_router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_categories).post(create_category))
-        .route("/{id}", delete(delete_category))
+        .route(
+            "/{id}",
+            get(get_category)
+                .put(update_category)
+                .delete(delete_category),
+        )
 }

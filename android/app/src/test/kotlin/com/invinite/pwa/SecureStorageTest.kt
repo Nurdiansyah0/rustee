@@ -3,6 +3,7 @@ package com.invinite.pwa
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -55,5 +56,40 @@ class SecureStorageTest {
 
         secureStorage.saveSyncCursor(100L)
         assertEquals(100L, secureStorage.getSyncCursor())
+    }
+
+    @Test
+    fun testNotificationServiceEnabledToggle() {
+        // Defaults to true
+        assertTrue(secureStorage.isNotificationServiceEnabled())
+
+        secureStorage.setNotificationServiceEnabled(false)
+        assertFalse(secureStorage.isNotificationServiceEnabled())
+
+        secureStorage.setNotificationServiceEnabled(true)
+        assertTrue(secureStorage.isNotificationServiceEnabled())
+    }
+
+    @Test
+    fun testGenericStringStorage() {
+        secureStorage.putString("custom_pref", "custom_val")
+        assertEquals("custom_val", secureStorage.getString("custom_pref"))
+        assertEquals("default", secureStorage.getString("non_existent", "default"))
+    }
+
+    @Test
+    fun testClearSessionPreservesDeviceId() {
+        val originalDeviceId = secureStorage.getDeviceId()
+        secureStorage.saveAuthToken("token-to-be-cleared")
+        secureStorage.putString("temp_setting", "setting_val")
+
+        secureStorage.clearSession()
+
+        // Auth token and generic settings must be cleared
+        assertEquals(null, secureStorage.getAuthToken())
+        assertEquals(null, secureStorage.getString("temp_setting"))
+
+        // Device ID must be preserved
+        assertEquals(originalDeviceId, secureStorage.getDeviceId())
     }
 }
