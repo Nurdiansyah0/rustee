@@ -1,21 +1,49 @@
 <template>
   <div class="space-y-4">
     <!-- Header & Action -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <h2 class="text-xl font-bold text-content-primary tracking-tight">Riwayat Transaksi</h2>
         <p class="text-xs text-content-secondary mt-0.5">Catatan mutasi pemasukan, pengeluaran, dan transfer</p>
       </div>
-      <Button
-        variant="primary"
-        size="sm"
-        @click="$emit('open-add')"
-      >
-        <template #prefix>
-          <Plus class="w-3.5 h-3.5 mr-1" />
-        </template>
-        Catat
-      </Button>
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Impor E-Statement Bank (Pro Feature) -->
+        <button
+          type="button"
+          @click="handleOpenImport"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-brand-default/30 bg-brand-default/10 hover:bg-brand-default hover:text-white text-brand-default transition font-bold text-xs cursor-pointer shadow-xs group"
+          title="Impor & Rekonsiliasi E-Statement Bank (FinRep Pro)"
+        >
+          <FileSpreadsheet class="w-3.5 h-3.5" />
+          <span>Impor E-Statement</span>
+          <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-brand-default/20 text-brand-default group-hover:bg-white/25 group-hover:text-white uppercase">
+            Pro
+          </span>
+        </button>
+
+        <!-- Ekspor CSV (Pro Feature) -->
+        <button
+          type="button"
+          @click="handleExportCSV"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border-default hover:bg-surface-subtle text-content-secondary hover:text-content-primary transition font-bold text-xs cursor-pointer shadow-xs"
+          title="Ekspor Rekap Buku Kas (FinRep Pro)"
+        >
+          <Download class="w-3.5 h-3.5" />
+          <span>Ekspor</span>
+        </button>
+
+        <!-- Primary Add Transaction -->
+        <Button
+          variant="primary"
+          size="sm"
+          @click="$emit('open-add')"
+        >
+          <template #prefix>
+            <Plus class="w-3.5 h-3.5 mr-1" />
+          </template>
+          Catat
+        </Button>
+      </div>
     </div>
 
     <!-- Search & Filter Controls -->
@@ -161,6 +189,13 @@
         <span>Catat transaksi</span>
       </button>
     </div>
+
+    <!-- Bank E-Statement Import & Personal Accounting Modal (Pro) -->
+    <BankStatementImportModal
+      :is-open="showImportModal"
+      @close="showImportModal = false"
+      @imported="handleImported"
+    />
   </div>
 </template>
 
@@ -169,8 +204,11 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
 import { formatFinancialDate } from '@/utils/datetime'
+import { exportTransactionsToCSV } from '@/utils/export'
 import { useWalletStore } from '@/stores/wallets'
 import { useAuthStore } from '@/stores/auth'
+import { useSubscriptionStore } from '@/stores/subscription'
+import BankStatementImportModal from '@/components/BankStatementImportModal.vue'
 import { Button } from '@/components/ui'
 import {
   Plus,
@@ -180,13 +218,43 @@ import {
   X,
   ArrowDownLeft,
   ArrowUpRight,
-  ArrowLeftRight
+  ArrowLeftRight,
+  FileSpreadsheet,
+  Download
 } from 'lucide-vue-next'
 
 const emit = defineEmits(['open-add', 'refresh'])
 
 const walletStore = useWalletStore()
 const authStore = useAuthStore()
+const subscriptionStore = useSubscriptionStore()
+
+const showImportModal = ref(false)
+
+function handleOpenImport() {
+  if (!authStore.isPremium) {
+    subscriptionStore.openUpgradeModal('estatement.import')
+  } else {
+    showImportModal.value = true
+  }
+}
+
+function handleExportCSV() {
+  if (!authStore.isPremium) {
+    subscriptionStore.openUpgradeModal('export.csv')
+  } else {
+    try {
+      exportTransactionsToCSV(displayedTransactions.value)
+    } catch (err) {
+      alert(err.message || 'Gagal mengekspor data transaksi.')
+    }
+  }
+}
+
+function handleImported() {
+  loadTransactions()
+  emit('refresh')
+}
 
 const incomeTitle = computed(() => authStore.incomeTitle || 'Masuk')
 const expenseTitle = computed(() => authStore.expenseTitle || 'Keluar')

@@ -173,6 +173,12 @@
           <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
             <Check class="w-3.5 h-3.5 stroke-[2.5]" />
           </div>
+          <span class="text-content-primary font-medium">Accounting Pribadi: Impor & rekonsiliasi e-statement bank (BCA, Mandiri, BRI, dll)</span>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <div class="w-5 h-5 rounded-full bg-income-muted text-income-default flex items-center justify-center shrink-0">
+            <Check class="w-3.5 h-3.5 stroke-[2.5]" />
+          </div>
           <span class="text-content-primary font-medium">Ekspor laporan buku kas (CSV & PDF) yang terenkripsi</span>
         </div>
       </div>
