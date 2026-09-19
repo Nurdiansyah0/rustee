@@ -33,11 +33,11 @@
         v-if="subscriptionStore.isTrialing"
         type="button"
         @click="$emit('open-upgrade')"
-        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 text-[11px] font-extrabold transition cursor-pointer shadow-sm shadow-amber-500/10"
-        :title="`Masa Uji Coba: ${subscriptionStore.daysRemaining ?? 7} hari tersisa. Klik untuk berlangganan.`"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-default/15 border border-brand-default/30 text-brand-default hover:bg-brand-default/25 active:scale-95 text-[11px] font-extrabold transition cursor-pointer shadow-sm shadow-brand-default/10"
+        :title="`Masa Uji Coba: ${subscriptionStore.daysRemaining ?? 90} hari tersisa. Klik untuk berlangganan.`"
       >
-        <Clock class="w-3 h-3 text-amber-500 animate-pulse" />
-        <span>Trial ({{ subscriptionStore.daysRemaining ?? 7 }} hari)</span>
+        <Clock class="w-3 h-3 text-brand-default animate-pulse" />
+        <span>Trial ({{ subscriptionStore.daysRemaining ?? 90 }} hari)</span>
       </button>
 
       <!-- Premium Active Badge -->
@@ -45,7 +45,7 @@
         v-else-if="authStore.isPremium"
         class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-muted text-brand-default border border-brand-border text-[11px] font-extrabold"
       >
-        <Sparkles class="w-3 h-3 text-amber-500" />
+        <Sparkles class="w-3 h-3 text-brand-default" />
         <span>Premium</span>
       </div>
 
@@ -54,9 +54,9 @@
         v-else
         type="button"
         @click="$emit('open-upgrade')"
-        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-emerald-500/15 border border-brand-border text-brand-default hover:bg-brand-muted text-[11px] font-extrabold transition cursor-pointer"
+        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-default/10 border border-brand-border text-brand-default hover:bg-brand-default hover:text-white text-[11px] font-extrabold transition cursor-pointer"
       >
-        <Sparkles class="w-3 h-3 text-amber-500" />
+        <Sparkles class="w-3 h-3 text-brand-default" />
         <span>Upgrade Pro</span>
       </button>
 

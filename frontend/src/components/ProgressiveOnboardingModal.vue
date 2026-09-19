@@ -344,8 +344,8 @@
         <!-- ================= STEP 4: PILIHAN PAKET BERLANGGANAN (R2 §6, §16, §17) ================= -->
         <div v-else-if="currentStep === 4" class="space-y-4 animate-in fade-in duration-200">
           <div class="text-center">
-            <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 rounded-xl text-amber-500 border border-amber-500/30">
-              <Sparkles class="w-6 h-6" />
+            <div class="inline-flex items-center justify-center w-12 h-12 mb-2 bg-gradient-to-br from-brand-default/20 to-brand-default/5 rounded-xl text-brand-default border border-brand-default/25 shadow-xs">
+              <Sparkles class="w-6 h-6 stroke-[2]" />
             </div>
             <h3 class="text-xl font-black text-content-primary tracking-tight">
               Pilih Paket Berlangganan Anda
@@ -363,26 +363,26 @@
               :class="[
                 'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
                 selectedPlanOption === 'trial'
-                  ? 'border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/30 shadow-md'
-                  : 'border-border-default bg-surface-sunken hover:border-amber-500/50'
+                  ? 'border-brand-default bg-brand-muted/40 ring-2 ring-brand-default/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-brand-default/40 hover:bg-surface-subtle'
               ]"
             >
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-brand-default/15 text-brand-default border border-brand-default/25">
                   Rekomendasi
                 </span>
-                <span class="text-xs font-black text-emerald-500">Rp 0</span>
+                <span class="text-xs font-black text-brand-default">Rp 0</span>
               </div>
               <div>
                 <div class="font-extrabold text-xs text-content-primary flex items-center gap-1">
                   <span>3 Bulan Trial Pro</span>
-                  <Sparkles class="w-3.5 h-3.5 text-amber-500" />
+                  <Sparkles class="w-3.5 h-3.5 text-brand-default" />
                 </div>
                 <div class="text-[11px] text-content-muted mt-0.5">
                   90 hari fitur analitik & proyeksi penuh tanpa biaya di depan.
                 </div>
               </div>
-              <div class="mt-2 text-[10px] text-amber-500 font-bold">
+              <div class="mt-2 text-[10px] text-brand-default font-bold">
                 Otomatis ke Free Tier setelah 90 hari
               </div>
             </div>
@@ -393,8 +393,8 @@
               :class="[
                 'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
                 selectedPlanOption === 'free'
-                  ? 'border-brand-default bg-brand-default/10 ring-2 ring-brand-default/30 shadow-md'
-                  : 'border-border-default bg-surface-sunken hover:border-brand-default/50'
+                  ? 'border-brand-default bg-brand-muted/40 ring-2 ring-brand-default/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-brand-default/40 hover:bg-surface-subtle'
               ]"
             >
               <div class="flex items-center justify-between mb-1.5">
@@ -422,12 +422,12 @@
               :class="[
                 'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
                 selectedPlanOption === 'monthly'
-                  ? 'border-[#118EEA] bg-[#118EEA]/10 ring-2 ring-[#118EEA]/30 shadow-md'
-                  : 'border-border-default bg-surface-sunken hover:border-[#118EEA]/50'
+                  ? 'border-brand-default bg-brand-muted/40 ring-2 ring-brand-default/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-brand-default/40 hover:bg-surface-subtle'
               ]"
             >
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#118EEA]/20 text-[#118EEA]">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-content-secondary border border-border-subtle">
                   Bulanan
                 </span>
                 <span class="text-xs font-black text-content-primary">Rp 10.000 / bln</span>
@@ -440,8 +440,8 @@
                   Akses analitik runway, skor kesehatan & integrasi DANA instan.
                 </div>
               </div>
-              <div class="mt-2 text-[10px] text-[#118EEA] font-bold">
-                Pembayaran instan via DANA
+              <div class="mt-2 text-[10px] text-content-muted font-medium">
+                Bisa berhenti kapan saja • via DANA
               </div>
             </div>
 
@@ -449,14 +449,14 @@
             <div
               @click="selectedPlanOption = 'annual'"
               :class="[
-                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between',
+                'p-3.5 rounded-xl border text-left cursor-pointer transition relative flex flex-col justify-between overflow-hidden',
                 selectedPlanOption === 'annual'
-                  ? 'border-[#118EEA] bg-[#118EEA]/10 ring-2 ring-[#118EEA]/30 shadow-md'
-                  : 'border-border-default bg-surface-sunken hover:border-[#118EEA]/50'
+                  ? 'border-brand-default bg-brand-muted/40 ring-2 ring-brand-default/30 shadow-md'
+                  : 'border-border-default bg-surface-sunken hover:border-brand-default/40 hover:bg-surface-subtle'
               ]"
             >
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500">
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-brand-default text-white uppercase tracking-wider">
                   Hemat Rp 10.000
                 </span>
                 <span class="text-xs font-black text-content-primary">Rp 110.000 / thn</span>
@@ -469,15 +469,15 @@
                   12 bulan penuh dengan harga 11 bulan. Ekspor laporan tak terbatas.
                 </div>
               </div>
-              <div class="mt-2 text-[10px] text-[#118EEA] font-bold">
-                Pembayaran instan via DANA
+              <div class="mt-2 text-[10px] text-brand-default font-semibold">
+                Hanya ~Rp 9.166/bulan • via DANA
               </div>
             </div>
           </div>
 
           <!-- Guarantee & Single Gateway Notice -->
           <div class="flex items-center gap-2 p-3 bg-surface-sunken rounded-xl border border-border-default text-xs text-content-secondary">
-            <ShieldCheck class="w-5 h-5 text-[#118EEA] shrink-0" />
+            <ShieldCheck class="w-5 h-5 text-brand-default shrink-0" />
             <div class="text-[11px] leading-snug">
               Pembayaran online diproses secara aman menggunakan <strong>DANA Open API & SNAP</strong> resmi dengan enkripsi RSA-SHA256.
             </div>
@@ -520,11 +520,9 @@
               :disabled="isSubmitting"
               :class="[
                 'px-5 py-2.5 font-bold text-xs rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5',
-                selectedPlanOption === 'trial'
-                  ? 'bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-amber-500/20'
-                  : selectedPlanOption === 'free'
+                selectedPlanOption === 'free'
                   ? 'bg-surface-sunken text-content-primary border border-border-default hover:bg-surface-subtle'
-                  : 'bg-[#118EEA] hover:bg-[#0c7acb] text-white shadow-[#118EEA]/20'
+                  : 'bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis active:scale-95 text-white shadow-brand-default/25'
               ]"
             >
               <Sparkles v-if="selectedPlanOption === 'trial'" class="w-3.5 h-3.5" />

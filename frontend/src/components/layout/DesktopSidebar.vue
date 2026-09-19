@@ -54,14 +54,14 @@
         v-if="subscriptionStore.isTrialing"
         type="button"
         @click="$emit('open-upgrade')"
-        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-600/15 border border-amber-500/30 cursor-pointer hover:border-amber-500 transition shadow-xs group focus-ring block"
+        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-brand-default/15 via-brand-default/10 to-brand-default/5 border border-brand-default/25 cursor-pointer hover:border-brand-default transition shadow-xs group focus-ring block"
       >
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5 text-xs font-extrabold text-amber-500">
-            <Clock class="w-3.5 h-3.5 animate-pulse text-amber-500" />
+          <div class="flex items-center gap-1.5 text-xs font-extrabold text-brand-default">
+            <Clock class="w-3.5 h-3.5 animate-pulse text-brand-default" />
             <span>Masa Uji Coba</span>
           </div>
-          <span class="text-[10px] font-extrabold text-amber-500 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-full tabular-nums">
+          <span class="text-[10px] font-extrabold text-brand-default bg-brand-default/20 border border-brand-default/30 px-1.5 py-0.5 rounded-full tabular-nums">
             {{ subscriptionStore.daysRemaining ?? 90 }} Hari
           </span>
         </div>
@@ -75,14 +75,14 @@
         v-else-if="!authStore.isPremium"
         type="button"
         @click="$emit('open-upgrade')"
-        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 border border-brand-border cursor-pointer hover:border-brand-default transition focus-ring block"
+        class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-brand-default/15 via-brand-default/10 to-surface-subtle border border-brand-border cursor-pointer hover:border-brand-default transition focus-ring block"
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-1.5 text-xs font-bold text-brand-default">
             <Sparkles class="w-3.5 h-3.5" />
             <span>FinRep Pro</span>
           </div>
-          <span class="text-[10px] font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded">
+          <span class="text-[10px] font-extrabold text-brand-default bg-brand-default/15 border border-brand-default/25 px-1.5 py-0.5 rounded">
             Rp10k/bln
           </span>
         </div>

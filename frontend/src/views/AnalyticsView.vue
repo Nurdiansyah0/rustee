@@ -8,10 +8,10 @@
       <div :class="[
         'px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border',
         userTier === 'premium'
-          ? 'bg-gradient-to-r from-amber-500/10 to-emerald-500/10 text-brand-default border-brand-border'
+          ? 'bg-brand-default/10 text-brand-default border-brand-border'
           : 'bg-surface-subtle text-content-muted border-border-subtle'
       ]">
-        <Sparkles v-if="userTier === 'premium'" class="w-3 h-3 text-amber-500" />
+        <Sparkles v-if="userTier === 'premium'" class="w-3 h-3 text-brand-default" />
         <span>{{ userTier === 'premium' ? 'Premium' : 'Free Tier' }}</span>
       </div>
     </div>

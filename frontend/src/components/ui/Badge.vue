@@ -88,8 +88,7 @@ const classes = computed(() => {
     warning: 'bg-warning-muted text-warning-default border-warning-border',
     transfer: 'bg-transfer-muted text-transfer-default border-transfer-border',
     brand: 'bg-brand-muted text-brand-default border-brand-border',
-    premium:
-      'bg-gradient-to-r from-amber-500/10 to-emerald-500/10 text-brand-default border-brand-border font-bold',
+    premium: 'bg-brand-default/10 text-brand-default border-brand-border font-bold',
     default: 'bg-surface-subtle text-content-secondary border-border-subtle',
   }
 
@@ -106,7 +105,7 @@ const dotClass = computed(() => {
     warning: 'bg-warning-default',
     transfer: 'bg-transfer-default',
     brand: 'bg-brand-default',
-    premium: 'bg-amber-500',
+    premium: 'bg-brand-default',
     default: 'bg-content-muted',
   }
   return dotMap[normalizedVariant.value] || dotMap.default

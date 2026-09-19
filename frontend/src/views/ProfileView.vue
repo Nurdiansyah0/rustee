@@ -20,12 +20,12 @@
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold text-content-muted uppercase tracking-wider">Status Langganan</h3>
         <!-- Badge based on trialing vs active vs free -->
-        <span v-if="subscriptionStore.isTrialing" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-amber-500/15 text-amber-500 border-amber-500/30">
-          <Clock class="w-3 h-3 text-amber-500 animate-pulse" />
-          <span>Trial ({{ subscriptionStore.daysRemaining ?? 7 }} Hari)</span>
+        <span v-if="subscriptionStore.isTrialing" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-brand-default/15 text-brand-default border-brand-default/30">
+          <Clock class="w-3 h-3 text-brand-default animate-pulse" />
+          <span>Trial ({{ subscriptionStore.daysRemaining ?? 90 }} Hari)</span>
         </span>
-        <span v-else-if="isPremiumActive" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-gradient-to-r from-amber-500/10 to-emerald-500/10 text-brand-default border-brand-border">
-          <Sparkles class="w-3 h-3 text-amber-500" />
+        <span v-else-if="isPremiumActive" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-brand-default/10 text-brand-default border-brand-border">
+          <Sparkles class="w-3 h-3 text-brand-default" />
           <span>FinRep Pro Aktif</span>
         </span>
         <span v-else-if="subscriptionStore.hasUsedTrial" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border bg-surface-subtle text-content-muted border-border-subtle">
@@ -37,13 +37,13 @@
       </div>
 
       <!-- State 1: Active Trial -->
-      <div v-if="subscriptionStore.isTrialing" class="p-4 bg-amber-500/10 rounded-xl border border-amber-500/30 text-xs space-y-2.5">
+      <div v-if="subscriptionStore.isTrialing" class="p-4 bg-brand-default/10 rounded-xl border border-brand-default/25 text-xs space-y-2.5">
         <div class="flex items-center justify-between">
-          <div class="font-bold text-sm text-amber-500 flex items-center gap-1.5">
+          <div class="font-bold text-sm text-brand-default flex items-center gap-1.5">
             <Clock class="w-4 h-4 animate-pulse" />
             <span>Masa Uji Coba Pro Aktif</span>
           </div>
-          <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-[10px]">
+          <span class="px-2 py-0.5 rounded-full bg-brand-default/20 text-brand-default font-extrabold text-[10px]">
             {{ subscriptionStore.daysRemaining ?? 90 }} Hari Tersisa
           </span>
         </div>
@@ -53,7 +53,7 @@
         <button
           type="button"
           @click="$emit('open-upgrade')"
-          class="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-md transition cursor-pointer text-center text-xs flex items-center justify-center gap-1.5 mt-1"
+          class="w-full py-2.5 px-4 bg-brand-default hover:bg-brand-emphasis active:bg-brand-emphasis text-white font-bold rounded-xl shadow-md shadow-brand-default/20 transition cursor-pointer text-center text-xs flex items-center justify-center gap-1.5 mt-1"
         >
           <Sparkles class="w-3.5 h-3.5" />
           <span>Kunci Akses Pro Tetap (Rp 10.000 / bln via DANA)</span>
