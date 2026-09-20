@@ -19,12 +19,13 @@ export const useSubscriptionStore = defineStore('subscription', () => {
   const currentPeriodEnd = ref(null)
 
   // Getters
-  const isPremium = computed(() => tier.value === 'premium')
+  const isPremium = computed(() => tier.value === 'premium' || status.value === 'trialing' || status.value === 'active')
   const isTrialing = computed(() => status.value === 'trialing')
-  const hasUsedTrial = computed(() => hasUsedTrialState.value || status.value === 'trial_expired')
+  const isTrialExpired = computed(() => !isTrialing.value && tier.value !== 'premium' && status.value !== 'active' && (hasUsedTrialState.value || status.value === 'trial_expired' || status.value === 'expired'))
+  const hasUsedTrial = computed(() => isTrialExpired.value)
 
   function canAccess(feature) {
-    if (isPremium.value) return true
+    if (isPremium.value || isTrialing.value) return true
     return features.value.includes(feature)
   }
 
@@ -270,6 +271,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     // Getters
     isPremium,
     isTrialing,
+    isTrialExpired,
     hasUsedTrial,
     canAccess,
     formattedPrice,

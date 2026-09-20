@@ -478,13 +478,15 @@ export function handleMockApiRequest(path, options = {}) {
     try {
       cached = JSON.parse(localStorage.getItem('invinite_auth_user') || 'null');
     } catch {}
-    const isPremium = cached?.subscription_tier === 'premium';
+    const isTrialing = cached?.trial_active === true || cached?.status === 'trialing';
+    const isPremium = cached?.subscription_tier === 'premium' || isTrialing;
     return {
-      status: isPremium ? 'active' : 'free',
+      status: isTrialing ? 'trialing' : (isPremium ? 'active' : 'free'),
       tier: isPremium ? 'premium' : 'free',
-      trial_active: false,
-      has_used_trial: false,
-      days_remaining: null
+      is_premium: isPremium,
+      trial_active: isTrialing,
+      has_used_trial: isTrialing || cached?.has_used_trial === true,
+      days_remaining: isTrialing ? 90 : null
     };
   }
 

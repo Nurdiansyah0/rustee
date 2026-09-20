@@ -53,7 +53,7 @@
               <AnalyticsView
                 v-else-if="currentTab === 'analytics'"
                 key="analytics"
-                :user-tier="authStore.isPremium ? 'premium' : 'free'"
+                :user-tier="(authStore.isPremium || subscriptionStore.isPremium || subscriptionStore.isTrialing) ? 'premium' : 'free'"
                 @open-upgrade="subscriptionStore.openUpgradeModal()"
               />
 
@@ -61,7 +61,7 @@
                 v-else-if="currentTab === 'profile'"
                 key="profile"
                 :user="authStore.user"
-                :user-tier="authStore.isPremium ? 'premium' : 'free'"
+                :user-tier="(authStore.isPremium || subscriptionStore.isPremium || subscriptionStore.isTrialing) ? 'premium' : 'free'"
                 @open-upgrade="subscriptionStore.openUpgradeModal()"
                 @open-onboarding="openPersonalizationModal"
                 @logout="handleLogout"

@@ -122,6 +122,22 @@ pub async fn me_handler(
     let result = state.auth_service.get_me(&auth_user.user_id).await?;
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
+    // If database subscription tier is premium/trialing but incoming token was free, refresh cookie
+    if (result.user.subscription_tier == "premium" || result.user.subscription_tier == "trialing")
+        && auth_user.tier != "premium"
+    {
+        if let Ok((refreshed_token, _)) = state
+            .jwt_engine()
+            .generate_token(&auth_user.user_id, &auth_user.email, &auth_user.role, "premium")
+        {
+            let cookie_val = make_auth_cookie(&refreshed_token, 86400, state.secure_cookie);
+            if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
+                headers.insert(SET_COOKIE, hv);
+            }
+        }
+    }
+
     Ok((StatusCode::OK, headers, Json(result)))
 }
 

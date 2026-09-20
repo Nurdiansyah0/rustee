@@ -7,12 +7,12 @@
       </div>
       <div :class="[
         'px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 border',
-        userTier === 'premium'
+        isPro
           ? 'bg-brand-default/10 text-brand-default border-brand-border'
           : 'bg-surface-subtle text-content-muted border-border-subtle'
       ]">
-        <Sparkles v-if="userTier === 'premium'" class="w-3 h-3 text-brand-default" />
-        <span>{{ userTier === 'premium' ? 'Premium' : 'Free Tier' }}</span>
+        <Sparkles v-if="isPro" class="w-3 h-3 text-brand-default" />
+        <span>{{ isPro ? (subscriptionStore.isTrialing ? 'Pro Trial (90 Hari)' : 'Premium') : 'Free Tier' }}</span>
       </div>
     </div>
 
@@ -63,14 +63,14 @@
             <span>Analisis Presisi & Proyeksi Runway</span>
           </h3>
           <span class="text-xs text-brand-default font-extrabold flex items-center gap-1.5">
-            <span v-if="userTier === 'premium'" class="w-1.5 h-1.5 rounded-full bg-brand-default"></span>
+            <span v-if="isPro" class="w-1.5 h-1.5 rounded-full bg-brand-default"></span>
             <span v-else class="w-1.5 h-1.5 rounded-full bg-brand-default animate-pulse"></span>
             <span>FinRep Pro</span>
           </span>
         </div>
 
         <!-- Premium Real Data State -->
-        <template v-if="userTier === 'premium'">
+        <template v-if="isPro">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="p-4 bg-surface-subtle rounded-xl border border-border-subtle">
               <div class="text-xs text-content-secondary font-medium">Skor Kesehatan Finansial</div>
@@ -175,7 +175,7 @@
 
       <!-- Frosted Lock Overlay for Free Tier Users (Visually Revealing the Pro Skeleton) -->
       <FeatureLockOverlay
-        v-if="userTier !== 'premium'"
+        v-if="!isPro"
         feature-name="analytics.advanced"
         @open-upgrade="$emit('open-upgrade')"
       />
@@ -184,16 +184,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { formatIDR } from '@/utils/currency'
 import { useWalletStore } from '@/stores/wallets'
 import { useAuthStore } from '@/stores/auth'
+import { useSubscriptionStore } from '@/stores/subscription'
 import FeatureLockOverlay from '@/components/FeatureLockOverlay.vue'
 import { Sparkles, ShieldCheck, Lock } from 'lucide-vue-next'
 
 const walletStore = useWalletStore()
 const authStore = useAuthStore()
+const subscriptionStore = useSubscriptionStore()
 
 const incomeTitle = computed(() => authStore.incomeTitle || 'Pemasukan')
 const expenseTitle = computed(() => authStore.expenseTitle || 'Pengeluaran')
@@ -203,6 +205,15 @@ const props = defineProps({
     type: String,
     default: 'free'
   }
+})
+
+const isPro = computed(() => {
+  return (
+    props.userTier === 'premium' ||
+    authStore.isPremium ||
+    subscriptionStore.isPremium ||
+    subscriptionStore.isTrialing
+  )
 })
 
 defineEmits(['open-upgrade'])
@@ -218,7 +229,7 @@ async function loadAnalytics() {
     console.error('Failed to load basic analytics', err)
   }
 
-  if (props.userTier === 'premium') {
+  if (isPro.value) {
     try {
       const a = await api.getAdvancedAnalytics()
       advancedData.value = a
@@ -227,6 +238,15 @@ async function loadAnalytics() {
     }
   }
 }
+
+watch(
+  () => isPro.value,
+  (newVal) => {
+    if (newVal) {
+      loadAnalytics()
+    }
+  }
+)
 
 onMounted(() => {
   loadAnalytics()

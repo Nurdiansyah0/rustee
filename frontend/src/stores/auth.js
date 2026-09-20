@@ -76,15 +76,26 @@ export const useAuthStore = defineStore('auth', () => {
   // Getters
   const isAuthenticated = computed(() => Boolean(user.value))
   const isPremium = computed(() => {
-    const tier = user.value?.subscription_tier || user.value?.tier
-    return tier === 'premium'
+    const u = user.value?.user || user.value
+    const tier = u?.subscription_tier || u?.tier
+    let subStore = null
+    try {
+      subStore = useSubscriptionStore()
+    } catch {}
+    return (
+      tier === 'premium' ||
+      tier === 'trialing' ||
+      Boolean(subStore?.isPremium) ||
+      Boolean(subStore?.isTrialing)
+    )
   })
   const displayName = computed(() => {
+    const u = user.value?.user || user.value
     return (
       personalization.value?.display_name?.trim() ||
-      user.value?.display_name ||
-      user.value?.name ||
-      user.value?.email?.split('@')[0] ||
+      u?.display_name ||
+      u?.name ||
+      u?.email?.split('@')[0] ||
       'Pengguna'
     )
   })
@@ -155,9 +166,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function checkAuth() {
     try {
       const me = await api.getMe()
-      user.value = me
-      permissions.value = me.permissions || []
-      saveCachedUser(me)
+      const userData = me?.user || me
+      user.value = userData
+      permissions.value = me?.permissions || userData?.permissions || []
+      saveCachedUser(userData)
       initialized.value = true
       // Fetch user financial vocabulary & preferences
       fetchPersonalization().catch(() => {})

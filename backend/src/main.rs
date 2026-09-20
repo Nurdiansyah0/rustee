@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         subscription_repo,
         user_repo,
         audit_repo,
-    ));
+    ).with_pool(pool.clone()));
 
     let rate_limiter = Arc::new(
         backend::api::middleware::rate_limiter::SlidingWindowRateLimiter::new(

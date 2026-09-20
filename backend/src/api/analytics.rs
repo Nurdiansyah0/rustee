@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::{
-        header::{HeaderMap, HeaderValue, CACHE_CONTROL},
+        header::{HeaderMap, HeaderValue, CACHE_CONTROL, SET_COOKIE},
         StatusCode,
     },
     response::IntoResponse,
@@ -10,8 +10,8 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::api::middleware::auth_extractor::AuthenticatedUser;
-use crate::api::middleware::feature_gate::require_permission;
+use crate::api::middleware::auth_extractor::{AuthenticatedUser, HasJwtEngine};
+use crate::api::middleware::feature_gate::is_permission_granted;
 use crate::api::AppState;
 use crate::domain::money::Rupiah;
 use crate::error::AppError;
@@ -123,8 +123,68 @@ pub async fn get_advanced_analytics(
     user: AuthenticatedUser,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Strict server-side feature gate: returns HTTP 403 Forbidden for Free tier
-    require_permission(&user, "analytics.advanced")?;
+    // Check permission granted by token tier first
+    let mut allowed = is_permission_granted(&user.tier, "analytics.advanced");
+    let mut refreshed_cookie = None;
+
+    if !allowed {
+        // Fallback: Check database for active trial or paid subscription
+        let sub = state
+            .payment_service
+            .get_subscription(&user.user_id)
+            .await
+            .ok()
+            .flatten();
+        let now = chrono::Utc::now();
+        if let Some(s) = sub {
+            if s.status == "active" {
+                allowed = true;
+            } else if s.status == "trialing" {
+                if let Ok(end_dt) = chrono::DateTime::parse_from_rfc3339(&s.current_period_end) {
+                    if end_dt.with_timezone(&chrono::Utc) > now {
+                        allowed = true;
+                    }
+                }
+            }
+        }
+
+        if !allowed {
+            if let Ok(Some((tier,))) = sqlx::query_as::<_, (String,)>(
+                "SELECT subscription_tier FROM users WHERE id = ?1",
+            )
+            .bind(&user.user_id)
+            .fetch_optional(&state.pool)
+            .await
+            {
+                if tier.eq_ignore_ascii_case("premium") || tier.eq_ignore_ascii_case("trialing") {
+                    allowed = true;
+                }
+            }
+        }
+
+        if allowed {
+            if let Ok((refreshed_token, _)) = state
+                .jwt_engine()
+                .generate_token(&user.user_id, &user.email, &user.role, "premium")
+            {
+                let cookie_val = crate::api::auth::make_auth_cookie(
+                    &refreshed_token,
+                    86400,
+                    state.auth_state.secure_cookie,
+                );
+                if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
+                    refreshed_cookie = Some(hv);
+                }
+            }
+        }
+    }
+
+    if !allowed {
+        return Err(AppError::Forbidden(
+            "Subscription feature 'analytics.advanced' required.".to_string(),
+            "FEATURE_LOCKED",
+        ));
+    }
 
     let cash_flow = state
         .ledger_service
@@ -141,6 +201,9 @@ pub async fn get_advanced_analytics(
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+    if let Some(cookie) = refreshed_cookie {
+        headers.insert(SET_COOKIE, cookie);
+    }
 
     Ok((
         StatusCode::OK,
@@ -150,7 +213,13 @@ pub async fn get_advanced_analytics(
             savings_rate_percent: savings_rate,
             financial_health_score: health_score,
             monthly_trend: "positive",
-            tier: user.tier,
+            tier: if !user.tier.eq_ignore_ascii_case("free") {
+                user.tier
+            } else if allowed {
+                "premium".to_string()
+            } else {
+                user.tier
+            },
             message: "Premium analytics unlocked",
         }),
     ))

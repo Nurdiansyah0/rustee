@@ -1,13 +1,16 @@
 use axum::{
     extract::State,
-    http::{header::CACHE_CONTROL, HeaderMap, HeaderValue, StatusCode},
+    http::{
+        header::{CACHE_CONTROL, SET_COOKIE},
+        HeaderMap, HeaderValue, StatusCode,
+    },
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::api::middleware::auth_extractor::AuthenticatedUser;
+use crate::api::middleware::auth_extractor::{AuthenticatedUser, HasJwtEngine};
 use crate::api::AppState;
 use crate::error::AppError;
 use crate::repository::{
@@ -192,14 +195,28 @@ pub async fn onboarding_handler(
         }
     }
 
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
     // 4. Activate trial if user opted in
     if payload.activate_trial.unwrap_or(false) {
-        let _ = state.payment_service.activate_trial(&user.user_id).await;
+        let _ = state.payment_service.activate_trial_with_pool(&state.pool, &user.user_id).await;
+        if let Ok((refreshed_token, _)) = state
+            .jwt_engine()
+            .generate_token(&user.user_id, &user.email, &user.role, "premium")
+        {
+            let cookie_val = crate::api::auth::make_auth_cookie(
+                &refreshed_token,
+                86400,
+                state.auth_state.secure_cookie,
+            );
+            if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
+                headers.insert(SET_COOKIE, hv);
+            }
+        }
     }
 
     let resp: PersonalizationResponse = Some(prefs).into();
-    let mut headers = HeaderMap::new();
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
     Ok((
         StatusCode::OK,
         headers,
