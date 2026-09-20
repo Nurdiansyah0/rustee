@@ -108,12 +108,14 @@ pub fn create_app(state: AppState) -> Router {
         .merge(webhooks::webhooks_router());
 
     let protected_router = router::register_ingestion_routes(protected_router)
-        .with_state(state);
+        .with_state(state.clone());
 
     Router::new()
         .merge(health_router)
         .route("/ws", axum::routing::get(ws::ws_handler))
         .route("/payment/success", axum::routing::get(payment_success_handler))
+        .route("/v1.0/debit/notify", axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()))
+        .route("/payment-gateway/v1.0/debit/notify", axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()))
         .nest("/api/v1/auth", auth_router)
         .nest("/api/v1", protected_router)
 }

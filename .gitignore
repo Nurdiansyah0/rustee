@@ -66,3 +66,7 @@ Thumbs.db
 .agents
 .agents/
 .agents/**
+
+# DANA Self Testing Suite & Sandbox Secrets
+dana_self_testing/
+

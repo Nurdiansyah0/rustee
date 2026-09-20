@@ -262,6 +262,7 @@ pub async fn checkout_handler(
 
 pub async fn dana_webhook_handler(
     headers: HeaderMap,
+    uri: axum::http::Uri,
     State(state): State<AppState>,
     body_bytes: Bytes,
 ) -> Result<impl IntoResponse, AppError> {
@@ -291,17 +292,38 @@ pub async fn dana_webhook_handler(
         }
     };
 
-    match state
+    let path = uri.path();
+    let full_path = if path.starts_with("/api/v1") {
+        path.to_string()
+    } else {
+        format!("/api/v1{}", path)
+    };
+
+    let mut result = state
         .payment_service
         .handle_dana_webhook(
             "POST",
-            "/api/v1/webhooks/dana",
+            &full_path,
             timestamp,
             signature,
             payload_str,
         )
-        .await
-    {
+        .await;
+
+    if matches!(result, Err(crate::service::payment_service::PaymentError::InvalidSignature)) && path != full_path {
+        result = state
+            .payment_service
+            .handle_dana_webhook(
+                "POST",
+                path,
+                timestamp,
+                signature,
+                payload_str,
+            )
+            .await;
+    }
+
+    match result {
         Ok(_) => Ok((
             StatusCode::OK,
             resp_headers,
@@ -426,6 +448,7 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/webhooks/midtrans", post(midtrans_webhook_handler))
         .route("/webhooks/xendit", post(xendit_webhook_handler))
         .route("/webhooks/dana", post(dana_webhook_handler))
+        .route("/v1.0/debit/notify", post(dana_webhook_handler))
         .route("/webhooks/dana/disburse", post(dana_disburse_notify_handler))
         .route("/subscription", get(get_subscription_status))
         .route("/subscriptions/status", get(get_subscription_status))
