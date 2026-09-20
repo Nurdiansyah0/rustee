@@ -403,6 +403,24 @@ pub async fn simulate_payment_handler(
     ))
 }
 
+/// Handler for outbound DANA Disburse to Balance / e-money topup (§19)
+/// POST https://api.sandbox.dana.id/rest/v1.0/emoney/topup
+pub async fn dana_disburse_to_balance_handler(
+    State(state): State<AppState>,
+    _user: AuthenticatedUser,
+    Json(payload): Json<crate::service::payment_service::DanaDisburseRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let result = state
+        .payment_service
+        .disburse_to_dana_balance(payload)
+        .await?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
+    Ok((StatusCode::OK, headers, Json(result)))
+}
+
 pub fn webhooks_router() -> Router<AppState> {
     Router::new()
         .route("/webhooks/midtrans", post(midtrans_webhook_handler))
@@ -418,5 +436,7 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/subscription/trial", post(trial_handler))
         .route("/subscription/trial/activate", post(trial_handler))
         .route("/subscriptions/simulate-payment", post(simulate_payment_handler))
+        .route("/subscriptions/dana/disburse", post(dana_disburse_to_balance_handler))
+        .route("/disburse/dana", post(dana_disburse_to_balance_handler))
 }
 
