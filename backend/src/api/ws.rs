@@ -16,7 +16,11 @@ async fn handle_socket(mut socket: WebSocket) {
                         "type": "pong",
                         "timestamp": chrono::Utc::now().timestamp_millis()
                     });
-                    if socket.send(Message::Text(pong.to_string().into())).await.is_err() {
+                    if socket
+                        .send(Message::Text(pong.to_string().into()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }

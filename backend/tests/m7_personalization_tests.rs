@@ -1,6 +1,9 @@
 use axum::{
     body::Body,
-    http::{header::{CONTENT_TYPE, COOKIE}, Request, StatusCode},
+    http::{
+        header::{CONTENT_TYPE, COOKIE},
+        Request, StatusCode,
+    },
 };
 use http_body_util::BodyExt;
 use serde_json::Value;
@@ -10,15 +13,15 @@ use tower::ServiceExt;
 use backend::{
     api::{create_app, AppState, AuthState},
     repository::{
-        db::{init_pool, run_migrations, DbConfig},
-        user_repo::{NewUser, SqlxUserRepository, UserRepository},
         account_repo::SqlxAccountRepository,
-        category_repo::SqlxCategoryRepository,
         audit_repo::SqlxAuditRepository,
+        category_repo::SqlxCategoryRepository,
+        db::{init_pool, run_migrations, DbConfig},
         idempotency_repo::SqlxIdempotencyRepository,
-        transaction_repo::SqlxTransactionRepository,
         subscription_repo::SqlxSubscriptionRepository,
+        transaction_repo::SqlxTransactionRepository,
         user_preferences_repo::SqlxUserPreferencesRepository,
+        user_repo::{NewUser, SqlxUserRepository, UserRepository},
     },
     service::{
         auth_service::AuthService,
@@ -101,6 +104,12 @@ async fn setup_app() -> TestContext {
         user_preferences_repo,
         ledger_service,
         payment_service,
+        tenant_service: Arc::new(
+            backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+        ),
+        tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+            pool.clone(),
+        )),
         pool: pool.clone(),
         rate_limiter: Arc::default(),
     };
@@ -154,7 +163,8 @@ async fn test_personalization_get_and_put() {
 
     let resp = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body: Value =
+        serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body["onboarding_completed"], false);
 
     // 2. PUT /api/v1/users/personalization
@@ -176,7 +186,8 @@ async fn test_personalization_get_and_put() {
 
     let resp_put = ctx.app.clone().oneshot(req_put).await.unwrap();
     assert_eq!(resp_put.status(), StatusCode::OK);
-    let body_put: Value = serde_json::from_slice(&resp_put.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body_put: Value =
+        serde_json::from_slice(&resp_put.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body_put["display_name"], "Sobat Hebat");
     assert_eq!(body_put["income_title"], "Gaji Pokok");
     assert_eq!(body_put["expense_title"], "Pengeluaran Rumah");
@@ -193,7 +204,8 @@ async fn test_personalization_get_and_put() {
 
     let resp_get2 = ctx.app.clone().oneshot(req_get2).await.unwrap();
     assert_eq!(resp_get2.status(), StatusCode::OK);
-    let body_get2: Value = serde_json::from_slice(&resp_get2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body_get2: Value =
+        serde_json::from_slice(&resp_get2.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body_get2["display_name"], "Sobat Hebat");
     assert_eq!(body_get2["income_title"], "Gaji Pokok");
     assert_eq!(body_get2["onboarding_completed"], true);
@@ -230,7 +242,8 @@ async fn test_onboarding_atomic_flow() {
 
     let resp = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body: Value =
+        serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body["status"], "success");
     assert_eq!(body["personalization"]["display_name"], "Rian Nurdiansyah");
     assert_eq!(body["personalization"]["onboarding_completed"], true);
@@ -244,7 +257,8 @@ async fn test_onboarding_atomic_flow() {
         .unwrap();
     let resp_acc = ctx.app.clone().oneshot(req_acc).await.unwrap();
     assert_eq!(resp_acc.status(), StatusCode::OK);
-    let accounts: Value = serde_json::from_slice(&resp_acc.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let accounts: Value =
+        serde_json::from_slice(&resp_acc.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert!(accounts.as_array().unwrap().len() >= 2);
 
     // Verify categories created
@@ -256,8 +270,14 @@ async fn test_onboarding_atomic_flow() {
         .unwrap();
     let resp_cat = ctx.app.clone().oneshot(req_cat).await.unwrap();
     assert_eq!(resp_cat.status(), StatusCode::OK);
-    let cats: Value = serde_json::from_slice(&resp_cat.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    let cat_names: Vec<&str> = cats.as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
+    let cats: Value =
+        serde_json::from_slice(&resp_cat.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let cat_names: Vec<&str> = cats
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
     assert!(cat_names.contains(&"Makan Restoran"));
     assert!(cat_names.contains(&"Bonus Klien"));
 
@@ -270,7 +290,8 @@ async fn test_onboarding_atomic_flow() {
         .unwrap();
     let resp_sub = ctx.app.clone().oneshot(req_sub).await.unwrap();
     assert_eq!(resp_sub.status(), StatusCode::OK);
-    let sub: Value = serde_json::from_slice(&resp_sub.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let sub: Value =
+        serde_json::from_slice(&resp_sub.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(sub["tier"], "premium");
     assert_eq!(sub["status"], "trialing");
 }
@@ -308,11 +329,14 @@ async fn test_checkout_dana_exclusive_enforcement() {
         .uri("/api/v1/subscriptions/checkout")
         .header(COOKIE, format!("auth_token={}", token))
         .header(CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"provider": "dana", "plan_id": "premium_monthly"}"#))
+        .body(Body::from(
+            r#"{"provider": "dana", "plan_id": "premium_monthly"}"#,
+        ))
         .unwrap();
     let resp_dana = ctx.app.clone().oneshot(req_dana).await.unwrap();
     assert_eq!(resp_dana.status(), StatusCode::OK);
-    let body_dana: Value = serde_json::from_slice(&resp_dana.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body_dana: Value =
+        serde_json::from_slice(&resp_dana.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body_dana["provider"], "dana");
     assert!(body_dana["checkout_url"].as_str().unwrap().contains("dana"));
 }
@@ -343,12 +367,16 @@ async fn test_category_custom_vocabulary_and_metadata() {
 
     let resp = ctx.app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
-    let cat: Value = serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let cat: Value =
+        serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap();
     let cat_id = cat["id"].as_str().unwrap();
     assert_eq!(cat["name"], "Kopi Senja");
     assert_eq!(cat["display_name"], "Ngopi Sore");
     assert_eq!(cat["normalized_name"], "ngopi sore");
-    assert_eq!(cat["metadata"], "{\"icon_variant\":\"coffee\",\"target_budget\":75000}");
+    assert_eq!(
+        cat["metadata"],
+        "{\"icon_variant\":\"coffee\",\"target_budget\":75000}"
+    );
 
     // 2. GET /api/v1/categories/{id}
     let req_get = Request::builder()
@@ -359,10 +387,14 @@ async fn test_category_custom_vocabulary_and_metadata() {
         .unwrap();
     let resp_get = ctx.app.clone().oneshot(req_get).await.unwrap();
     assert_eq!(resp_get.status(), StatusCode::OK);
-    let cat_get: Value = serde_json::from_slice(&resp_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let cat_get: Value =
+        serde_json::from_slice(&resp_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(cat_get["id"], cat_id);
     assert_eq!(cat_get["display_name"], "Ngopi Sore");
-    assert_eq!(cat_get["metadata"], "{\"icon_variant\":\"coffee\",\"target_budget\":75000}");
+    assert_eq!(
+        cat_get["metadata"],
+        "{\"icon_variant\":\"coffee\",\"target_budget\":75000}"
+    );
 
     // 3. PUT /api/v1/categories/{id}
     let update_payload = serde_json::json!({
@@ -379,9 +411,13 @@ async fn test_category_custom_vocabulary_and_metadata() {
         .unwrap();
     let resp_put = ctx.app.clone().oneshot(req_put).await.unwrap();
     assert_eq!(resp_put.status(), StatusCode::OK);
-    let cat_updated: Value = serde_json::from_slice(&resp_put.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let cat_updated: Value =
+        serde_json::from_slice(&resp_put.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(cat_updated["display_name"], "Ngopi Malam");
-    assert_eq!(cat_updated["metadata"], "{\"icon_variant\":\"coffee_dark\"}");
+    assert_eq!(
+        cat_updated["metadata"],
+        "{\"icon_variant\":\"coffee_dark\"}"
+    );
     assert_eq!(cat_updated["color"], "#3B1E08");
 
     // 4. DELETE /api/v1/categories/{id} (soft-delete)
@@ -405,12 +441,16 @@ async fn test_category_custom_vocabulary_and_metadata() {
     assert_eq!(resp_get2.status(), StatusCode::NOT_FOUND);
 
     // 6. Direct DB verification: row exists but deleted_at IS NOT NULL
-    let deleted_at: Option<String> = sqlx::query_scalar("SELECT deleted_at FROM categories WHERE id = ?1")
-        .bind(cat_id)
-        .fetch_one(&ctx.pool)
-        .await
-        .unwrap();
-    assert!(deleted_at.is_some(), "Category must be soft-deleted with non-null timestamp");
+    let deleted_at: Option<String> =
+        sqlx::query_scalar("SELECT deleted_at FROM categories WHERE id = ?1")
+            .bind(cat_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    assert!(
+        deleted_at.is_some(),
+        "Category must be soft-deleted with non-null timestamp"
+    );
 }
 
 #[tokio::test]
@@ -432,7 +472,8 @@ async fn test_starter_categories_display_name_and_normalized_name_populated() {
         .unwrap();
     let resp_reg = ctx.app.clone().oneshot(req_reg).await.unwrap();
     assert_eq!(resp_reg.status(), StatusCode::CREATED);
-    let reg_body: Value = serde_json::from_slice(&resp_reg.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let reg_body: Value =
+        serde_json::from_slice(&resp_reg.into_body().collect().await.unwrap().to_bytes()).unwrap();
     let token = reg_body["token"].as_str().unwrap();
 
     // Query categories via API
@@ -444,7 +485,8 @@ async fn test_starter_categories_display_name_and_normalized_name_populated() {
         .unwrap();
     let resp_cats = ctx.app.clone().oneshot(req_cats).await.unwrap();
     assert_eq!(resp_cats.status(), StatusCode::OK);
-    let cats: Value = serde_json::from_slice(&resp_cats.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let cats: Value =
+        serde_json::from_slice(&resp_cats.into_body().collect().await.unwrap().to_bytes()).unwrap();
     let cat_arr = cats.as_array().unwrap();
     assert!(!cat_arr.is_empty());
 
@@ -452,8 +494,16 @@ async fn test_starter_categories_display_name_and_normalized_name_populated() {
         let name = cat["name"].as_str().unwrap();
         let disp = cat["display_name"].as_str();
         let norm = cat["normalized_name"].as_str();
-        assert!(disp.is_some(), "Starter category '{}' missing display_name", name);
-        assert!(norm.is_some(), "Starter category '{}' missing normalized_name", name);
+        assert!(
+            disp.is_some(),
+            "Starter category '{}' missing display_name",
+            name
+        );
+        assert!(
+            norm.is_some(),
+            "Starter category '{}' missing normalized_name",
+            name
+        );
         assert_eq!(norm.unwrap(), name.to_lowercase());
     }
 }
@@ -511,7 +561,9 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .unwrap();
     let resp_get_a = ctx.app.clone().oneshot(req_get_a).await.unwrap();
     assert_eq!(resp_get_a.status(), StatusCode::OK);
-    let body_a: Value = serde_json::from_slice(&resp_get_a.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body_a: Value =
+        serde_json::from_slice(&resp_get_a.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
     assert_eq!(body_a["user_id"], user_a_id);
     assert_eq!(body_a["display_name"], "Alpha User");
     assert_eq!(body_a["income_title"], "Gaji Utama PT Alpha");
@@ -526,7 +578,9 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .unwrap();
     let resp_get_b = ctx.app.clone().oneshot(req_get_b).await.unwrap();
     assert_eq!(resp_get_b.status(), StatusCode::OK);
-    let body_b: Value = serde_json::from_slice(&resp_get_b.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let body_b: Value =
+        serde_json::from_slice(&resp_get_b.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
     assert_eq!(body_b["user_id"], user_b_id);
     assert_eq!(body_b["display_name"], "Beta User");
     assert_eq!(body_b["income_title"], "Freelance Side PT Beta");
@@ -540,10 +594,20 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .body(Body::empty())
         .unwrap();
     let resp_cats_a = ctx.app.clone().oneshot(req_cats_a).await.unwrap();
-    let cats_a: Value = serde_json::from_slice(&resp_cats_a.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    let names_a: Vec<&str> = cats_a.as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
+    let cats_a: Value =
+        serde_json::from_slice(&resp_cats_a.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    let names_a: Vec<&str> = cats_a
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
     assert!(names_a.contains(&"Makan Resto Alpha"));
-    assert!(!names_a.contains(&"Game Beta"), "User A must not see User B categories");
+    assert!(
+        !names_a.contains(&"Game Beta"),
+        "User A must not see User B categories"
+    );
 
     let req_cats_b = Request::builder()
         .method("GET")
@@ -552,13 +616,28 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .body(Body::empty())
         .unwrap();
     let resp_cats_b = ctx.app.clone().oneshot(req_cats_b).await.unwrap();
-    let cats_b: Value = serde_json::from_slice(&resp_cats_b.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    let names_b: Vec<&str> = cats_b.as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
+    let cats_b: Value =
+        serde_json::from_slice(&resp_cats_b.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    let names_b: Vec<&str> = cats_b
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
     assert!(names_b.contains(&"Game Beta"));
-    assert!(!names_b.contains(&"Makan Resto Alpha"), "User B must not see User A categories");
+    assert!(
+        !names_b.contains(&"Makan Resto Alpha"),
+        "User B must not see User A categories"
+    );
 
     // Cross-tenant update rejection
-    let user_a_cat = cats_a.as_array().unwrap().iter().find(|c| c["name"] == "Makan Resto Alpha").unwrap();
+    let user_a_cat = cats_a
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "Makan Resto Alpha")
+        .unwrap();
     let user_a_cat_id = user_a_cat["id"].as_str().unwrap();
 
     let req_cross_update = Request::builder()
@@ -569,7 +648,11 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .body(Body::from(r#"{"display_name":"Hacked Name"}"#))
         .unwrap();
     let resp_cross = ctx.app.clone().oneshot(req_cross_update).await.unwrap();
-    assert_eq!(resp_cross.status(), StatusCode::NOT_FOUND, "Cross-user category update must be rejected");
+    assert_eq!(
+        resp_cross.status(),
+        StatusCode::NOT_FOUND,
+        "Cross-user category update must be rejected"
+    );
 
     let req_cross_delete = Request::builder()
         .method("DELETE")
@@ -578,5 +661,9 @@ async fn test_multi_tenant_vocabulary_and_personalization_isolation() {
         .body(Body::empty())
         .unwrap();
     let resp_cross_del = ctx.app.clone().oneshot(req_cross_delete).await.unwrap();
-    assert_eq!(resp_cross_del.status(), StatusCode::NOT_FOUND, "Cross-user category delete must be rejected");
+    assert_eq!(
+        resp_cross_del.status(),
+        StatusCode::NOT_FOUND,
+        "Cross-user category delete must be rejected"
+    );
 }

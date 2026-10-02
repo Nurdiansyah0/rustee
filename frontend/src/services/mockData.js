@@ -176,7 +176,21 @@ function getDefaultDatabase() {
       trial_active: false,
       has_used_trial: false,
       days_remaining: null
-    }
+    },
+    tenants: [
+      {
+        id: 'tnt_personal_default',
+        name: 'Ruang Kerja Pribadi',
+        slug: 'pribadi',
+        status: 'ACTIVE',
+        role: 'owner',
+        is_default: true,
+        is_personal: true,
+        business_type: 'personal',
+        created_at: '2026-09-01T00:00:00Z',
+        updated_at: '2026-09-01T00:00:00Z'
+      }
+    ]
   };
 }
 
@@ -262,6 +276,25 @@ export function handleMockApiRequest(path, options = {}) {
   // 3. Auth: Logout
   if (pathname === '/api/v1/auth/logout' && method === 'POST') {
     return { success: true };
+  }
+
+  // 3b. Auth: Forgot Password / Recovery
+  if ((pathname === '/api/v1/auth/forgot-password' || pathname === '/api/v1/auth/recovery') && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const email = (body.email || '').toLowerCase().trim();
+    return {
+      success: true,
+      message: 'Jika email terdaftar di FinRep, tautan pemulihan kata sandi telah dikirimkan ke kotak masuk Anda.',
+      email
+    };
+  }
+
+  // 3c. Auth: Reset Password
+  if (pathname === '/api/v1/auth/reset-password' && method === 'POST') {
+    return {
+      success: true,
+      message: 'Kata sandi Anda berhasil diperbarui. Silakan masuk menggunakan kata sandi baru.'
+    };
   }
 
   // 4. Auth: Me
@@ -624,6 +657,98 @@ export function handleMockApiRequest(path, options = {}) {
       success: true,
       message: 'Onboarding berhasil diselesaikan',
       personalization: pers
+    };
+  }
+
+  // 19. Tenants: GET (List Workspaces)
+  if (pathname === '/api/v1/tenants' && method === 'GET') {
+    if (!db.tenants || db.tenants.length === 0) {
+      db.tenants = [
+        {
+          id: 'tnt_personal_default',
+          name: 'Ruang Kerja Pribadi',
+          slug: 'pribadi',
+          status: 'ACTIVE',
+          role: 'owner',
+          is_default: true,
+          is_personal: true,
+          business_type: 'personal',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+      saveDatabase(db);
+    }
+    return db.tenants;
+  }
+
+  // 20. Tenants: POST (Create Workspace)
+  if (pathname === '/api/v1/tenants' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const slug = (body.name || 'bisnis')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'workspace-' + Math.random().toString(36).substring(2, 6);
+
+    const newTenant = {
+      id: 'tnt_' + Math.random().toString(36).substring(2, 9),
+      name: body.name || 'Ruang Kerja Bisnis',
+      slug: body.slug || slug,
+      status: 'ACTIVE',
+      role: 'owner',
+      is_default: false,
+      is_personal: false,
+      business_type: body.business_type || 'general',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (!db.tenants) db.tenants = [];
+    db.tenants.push(newTenant);
+    saveDatabase(db);
+    return newTenant;
+  }
+
+  // 21. Tenants: POST Switch
+  if (pathname.startsWith('/api/v1/tenants/') && pathname.endsWith('/switch') && method === 'POST') {
+    const parts = pathname.split('/');
+    const tenantId = parts[parts.length - 2];
+    const tenant = (db.tenants || []).find((t) => t.id === tenantId) || {
+      id: tenantId,
+      name: 'Ruang Kerja Bisnis',
+      slug: 'bisnis',
+      role: 'owner',
+      status: 'ACTIVE'
+    };
+    return {
+      active_tenant_id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      role: tenant.role || 'owner',
+      status: 'switched'
+    };
+  }
+
+  // 22. Tenants: GET Capabilities
+  if (pathname.startsWith('/api/v1/tenants/') && pathname.endsWith('/capabilities') && method === 'GET') {
+    const parts = pathname.split('/');
+    const tenantId = parts[parts.length - 2];
+    const tenant = (db.tenants || []).find((t) => t.id === tenantId);
+    const bType = tenant?.business_type || (tenant?.is_personal ? 'personal' : 'general');
+    const capMap = {
+      personal: ['accounts', 'transactions', 'budgets', 'analytics'],
+      retail: ['pos', 'inventory', 'invoicing', 'accounting', 'receivables', 'reports'],
+      fnb: ['pos', 'tables', 'kitchen', 'inventory', 'accounting', 'reports'],
+      rental: ['inventory', 'bookings', 'invoicing', 'receivables', 'accounting'],
+      contractor: ['projects', 'milestones', 'invoicing', 'receivables', 'accounting'],
+      general: ['invoicing', 'accounting', 'receivables', 'reports']
+    };
+    const caps = capMap[bType] || capMap.general;
+    return {
+      tenant_id: tenantId,
+      business_type: bType,
+      role: tenant?.role || 'owner',
+      capabilities: caps
     };
   }
 

@@ -6,6 +6,7 @@ import { useTransactionStore } from './transactions'
 import { useCategoryStore } from './categories'
 import { useAnalyticsStore } from './analytics'
 import { useSubscriptionStore } from './subscription'
+import { useWorkspaceStore } from './workspace'
 
 const CACHED_USER_KEY = 'invinite_auth_user'
 const CACHED_PERSONALIZATION_KEY = 'invinite_user_personalization'
@@ -280,6 +281,7 @@ export const useAuthStore = defineStore('auth', () => {
       try { useCategoryStore().$reset() } catch {}
       try { useAnalyticsStore().$reset() } catch {}
       try { useSubscriptionStore().$reset() } catch {}
+      try { useWorkspaceStore().$reset() } catch {}
     }
   }
 

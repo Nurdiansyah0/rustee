@@ -53,11 +53,22 @@ pub struct CreateIngestedTxParams {
 
 #[async_trait]
 pub trait IngestionRepository: Send + Sync {
-    async fn create_event(&self, event: &NewIngestionEvent) -> Result<IngestionEventRecord, DbError>;
+    async fn create_event(
+        &self,
+        event: &NewIngestionEvent,
+    ) -> Result<IngestionEventRecord, DbError>;
 
-    async fn find_by_id(&self, user_id: &str, id: &str) -> Result<Option<IngestionEventRecord>, DbError>;
+    async fn find_by_id(
+        &self,
+        user_id: &str,
+        id: &str,
+    ) -> Result<Option<IngestionEventRecord>, DbError>;
 
-    async fn find_by_hash(&self, user_id: &str, raw_payload_hash: &str) -> Result<Option<IngestionEventRecord>, DbError>;
+    async fn find_by_hash(
+        &self,
+        user_id: &str,
+        raw_payload_hash: &str,
+    ) -> Result<Option<IngestionEventRecord>, DbError>;
 
     async fn update_status(
         &self,
@@ -68,9 +79,16 @@ pub trait IngestionRepository: Send + Sync {
         parsed_candidate: Option<&str>,
     ) -> Result<(), DbError>;
 
-    async fn list_pending_candidates(&self, user_id: &str) -> Result<Vec<IngestionEventRecord>, DbError>;
+    async fn list_pending_candidates(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<IngestionEventRecord>, DbError>;
 
-    async fn list_recent_events(&self, user_id: &str, limit: i64) -> Result<Vec<IngestionEventRecord>, DbError>;
+    async fn list_recent_events(
+        &self,
+        user_id: &str,
+        limit: i64,
+    ) -> Result<Vec<IngestionEventRecord>, DbError>;
 
     /// Atomically insert transaction, update account balance, and update ingestion event status.
     async fn commit_transaction_atomic(
@@ -91,7 +109,10 @@ impl SqlxIngestionRepository {
 
 #[async_trait]
 impl IngestionRepository for SqlxIngestionRepository {
-    async fn create_event(&self, event: &NewIngestionEvent) -> Result<IngestionEventRecord, DbError> {
+    async fn create_event(
+        &self,
+        event: &NewIngestionEvent,
+    ) -> Result<IngestionEventRecord, DbError> {
         sqlx::query(
             r#"
             INSERT INTO ingestion_events
@@ -126,7 +147,11 @@ impl IngestionRepository for SqlxIngestionRepository {
         })
     }
 
-    async fn find_by_id(&self, user_id: &str, id: &str) -> Result<Option<IngestionEventRecord>, DbError> {
+    async fn find_by_id(
+        &self,
+        user_id: &str,
+        id: &str,
+    ) -> Result<Option<IngestionEventRecord>, DbError> {
         sqlx::query_as::<_, IngestionEventRecord>(
             r#"
             SELECT id, user_id, source, raw_payload_hash, status, confidence, parsed_candidate, created_at, processed_at
@@ -141,7 +166,11 @@ impl IngestionRepository for SqlxIngestionRepository {
         .map_err(DbError::from_sqlx)
     }
 
-    async fn find_by_hash(&self, user_id: &str, raw_payload_hash: &str) -> Result<Option<IngestionEventRecord>, DbError> {
+    async fn find_by_hash(
+        &self,
+        user_id: &str,
+        raw_payload_hash: &str,
+    ) -> Result<Option<IngestionEventRecord>, DbError> {
         sqlx::query_as::<_, IngestionEventRecord>(
             r#"
             SELECT id, user_id, source, raw_payload_hash, status, confidence, parsed_candidate, created_at, processed_at
@@ -187,7 +216,10 @@ impl IngestionRepository for SqlxIngestionRepository {
         Ok(())
     }
 
-    async fn list_pending_candidates(&self, user_id: &str) -> Result<Vec<IngestionEventRecord>, DbError> {
+    async fn list_pending_candidates(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<IngestionEventRecord>, DbError> {
         sqlx::query_as::<_, IngestionEventRecord>(
             r#"
             SELECT id, user_id, source, raw_payload_hash, status, confidence, parsed_candidate, created_at, processed_at
@@ -202,7 +234,11 @@ impl IngestionRepository for SqlxIngestionRepository {
         .map_err(DbError::from_sqlx)
     }
 
-    async fn list_recent_events(&self, user_id: &str, limit: i64) -> Result<Vec<IngestionEventRecord>, DbError> {
+    async fn list_recent_events(
+        &self,
+        user_id: &str,
+        limit: i64,
+    ) -> Result<Vec<IngestionEventRecord>, DbError> {
         sqlx::query_as::<_, IngestionEventRecord>(
             r#"
             SELECT id, user_id, source, raw_payload_hash, status, confidence, parsed_candidate, created_at, processed_at
@@ -263,7 +299,9 @@ impl IngestionRepository for SqlxIngestionRepository {
             "expense" => -params.amount.0,
             _ => {
                 let _ = tx.rollback().await;
-                return Err(DbError::Validation("Invalid transaction direction".to_string()));
+                return Err(DbError::Validation(
+                    "Invalid transaction direction".to_string(),
+                ));
             }
         };
 

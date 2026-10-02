@@ -1,38 +1,51 @@
+pub mod accounting;
 pub mod accounts;
 pub mod analytics;
 pub mod auth;
 pub mod categories;
 pub mod handlers;
 pub mod health;
+pub mod invoices;
 pub mod middleware;
+pub mod outbox;
+pub mod payments;
+pub mod receivables;
 pub mod router;
 pub mod sync;
+pub mod tenants;
 pub mod transactions;
 pub mod users;
 pub mod webhooks;
 pub mod ws;
 
+pub use accounting::accounting_router;
 pub use accounts::accounts_router;
 pub use analytics::analytics_router;
 pub use auth::{auth_routes, auth_routes_with_rate_limiter, AuthState};
 pub use categories::categories_router;
 pub use health::health_router;
+pub use invoices::invoices_router;
 pub use middleware::*;
+pub use outbox::outbox_router;
+pub use payments::payments_router;
+pub use receivables::receivables_router;
 pub use router::register_ingestion_routes;
+pub use tenants::tenants_router;
 pub use transactions::transactions_router;
 pub use users::users_router;
 pub use webhooks::webhooks_router;
 
-use axum::Router;
-use sqlx::SqlitePool;
-use std::sync::Arc;
 use crate::repository::{
     account_repo::AccountRepository, category_repo::CategoryRepository,
-    user_preferences_repo::UserPreferencesRepository,
+    tenant_repo::TenantRepository, user_preferences_repo::UserPreferencesRepository,
 };
 use crate::service::{
     jwt::JwtEngine, ledger_service::LedgerService, payment_service::PaymentService,
+    tenant_service::TenantService,
 };
+use axum::Router;
+use sqlx::SqlitePool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -42,8 +55,35 @@ pub struct AppState {
     pub user_preferences_repo: Arc<dyn UserPreferencesRepository>,
     pub ledger_service: Arc<LedgerService>,
     pub payment_service: Arc<PaymentService>,
+    pub tenant_service: Arc<TenantService>,
+    pub tenant_repo: Arc<dyn TenantRepository>,
     pub pool: SqlitePool,
     pub rate_limiter: Arc<SlidingWindowRateLimiter>,
+}
+
+impl AppState {
+    pub fn accounting_service(&self) -> Arc<crate::service::accounting_service::AccountingService> {
+        Arc::new(crate::service::accounting_service::AccountingService::new_with_pool(self.pool.clone()))
+    }
+
+    pub fn accounting_repo(&self) -> Arc<dyn crate::repository::accounting_repo::AccountingRepository> {
+        Arc::new(crate::repository::accounting_repo::SqlxAccountingRepository::new(self.pool.clone()))
+    }
+
+    pub fn invoice_service(&self) -> Arc<crate::service::invoice_service::InvoiceService> {
+        Arc::new(crate::service::invoice_service::InvoiceService::new(
+            self.pool.clone(),
+            self.accounting_service(),
+        ))
+    }
+
+    pub fn outbox_repo(&self) -> Arc<dyn crate::repository::outbox_repo::OutboxRepository> {
+        Arc::new(crate::repository::outbox_repo::SqlxOutboxRepository::new(self.pool.clone()))
+    }
+
+    pub fn outbox_processor(&self) -> Arc<crate::service::outbox_processor::OutboxProcessor> {
+        Arc::new(crate::service::outbox_processor::OutboxProcessor::with_default_config(self.pool.clone()))
+    }
 }
 
 impl HasJwtEngine for AppState {
@@ -91,13 +131,17 @@ async fn payment_success_handler() -> axum::response::Html<&'static str> {
 }
 
 pub fn create_app(state: AppState) -> Router {
-    let auth_router = auth::auth_routes_with_rate_limiter(
-        state.auth_state.clone(),
-        state.rate_limiter.clone(),
-    );
+    let auth_router =
+        auth::auth_routes_with_rate_limiter(state.auth_state.clone(), state.rate_limiter.clone());
     let health_router = health::health_router(state.pool.clone());
 
     let protected_router = Router::new()
+        .nest("/tenants", tenants::tenants_router())
+        .nest("/accounting", accounting::accounting_router())
+        .nest("/invoices", invoices::invoices_router())
+        .nest("/receivables", receivables::receivables_router())
+        .nest("/payments", payments::payments_router())
+        .nest("/outbox", outbox::outbox_router())
         .nest("/accounts", accounts::accounts_router())
         .nest("/categories", categories::categories_router())
         .nest("/transactions", transactions::transactions_router())
@@ -107,15 +151,24 @@ pub fn create_app(state: AppState) -> Router {
         .merge(analytics::analytics_router())
         .merge(webhooks::webhooks_router());
 
-    let protected_router = router::register_ingestion_routes(protected_router)
-        .with_state(state.clone());
+    let protected_router =
+        router::register_ingestion_routes(protected_router).with_state(state.clone());
 
     Router::new()
         .merge(health_router)
         .route("/ws", axum::routing::get(ws::ws_handler))
-        .route("/payment/success", axum::routing::get(payment_success_handler))
-        .route("/v1.0/debit/notify", axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()))
-        .route("/payment-gateway/v1.0/debit/notify", axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()))
+        .route(
+            "/payment/success",
+            axum::routing::get(payment_success_handler),
+        )
+        .route(
+            "/v1.0/debit/notify",
+            axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()),
+        )
+        .route(
+            "/payment-gateway/v1.0/debit/notify",
+            axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()),
+        )
         .nest("/api/v1/auth", auth_router)
         .nest("/api/v1", protected_router)
 }

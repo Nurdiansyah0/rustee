@@ -87,9 +87,12 @@ impl UserPreferencesRepository for SqlxUserPreferencesRepository {
             .as_ref()
             .map(|g| serde_json::to_string(g).unwrap_or_default())
             .or_else(|| existing.as_ref().and_then(|e| e.financial_goals.clone()));
-        let onboarding_completed = update
-            .onboarding_completed
-            .unwrap_or_else(|| existing.as_ref().map(|e| e.onboarding_completed).unwrap_or(false));
+        let onboarding_completed = update.onboarding_completed.unwrap_or_else(|| {
+            existing
+                .as_ref()
+                .map(|e| e.onboarding_completed)
+                .unwrap_or(false)
+        });
 
         let created_at = existing
             .as_ref()
@@ -123,12 +126,13 @@ impl UserPreferencesRepository for SqlxUserPreferencesRepository {
 
         // If display_name is given, synchronize users.display_name
         if let Some(ref dname) = display_name {
-            let _ = sqlx::query("UPDATE users SET display_name = ?1, updated_at = ?2 WHERE id = ?3")
-                .bind(dname)
-                .bind(&now)
-                .bind(user_id)
-                .execute(&self.pool)
-                .await;
+            let _ =
+                sqlx::query("UPDATE users SET display_name = ?1, updated_at = ?2 WHERE id = ?3")
+                    .bind(dname)
+                    .bind(&now)
+                    .bind(user_id)
+                    .execute(&self.pool)
+                    .await;
         }
 
         Ok(UserPreferences {

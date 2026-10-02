@@ -1,6 +1,6 @@
-use axum::Router;
 use crate::api::handlers::ingestion::ingestion_router;
 use crate::api::AppState;
+use axum::Router;
 
 /// Registers ingestion pipeline routes under `/ingestion`.
 /// Baseline endpoints per Master Specification v3.1.0:

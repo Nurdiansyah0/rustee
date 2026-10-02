@@ -39,6 +39,23 @@ pub struct LogoutResponse {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimpleSuccessResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub password: String,
+}
+
 /// Formats the Set-Cookie header for auth_token
 pub fn make_auth_cookie(token: &str, max_age_secs: i64, secure: bool) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
@@ -127,10 +144,12 @@ pub async fn me_handler(
     if (result.user.subscription_tier == "premium" || result.user.subscription_tier == "trialing")
         && auth_user.tier != "premium"
     {
-        if let Ok((refreshed_token, _)) = state
-            .jwt_engine()
-            .generate_token(&auth_user.user_id, &auth_user.email, &auth_user.role, "premium")
-        {
+        if let Ok((refreshed_token, _)) = state.jwt_engine().generate_token(
+            &auth_user.user_id,
+            &auth_user.email,
+            &auth_user.role,
+            "premium",
+        ) {
             let cookie_val = make_auth_cookie(&refreshed_token, 86400, state.secure_cookie);
             if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
                 headers.insert(SET_COOKIE, hv);
@@ -150,18 +169,57 @@ pub async fn cache_control_middleware(request: Request, next: Next) -> Response 
     response
 }
 
+/// POST /api/v1/auth/forgot-password & /api/v1/auth/recovery
+pub async fn forgot_password_handler(
+    State(state): State<AuthState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    state.auth_service.forgot_password(&payload.email).await?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
+    let res = SimpleSuccessResponse {
+        success: true,
+        message: "Jika alamat email terdaftar, tautan pemulihan kata sandi telah dikirimkan ke kotak masuk Anda.".to_string(),
+    };
+
+    Ok((StatusCode::OK, headers, Json(res)))
+}
+
+/// POST /api/v1/auth/reset-password
+pub async fn reset_password_handler(
+    State(state): State<AuthState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    state.auth_service.reset_password(&payload.token, &payload.password).await?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
+
+    let res = SimpleSuccessResponse {
+        success: true,
+        message: "Kata sandi Anda berhasil diperbarui. Silakan masuk menggunakan kata sandi baru.".to_string(),
+    };
+
+    Ok((StatusCode::OK, headers, Json(res)))
+}
+
 /// Builds the basic Auth sub-router without rate limiter
 pub fn auth_routes(state: AuthState) -> Router {
     Router::new()
         .route("/register", post(register_handler))
         .route("/login", post(login_handler))
+        .route("/forgot-password", post(forgot_password_handler))
+        .route("/recovery", post(forgot_password_handler))
+        .route("/reset-password", post(reset_password_handler))
         .route("/logout", post(logout_handler))
         .route("/me", get(me_handler))
         .layer(from_fn(cache_control_middleware))
         .with_state(state)
 }
 
-/// Builds the Auth sub-router with rate limiting on sensitive /register and /login routes
+/// Builds the Auth sub-router with rate limiting on sensitive routes
 pub fn auth_routes_with_rate_limiter(
     state: AuthState,
     rate_limiter: Arc<SlidingWindowRateLimiter>,
@@ -169,6 +227,9 @@ pub fn auth_routes_with_rate_limiter(
     let sensitive = Router::new()
         .route("/register", post(register_handler))
         .route("/login", post(login_handler))
+        .route("/forgot-password", post(forgot_password_handler))
+        .route("/recovery", post(forgot_password_handler))
+        .route("/reset-password", post(reset_password_handler))
         .route_layer(from_fn_with_state(rate_limiter, rate_limit_middleware))
         .with_state(state.clone());
 

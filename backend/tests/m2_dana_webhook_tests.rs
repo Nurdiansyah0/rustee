@@ -126,9 +126,17 @@ async fn setup_app() -> TestContext {
         auth_state,
         account_repo,
         category_repo,
-        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(
+            pool.clone(),
+        )),
         ledger_service,
         payment_service,
+        tenant_service: Arc::new(
+            backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+        ),
+        tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+            pool.clone(),
+        )),
         pool: pool.clone(),
         rate_limiter: Arc::default(),
     };
@@ -264,13 +272,16 @@ async fn test_dana_checkout_session_generation() {
         .uri("/api/v1/subscriptions/checkout")
         .header(COOKIE, format!("auth_token={}", token))
         .header(CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"provider": "dana", "plan_id": "premium_annual"}"#))
+        .body(Body::from(
+            r#"{"provider": "dana", "plan_id": "premium_annual"}"#,
+        ))
         .unwrap();
 
     let resp_annual = ctx.app.clone().oneshot(req_annual).await.unwrap();
     assert_eq!(resp_annual.status(), StatusCode::OK);
     let json_annual: Value =
-        serde_json::from_slice(&resp_annual.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        serde_json::from_slice(&resp_annual.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
     assert_eq!(json_annual["amount"], 110000);
     assert_eq!(json_annual["currency"], "IDR");
     assert_eq!(json_annual["provider"], "dana");
@@ -345,8 +356,15 @@ async fn test_dana_checkout_session_generation() {
         .unwrap();
     let resp_trial_act = ctx.app.clone().oneshot(req_trial_act).await.unwrap();
     assert_eq!(resp_trial_act.status(), StatusCode::OK);
-    let trial_json: Value =
-        serde_json::from_slice(&resp_trial_act.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let trial_json: Value = serde_json::from_slice(
+        &resp_trial_act
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+    )
+    .unwrap();
     assert_eq!(trial_json["status"], "trialing");
     assert_eq!(trial_json["tier"], "premium");
     assert_eq!(trial_json["days_remaining"], 90);
@@ -974,20 +992,30 @@ async fn test_dana_webhook_annual_settlement_and_subscription_events() {
 
     // 3. Verify subscription_events record was persisted
     let row: (i64, String, String) = sqlx::query_as(
-        "SELECT COUNT(*), event_type, provider FROM subscription_events WHERE user_id = ?"
+        "SELECT COUNT(*), event_type, provider FROM subscription_events WHERE user_id = ?",
     )
     .bind(&user_id)
     .fetch_one(&ctx.pool)
     .await
     .expect("fetch subscription event");
-    assert!(row.0 >= 1, "At least 1 subscription_event should be recorded");
+    assert!(
+        row.0 >= 1,
+        "At least 1 subscription_event should be recorded"
+    );
     assert_eq!(row.1, "subscription_activated");
     assert_eq!(row.2, "dana");
 
     // 4. Verify audit_logs record exists
     let audit_logs = ctx.audit_repo.list_by_user(&user_id, 10, 0).await.unwrap();
-    assert!(!audit_logs.is_empty(), "Audit logs must contain settlement record");
-    assert!(audit_logs.iter().any(|l| l.action == "subscription_activated" && l.details.as_ref().map(|d| d.contains("premium_annual")).unwrap_or(false)));
+    assert!(
+        !audit_logs.is_empty(),
+        "Audit logs must contain settlement record"
+    );
+    assert!(audit_logs
+        .iter()
+        .any(|l| l.action == "subscription_activated"
+            && l.details
+                .as_ref()
+                .map(|d| d.contains("premium_annual"))
+                .unwrap_or(false)));
 }
-
-

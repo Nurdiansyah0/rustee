@@ -206,7 +206,10 @@ impl CategoryRepository for SqlxCategoryRepository {
             .or_else(|| Some(name.to_lowercase()));
         let icon = update.icon.clone().or_else(|| existing.icon.clone());
         let color = update.color.clone().or_else(|| existing.color.clone());
-        let metadata = update.metadata.clone().or_else(|| existing.metadata.clone());
+        let metadata = update
+            .metadata
+            .clone()
+            .or_else(|| existing.metadata.clone());
 
         sqlx::query(
             r#"

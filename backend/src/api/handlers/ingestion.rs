@@ -1,17 +1,17 @@
+use crate::api::middleware::auth_extractor::AuthenticatedUser;
+use crate::api::AppState;
+use crate::domain::ingestion::CanonicalTransactionCandidate;
+use crate::error::AppError;
+use crate::service::ingestion_service::{
+    ConfirmCandidateRequest, ConfirmCandidateResponse, GmailPayload, IngestionService,
+    NotificationPayload, RejectCandidateResponse, SmsPayload,
+};
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
-};
-use crate::api::middleware::auth_extractor::AuthenticatedUser;
-use crate::api::AppState;
-use crate::domain::ingestion::CanonicalTransactionCandidate;
-use crate::error::AppError;
-use crate::service::ingestion_service::{
-    ConfirmCandidateRequest, ConfirmCandidateResponse, GmailPayload,
-    IngestionService, NotificationPayload, RejectCandidateResponse, SmsPayload,
 };
 
 fn require_ingestion_permission(user: &AuthenticatedUser) -> Result<(), AppError> {
@@ -36,9 +36,7 @@ pub async fn ingest_notification(
 ) -> Result<impl IntoResponse, AppError> {
     require_ingestion_permission(&user)?;
 
-    let idempotency_key = headers
-        .get("Idempotency-Key")
-        .and_then(|h| h.to_str().ok());
+    let idempotency_key = headers.get("Idempotency-Key").and_then(|h| h.to_str().ok());
 
     let service = IngestionService::new(state.pool.clone());
     let response = service
@@ -57,9 +55,7 @@ pub async fn ingest_sms(
 ) -> Result<impl IntoResponse, AppError> {
     require_ingestion_permission(&user)?;
 
-    let idempotency_key = headers
-        .get("Idempotency-Key")
-        .and_then(|h| h.to_str().ok());
+    let idempotency_key = headers.get("Idempotency-Key").and_then(|h| h.to_str().ok());
 
     let service = IngestionService::new(state.pool.clone());
     let response = service
@@ -78,9 +74,7 @@ pub async fn ingest_gmail(
 ) -> Result<impl IntoResponse, AppError> {
     require_ingestion_permission(&user)?;
 
-    let idempotency_key = headers
-        .get("Idempotency-Key")
-        .and_then(|h| h.to_str().ok());
+    let idempotency_key = headers.get("Idempotency-Key").and_then(|h| h.to_str().ok());
 
     let service = IngestionService::new(state.pool.clone());
     let response = service

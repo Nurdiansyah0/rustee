@@ -182,9 +182,8 @@ impl CanonicalTransactionCandidate {
         // 4. External reference check (if both exist and are non-empty)
         if let (Some(ref1), Some(ref2)) = (&self.external_reference, &other.external_reference) {
             if !ref1.is_empty() && !ref2.is_empty() {
-                let matches = ref1.eq_ignore_ascii_case(ref2)
-                    || ref1.contains(ref2)
-                    || ref2.contains(ref1);
+                let matches =
+                    ref1.eq_ignore_ascii_case(ref2) || ref1.contains(ref2) || ref2.contains(ref1);
                 if !matches {
                     return false;
                 }
@@ -257,7 +256,15 @@ pub fn parse_idr_amount(text: &str) -> Option<Rupiah> {
 
     // Look for currency prefixes: "rp", "rp.", "idr", "idr.", "sebesar", "db", "cr"
     let prefixes = [
-        "rp.", "rp", "idr.", "idr", "sebesar rp.", "sebesar rp", "sebesar", "db", "cr",
+        "rp.",
+        "rp",
+        "idr.",
+        "idr",
+        "sebesar rp.",
+        "sebesar rp",
+        "sebesar",
+        "db",
+        "cr",
     ];
 
     for prefix in &prefixes {
@@ -352,7 +359,10 @@ fn clean_numeric_amount(raw: &str) -> Option<i64> {
     };
 
     // Filter to only digits
-    let digits: String = without_decimal.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits: String = without_decimal
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
     digits.parse::<i64>().ok()
 }
 
@@ -393,17 +403,32 @@ pub fn detect_provider(package_or_source: &str, content: &str) -> String {
     let lower_pkg = package_or_source.to_lowercase();
     let lower_content = content.to_lowercase();
 
-    if lower_pkg.contains("bca") || lower_content.contains("bca") || lower_content.contains("klikbca") {
+    if lower_pkg.contains("bca")
+        || lower_content.contains("bca")
+        || lower_content.contains("klikbca")
+    {
         "bca".to_string()
-    } else if lower_pkg.contains("mandiri") || lower_content.contains("mandiri") || lower_content.contains("livin") {
+    } else if lower_pkg.contains("mandiri")
+        || lower_content.contains("mandiri")
+        || lower_content.contains("livin")
+    {
         "mandiri".to_string()
-    } else if lower_pkg.contains("bri") || lower_content.contains("brimo") || lower_content.contains("bank bri") {
+    } else if lower_pkg.contains("bri")
+        || lower_content.contains("brimo")
+        || lower_content.contains("bank bri")
+    {
         "bri".to_string()
-    } else if lower_pkg.contains("bni") || lower_content.contains("wondr") || lower_content.contains("bni mobile") {
+    } else if lower_pkg.contains("bni")
+        || lower_content.contains("wondr")
+        || lower_content.contains("bni mobile")
+    {
         "bni".to_string()
     } else if lower_pkg.contains("dana") || lower_content.contains("dana") {
         "dana".to_string()
-    } else if lower_pkg.contains("gojek") || lower_pkg.contains("gopay") || lower_content.contains("gopay") {
+    } else if lower_pkg.contains("gojek")
+        || lower_pkg.contains("gopay")
+        || lower_content.contains("gopay")
+    {
         "gopay".to_string()
     } else if lower_pkg.contains("ovo") || lower_content.contains("ovo") {
         "ovo".to_string()
@@ -417,8 +442,20 @@ pub fn detect_provider(package_or_source: &str, content: &str) -> String {
 pub fn parse_external_reference(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     let markers = [
-        "ref no:", "ref no", "no. ref:", "no. ref", "no ref:", "no ref", "ref:", "ref",
-        "no. transaksi:", "no transaksi:", "no. transaksi", "order id:", "rrn:", "stan:",
+        "ref no:",
+        "ref no",
+        "no. ref:",
+        "no. ref",
+        "no ref:",
+        "no ref",
+        "ref:",
+        "ref",
+        "no. transaksi:",
+        "no transaksi:",
+        "no. transaksi",
+        "order id:",
+        "rrn:",
+        "stan:",
     ];
 
     for marker in &markers {
@@ -468,7 +505,10 @@ pub fn parse_merchant_candidate(text: &str) -> Option<String> {
             }
 
             if !words.is_empty() {
-                let candidate = words.join(" ").trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+                let candidate = words
+                    .join(" ")
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string();
                 if !candidate.is_empty() {
                     return Some(candidate);
                 }
@@ -659,14 +699,13 @@ pub fn parse_dana_notification(title: &str, text: &str) -> ParsedSignal {
 
     let amount = parse_idr_amount(&combined);
 
-    let direction = if lower.contains("menerima")
-        || lower.contains("isi saldo")
-        || lower.contains("bertambah")
-    {
-        Some(TransactionDirection::Income)
-    } else {
-        Some(TransactionDirection::Expense)
-    };
+    let direction =
+        if lower.contains("menerima") || lower.contains("isi saldo") || lower.contains("bertambah")
+        {
+            Some(TransactionDirection::Income)
+        } else {
+            Some(TransactionDirection::Expense)
+        };
 
     let merchant = parse_merchant_candidate(&combined);
     let external_reference = parse_external_reference(&combined);
@@ -763,14 +802,12 @@ pub fn parse_shopeepay_notification(title: &str, text: &str) -> ParsedSignal {
 
     let amount = parse_idr_amount(&combined);
 
-    let direction = if lower.contains("top up")
-        || lower.contains("isi saldo")
-        || lower.contains("menerima")
-    {
-        Some(TransactionDirection::Income)
-    } else {
-        Some(TransactionDirection::Expense)
-    };
+    let direction =
+        if lower.contains("top up") || lower.contains("isi saldo") || lower.contains("menerima") {
+            Some(TransactionDirection::Income)
+        } else {
+            Some(TransactionDirection::Expense)
+        };
 
     let merchant = parse_merchant_candidate(&combined);
     let external_reference = parse_external_reference(&combined);
@@ -915,11 +952,23 @@ mod tests {
 
     #[test]
     fn test_amount_parsing_various_indonesian_formats() {
-        assert_eq!(parse_idr_amount("Transfer Rp 50.000 ke 1234567890"), Some(Rupiah::new(50000)));
-        assert_eq!(parse_idr_amount("Pembayaran Rp50.000,00 berhasil"), Some(Rupiah::new(50000)));
-        assert_eq!(parse_idr_amount("Total sebesar Rp. 1.250.000 berhasil"), Some(Rupiah::new(1250000)));
+        assert_eq!(
+            parse_idr_amount("Transfer Rp 50.000 ke 1234567890"),
+            Some(Rupiah::new(50000))
+        );
+        assert_eq!(
+            parse_idr_amount("Pembayaran Rp50.000,00 berhasil"),
+            Some(Rupiah::new(50000))
+        );
+        assert_eq!(
+            parse_idr_amount("Total sebesar Rp. 1.250.000 berhasil"),
+            Some(Rupiah::new(1250000))
+        );
         assert_eq!(parse_idr_amount("IDR 75,000.00"), Some(Rupiah::new(75000)));
-        assert_eq!(parse_idr_amount("TRSF E-BANKING DB 100.000,00"), Some(Rupiah::new(100000)));
+        assert_eq!(
+            parse_idr_amount("TRSF E-BANKING DB 100.000,00"),
+            Some(Rupiah::new(100000))
+        );
         assert_eq!(parse_idr_amount("Promo diskon 50% tanpa nominal"), None);
     }
 

@@ -116,9 +116,17 @@ async fn setup_challenger_app() -> ChallengerContext {
         auth_state,
         account_repo,
         category_repo,
-        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(
+            pool.clone(),
+        )),
         ledger_service,
         payment_service,
+        tenant_service: Arc::new(
+            backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+        ),
+        tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+            pool.clone(),
+        )),
         pool: pool.clone(),
         rate_limiter: Arc::default(),
     };
@@ -152,11 +160,7 @@ async fn create_user(ctx: &ChallengerContext, email: &str, tier: &str) -> String
     user_id
 }
 
-fn build_signed_dana_request(
-    path: &str,
-    timestamp: &str,
-    payload: &str,
-) -> Request<Body> {
+fn build_signed_dana_request(path: &str, timestamp: &str, payload: &str) -> Request<Body> {
     let signature = PaymentService::sign_dana_payload(
         "POST",
         path,
@@ -219,7 +223,12 @@ async fn test_scenario_a_first_valid_notification() {
     assert_eq!(user.subscription_tier, "premium");
 
     // 2. Exactly one subscription record exists, active, 30 days
-    let sub = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(sub.status, "active");
     assert_eq!(sub.provider, "dana");
     assert_eq!(sub.amount.0, 10000);
@@ -229,15 +238,21 @@ async fn test_scenario_a_first_valid_notification() {
     assert_eq!((end_dt - start_dt).num_days(), 30);
 
     // 3. Exactly one webhook_events record
-    let event = ctx.subscription_repo.get_webhook_event("dana", tx_id).await.unwrap().unwrap();
+    let event = ctx
+        .subscription_repo
+        .get_webhook_event("dana", tx_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(event.status, "processed");
 
     // 4. Exactly one subscription_events record
-    let (event_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
-        .bind(&user_id)
-        .fetch_one(&ctx.pool)
-        .await
-        .unwrap();
+    let (event_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
     assert_eq!(event_count, 1);
 
     // 5. Exactly one audit_logs record
@@ -273,7 +288,12 @@ async fn test_scenario_b_identical_replay() {
     let resp1 = ctx.app.clone().oneshot(req1).await.unwrap();
     assert_eq!(resp1.status(), StatusCode::OK);
 
-    let sub_initial = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub_initial = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     let initial_end = sub_initial.current_period_end.clone();
 
     // 2. Replay Dispatch (exact identical headers, signature, and body)
@@ -287,25 +307,42 @@ async fn test_scenario_b_identical_replay() {
     assert_eq!(json2["responseMessage"], "Successful");
 
     // 3. Verify zero secondary financial effects
-    let sub_after_replay = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
-    assert_eq!(sub_after_replay.current_period_end, initial_end, "End date must not change");
-
-    let (sub_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE user_id = ?")
-        .bind(&user_id)
-        .fetch_one(&ctx.pool)
+    let sub_after_replay = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
         .await
+        .unwrap()
         .unwrap();
+    assert_eq!(
+        sub_after_replay.current_period_end, initial_end,
+        "End date must not change"
+    );
+
+    let (sub_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
     assert_eq!(sub_count, 1, "Must have exactly 1 subscription record");
 
-    let (evt_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
-        .bind(&user_id)
-        .fetch_one(&ctx.pool)
-        .await
-        .unwrap();
-    assert_eq!(evt_count, 1, "Must have exactly 1 subscription_event (no duplicate)");
+    let (evt_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        evt_count, 1,
+        "Must have exactly 1 subscription_event (no duplicate)"
+    );
 
     let audit_logs = ctx.audit_repo.list_by_user(&user_id, 10, 0).await.unwrap();
-    assert_eq!(audit_logs.len(), 1, "Must have exactly 1 audit log (no duplicate)");
+    assert_eq!(
+        audit_logs.len(),
+        1,
+        "Must have exactly 1 audit log (no duplicate)"
+    );
 }
 
 // ===========================================================================
@@ -335,7 +372,12 @@ async fn test_scenario_c_conflicting_amount_and_status() {
     let resp1 = ctx.app.clone().oneshot(req1).await.unwrap();
     assert_eq!(resp1.status(), StatusCode::OK);
 
-    let sub_valid = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub_valid = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(sub_valid.status, "active");
     assert_eq!(sub_valid.amount.0, 10000);
     let baseline_end = sub_valid.current_period_end.clone();
@@ -352,14 +394,29 @@ async fn test_scenario_c_conflicting_amount_and_status() {
     })
     .to_string();
 
-    let req2 = build_signed_dana_request("/api/v1/webhooks/dana", timestamp2, &payload_conflicting_amount);
+    let req2 = build_signed_dana_request(
+        "/api/v1/webhooks/dana",
+        timestamp2,
+        &payload_conflicting_amount,
+    );
     let resp2 = ctx.app.clone().oneshot(req2).await.unwrap();
     assert_eq!(resp2.status(), StatusCode::OK);
 
     // Verify original payment state was NOT corrupted / overwritten
-    let sub_after_c1 = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
-    assert_eq!(sub_after_c1.amount.0, 10000, "Amount must remain original 10000, not corrupted by 50000");
-    assert_eq!(sub_after_c1.current_period_end, baseline_end, "End date must remain unchanged");
+    let sub_after_c1 = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        sub_after_c1.amount.0, 10000,
+        "Amount must remain original 10000, not corrupted by 50000"
+    );
+    assert_eq!(
+        sub_after_c1.current_period_end, baseline_end,
+        "End date must remain unchanged"
+    );
     assert_eq!(sub_after_c1.status, "active");
 
     // 3. Adversarial Replay C2: Same tx_id, but conflicting status (05 = Expired / Cancelled)
@@ -374,15 +431,30 @@ async fn test_scenario_c_conflicting_amount_and_status() {
     })
     .to_string();
 
-    let req3 = build_signed_dana_request("/api/v1/webhooks/dana", timestamp3, &payload_conflicting_status);
+    let req3 = build_signed_dana_request(
+        "/api/v1/webhooks/dana",
+        timestamp3,
+        &payload_conflicting_status,
+    );
     let resp3 = ctx.app.clone().oneshot(req3).await.unwrap();
     assert_eq!(resp3.status(), StatusCode::OK);
 
     // Verify subscription status remains active and user tier remains premium
-    let sub_after_c2 = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
-    assert_eq!(sub_after_c2.status, "active", "Conflicting expired status must NOT overwrite active subscription");
+    let sub_after_c2 = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        sub_after_c2.status, "active",
+        "Conflicting expired status must NOT overwrite active subscription"
+    );
     let user_c = ctx.user_repo.find_by_id(&user_id).await.unwrap().unwrap();
-    assert_eq!(user_c.subscription_tier, "premium", "User tier must remain premium");
+    assert_eq!(
+        user_c.subscription_tier, "premium",
+        "User tier must remain premium"
+    );
 }
 
 // ===========================================================================
@@ -413,7 +485,12 @@ async fn test_scenario_d_conflicting_tx_id_same_partner_reference() {
     let resp1 = ctx.app.clone().oneshot(req1).await.unwrap();
     assert_eq!(resp1.status(), StatusCode::OK);
 
-    let sub1 = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub1 = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(sub1.status, "active");
     let initial_end = sub1.current_period_end.clone();
 
@@ -432,18 +509,27 @@ async fn test_scenario_d_conflicting_tx_id_same_partner_reference() {
     let req2 = build_signed_dana_request("/api/v1/webhooks/dana", timestamp2, &payload2);
     let resp2 = ctx.app.clone().oneshot(req2).await.unwrap();
 
-    let sub2 = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
-    
+    let sub2 = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
+
     println!("[SCENARIO D OBSERVATION]");
-    println!("Response status for conflicting tx_id: {:?}", resp2.status());
+    println!(
+        "Response status for conflicting tx_id: {:?}",
+        resp2.status()
+    );
     println!("Initial end date: {}", initial_end);
     println!("Post-conflict end date: {}", sub2.current_period_end);
 
-    let (evt_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
-        .bind(&user_id)
-        .fetch_one(&ctx.pool)
-        .await
-        .unwrap();
+    let (evt_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
     println!("Subscription events recorded: {}", evt_count);
 
     // Audit Requirement R6 / R4:
@@ -487,7 +573,11 @@ async fn test_scenario_e_concurrent_duplicate_notifications() {
         let timestamp_clone = timestamp.to_string();
 
         let handle = tokio::spawn(async move {
-            let req = build_signed_dana_request("/api/v1/webhooks/dana", &timestamp_clone, &payload_clone);
+            let req = build_signed_dana_request(
+                "/api/v1/webhooks/dana",
+                &timestamp_clone,
+                &payload_clone,
+            );
             app.oneshot(req).await
         });
         handles.push(handle);
@@ -495,7 +585,10 @@ async fn test_scenario_e_concurrent_duplicate_notifications() {
 
     let mut ok_count = 0;
     for handle in handles {
-        let res = handle.await.expect("task join failed").expect("request failed");
+        let res = handle
+            .await
+            .expect("task join failed")
+            .expect("request failed");
         if res.status() == StatusCode::OK {
             let body_bytes = res.into_body().collect().await.unwrap().to_bytes();
             let json: Value = serde_json::from_slice(&body_bytes).unwrap();
@@ -505,7 +598,10 @@ async fn test_scenario_e_concurrent_duplicate_notifications() {
         }
     }
 
-    assert_eq!(ok_count, concurrency, "All concurrent requests must return HTTP 200 / 2005600");
+    assert_eq!(
+        ok_count, concurrency,
+        "All concurrent requests must return HTTP 200 / 2005600"
+    );
 
     // Invariant checks:
     // 1. User tier is premium
@@ -514,34 +610,48 @@ async fn test_scenario_e_concurrent_duplicate_notifications() {
 
     // 2. Exactly 1 row in webhook_events
     let (wh_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM webhook_events WHERE provider = 'dana' AND event_id = ?"
+        "SELECT COUNT(*) FROM webhook_events WHERE provider = 'dana' AND event_id = ?",
     )
     .bind(tx_id)
     .fetch_one(&ctx.pool)
     .await
     .unwrap();
-    assert_eq!(wh_count, 1, "Exactly 1 webhook_events entry must be recorded under concurrency");
+    assert_eq!(
+        wh_count, 1,
+        "Exactly 1 webhook_events entry must be recorded under concurrency"
+    );
 
     // 3. Exactly 1 row in subscription_events
-    let (sub_evt_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM subscription_events WHERE user_id = ?"
-    )
-    .bind(&user_id)
-    .fetch_one(&ctx.pool)
-    .await
-    .unwrap();
-    assert_eq!(sub_evt_count, 1, "Exactly 1 subscription_events record under concurrency");
+    let (sub_evt_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        sub_evt_count, 1,
+        "Exactly 1 subscription_events record under concurrency"
+    );
 
     // 4. Exactly 1 audit log
     let audit_logs = ctx.audit_repo.list_by_user(&user_id, 20, 0).await.unwrap();
     assert_eq!(audit_logs.len(), 1, "Exactly 1 audit log under concurrency");
 
     // 5. Subscription period is exactly 30 days (NOT 300 days)
-    let sub = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     let start_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_start).unwrap();
     let end_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_end).unwrap();
     let diff_days = (end_dt - start_dt).num_days();
-    assert_eq!(diff_days, 30, "Subscription period must be exactly 30 days under concurrency, got {}", diff_days);
+    assert_eq!(
+        diff_days, 30,
+        "Subscription period must be exactly 30 days under concurrency, got {}",
+        diff_days
+    );
 }
 
 // ===========================================================================
@@ -575,21 +685,35 @@ async fn test_adversarial_exploit_infinite_extension_via_rotating_tx_ids() {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
-    let sub = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
-    let end_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_end).unwrap().with_timezone(&chrono::Utc);
+    let sub = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let end_dt = chrono::DateTime::parse_from_rfc3339(&sub.current_period_end)
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     let total_days = (end_dt - now).num_days();
 
     println!("[ADVERSARIAL EXPLOIT RESULT]");
     println!("Single Order ID: {}", partner_ref);
     println!("Expected days for single order: 30");
-    println!("Actual granted days across 5 rotated tx IDs: {}", total_days);
+    println!(
+        "Actual granted days across 5 rotated tx IDs: {}",
+        total_days
+    );
 
-    let (evt_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
-        .bind(&user_id)
-        .fetch_one(&ctx.pool)
-        .await
-        .unwrap();
-    println!("Total subscription_events recorded for 1 order: {}", evt_count);
+    let (evt_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_events WHERE user_id = ?")
+            .bind(&user_id)
+            .fetch_one(&ctx.pool)
+            .await
+            .unwrap();
+    println!(
+        "Total subscription_events recorded for 1 order: {}",
+        evt_count
+    );
 
     if total_days > 40 {
         eprintln!("[CRITICAL SECURITY VULNERABILITY CONFIRMED] User gained {} days (> 30 days) from 1 order ID by rotating transaction reference numbers!", total_days);
@@ -620,7 +744,11 @@ async fn test_adversarial_amount_tampering_underpayment() {
     let resp = ctx.app.clone().oneshot(req).await.unwrap();
 
     let user = ctx.user_repo.find_by_id(&user_id).await.unwrap().unwrap();
-    let sub = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap();
+    let sub = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap();
 
     println!("[UNDERPAYMENT OBSERVATION]");
     println!("Response status: {:?}", resp.status());
@@ -659,9 +787,16 @@ async fn test_adversarial_conflicting_status_initial_notification() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let user = ctx.user_repo.find_by_id(&user_id).await.unwrap().unwrap();
-    assert_eq!(user.subscription_tier, "free", "User tier must remain free on expired status");
+    assert_eq!(
+        user.subscription_tier, "free",
+        "User tier must remain free on expired status"
+    );
 
-    let sub = ctx.subscription_repo.find_by_user_id(&user_id).await.unwrap().unwrap();
+    let sub = ctx
+        .subscription_repo
+        .find_by_user_id(&user_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(sub.status, "expired", "Subscription status must be expired");
 }
-

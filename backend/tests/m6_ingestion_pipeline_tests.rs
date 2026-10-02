@@ -88,7 +88,9 @@ async fn setup_harness() -> TestHarness {
     };
 
     let pool = init_pool(&config).await.expect("Failed to init pool");
-    run_migrations(&pool).await.expect("Failed to run migrations");
+    run_migrations(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let user_repo = Arc::new(SqlxUserRepository::new(pool.clone()));
     let account_repo = Arc::new(SqlxAccountRepository::new(pool.clone()));
@@ -137,9 +139,17 @@ async fn setup_harness() -> TestHarness {
         auth_state,
         account_repo: account_repo.clone(),
         category_repo: category_repo.clone(),
-        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(
+            pool.clone(),
+        )),
         ledger_service,
         payment_service,
+        tenant_service: Arc::new(
+            backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+        ),
+        tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+            pool.clone(),
+        )),
         pool: pool.clone(),
         rate_limiter: Arc::default(),
     };
@@ -162,7 +172,12 @@ async fn setup_harness() -> TestHarness {
         .expect("create premium user");
 
     let (premium_token, _) = jwt_engine
-        .generate_token(&premium_user_id, "premium_ingest@test.com", "user", "premium")
+        .generate_token(
+            &premium_user_id,
+            "premium_ingest@test.com",
+            "user",
+            "premium",
+        )
         .expect("jwt token");
 
     // 2. Create Free User
@@ -304,7 +319,9 @@ async fn test_9_stage_pipeline_android_notification_bca_auto_created() {
     // Confidence = HIGH, status = auto_created, transaction_id present
     assert_eq!(json["status"], "auto_created");
     assert_eq!(json["confidence"], "HIGH");
-    let tx_id = json["transaction_id"].as_str().expect("transaction_id present");
+    let tx_id = json["transaction_id"]
+        .as_str()
+        .expect("transaction_id present");
 
     // Stage 9: Verify atomic ledger insert & account balance mutation
     let tx_row: (i64, String, String, String) = sqlx::query_as(
@@ -322,25 +339,22 @@ async fn test_9_stage_pipeline_android_notification_bca_auto_created() {
     assert_eq!(tx_row.3, "HIGH");
 
     // Balance mutation check: Initial 1,000,000 - 150,000 = 850,000
-    let balance_row: (i64,) = sqlx::query_as(
-        "SELECT current_balance FROM accounts WHERE id = ?1",
-    )
-    .bind(&harness.bca_account_id)
-    .fetch_one(&harness.pool)
-    .await
-    .expect("fetch account balance");
+    let balance_row: (i64,) = sqlx::query_as("SELECT current_balance FROM accounts WHERE id = ?1")
+        .bind(&harness.bca_account_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("fetch account balance");
 
     assert_eq!(balance_row.0, 850_000);
 
     // Verify ingestion_events record
     let event_id = json["event_id"].as_str().unwrap();
-    let event_row: (String, String) = sqlx::query_as(
-        "SELECT status, confidence FROM ingestion_events WHERE id = ?1",
-    )
-    .bind(event_id)
-    .fetch_one(&harness.pool)
-    .await
-    .expect("fetch event");
+    let event_row: (String, String) =
+        sqlx::query_as("SELECT status, confidence FROM ingestion_events WHERE id = ?1")
+            .bind(event_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("fetch event");
 
     assert_eq!(event_row.0, "auto_created");
     assert_eq!(event_row.1, "HIGH");
@@ -452,13 +466,11 @@ async fn test_sms_capability_ingestion() {
     let _tx_id = json["transaction_id"].as_str().expect("tx_id present");
 
     // Check balance of Mandiri account (500_000 - 250_000 = 250_000)
-    let balance_row: (i64,) = sqlx::query_as(
-        "SELECT current_balance FROM accounts WHERE id = ?1",
-    )
-    .bind(&harness.mandiri_account_id)
-    .fetch_one(&harness.pool)
-    .await
-    .unwrap();
+    let balance_row: (i64,) = sqlx::query_as("SELECT current_balance FROM accounts WHERE id = ?1")
+        .bind(&harness.mandiri_account_id)
+        .fetch_one(&harness.pool)
+        .await
+        .unwrap();
 
     assert_eq!(balance_row.0, 250_000);
 }
@@ -640,24 +652,24 @@ async fn test_cross_source_signal_deduplication() {
 
     // CRITICAL LEDGER VERIFICATION:
     // Exactly ONE transaction exists for Rp 50.000!
-    let count_row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM transactions WHERE user_id = ?1 AND amount = 50000",
-    )
-    .bind(&harness.premium_user_id)
-    .fetch_one(&harness.pool)
-    .await
-    .unwrap();
+    let count_row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM transactions WHERE user_id = ?1 AND amount = 50000")
+            .bind(&harness.premium_user_id)
+            .fetch_one(&harness.pool)
+            .await
+            .unwrap();
 
-    assert_eq!(count_row.0, 1, "Exactly one ledger transaction must be created across multiple sources");
+    assert_eq!(
+        count_row.0, 1,
+        "Exactly one ledger transaction must be created across multiple sources"
+    );
 
     // Balance deducted exactly once: 1,000,000 - 50,000 = 950,000
-    let balance_row: (i64,) = sqlx::query_as(
-        "SELECT current_balance FROM accounts WHERE id = ?1",
-    )
-    .bind(&harness.bca_account_id)
-    .fetch_one(&harness.pool)
-    .await
-    .unwrap();
+    let balance_row: (i64,) = sqlx::query_as("SELECT current_balance FROM accounts WHERE id = ?1")
+        .bind(&harness.bca_account_id)
+        .fetch_one(&harness.pool)
+        .await
+        .unwrap();
 
     assert_eq!(balance_row.0, 950_000);
 }
@@ -710,7 +722,10 @@ async fn test_candidate_review_api_confirm_atomically_commits_to_ledger() {
 
     let confirm_req = Request::builder()
         .method(Method::POST)
-        .uri(format!("/api/v1/ingestion/candidates/{}/confirm", candidate_id))
+        .uri(format!(
+            "/api/v1/ingestion/candidates/{}/confirm",
+            candidate_id
+        ))
         .header(AUTHORIZATION, format!("Bearer {}", harness.premium_token))
         .header(CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&confirm_payload).unwrap()))
@@ -773,7 +788,10 @@ async fn test_candidate_review_api_reject_flow() {
     // 2. Reject candidate
     let reject_req = Request::builder()
         .method(Method::POST)
-        .uri(format!("/api/v1/ingestion/candidates/{}/reject", candidate_id))
+        .uri(format!(
+            "/api/v1/ingestion/candidates/{}/reject",
+            candidate_id
+        ))
         .header(AUTHORIZATION, format!("Bearer {}", harness.premium_token))
         .body(Body::empty())
         .unwrap();
@@ -896,13 +914,12 @@ async fn test_idempotency_key_deduplication() {
     assert_eq!(json1, json2);
 
     // Exactly one transaction in database
-    let tx_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM transactions WHERE user_id = ?1 AND amount = 70000",
-    )
-    .bind(&harness.premium_user_id)
-    .fetch_one(&harness.pool)
-    .await
-    .unwrap();
+    let tx_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM transactions WHERE user_id = ?1 AND amount = 70000")
+            .bind(&harness.premium_user_id)
+            .fetch_one(&harness.pool)
+            .await
+            .unwrap();
 
     assert_eq!(tx_count.0, 1);
 }
@@ -940,7 +957,10 @@ async fn test_multi_tenant_isolation_candidate_review() {
 
     let bad_confirm_req = Request::builder()
         .method(Method::POST)
-        .uri(format!("/api/v1/ingestion/candidates/{}/confirm", user_a_candidate_id))
+        .uri(format!(
+            "/api/v1/ingestion/candidates/{}/confirm",
+            user_a_candidate_id
+        ))
         .header(AUTHORIZATION, format!("Bearer {}", harness.user_b_token))
         .header(CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&confirm_payload).unwrap()))

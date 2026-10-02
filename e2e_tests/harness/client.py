@@ -8,6 +8,7 @@ import sys
 import os
 import json
 import time
+import uuid
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -48,12 +49,15 @@ class ApiClient:
     def __init__(self, base_url: str = "http://127.0.0.1:8089", client_ip: Optional[str] = None):
         self.base_url = base_url.rstrip("/")
         self.cookies: Dict[str, str] = {}
+        self.tenant_id: Optional[str] = None
+        if not client_ip:
+            u = uuid.uuid4().hex
+            client_ip = f"10.{(int(u[0:2], 16) % 250) + 1}.{(int(u[2:4], 16) % 250) + 1}.{(int(u[4:6], 16) % 250) + 1}"
         self.default_headers = {
-            "User-Agent": "Invinite-E2E-Tester/3.1.0",
-            "Accept": "application/json"
+            "User-Agent": "Invinite-E2E-Tester/4.1.0",
+            "Accept": "application/json",
+            "X-Forwarded-For": client_ip
         }
-        if client_ip:
-            self.default_headers["X-Forwarded-For"] = client_ip
 
     def set_cookie(self, name: str, value: str):
         self.cookies[name] = value
@@ -61,12 +65,18 @@ class ApiClient:
     def clear_cookies(self):
         self.cookies.clear()
 
+    def set_tenant(self, tenant_id: Optional[str]):
+        self.tenant_id = tenant_id
+
     def _build_request(self, method: str, path: str, data: Optional[bytes] = None, headers: Optional[Dict[str, str]] = None) -> urllib.request.Request:
         url = f"{self.base_url}{path}" if path.startswith("/") else f"{self.base_url}/{path}"
         req = urllib.request.Request(url, data=data, method=method)
 
         for k, v in self.default_headers.items():
             req.add_header(k, v)
+
+        if self.tenant_id:
+            req.add_header("X-Tenant-ID", self.tenant_id)
 
         if headers:
             for k, v in headers.items():
@@ -335,6 +345,179 @@ class ApiClient:
 
     def ready(self) -> ApiResponse:
         return self.get("/ready")
+
+    # =========================================================================
+    # v4.1 Multi-Tenant Workspace Helpers
+    # =========================================================================
+    def create_tenant(self, name: str, slug: Optional[str] = None, timezone: Optional[str] = None, currency: Optional[str] = None) -> ApiResponse:
+        payload: Dict[str, Any] = {"name": name}
+        if slug:
+            payload["slug"] = slug
+        if timezone:
+            payload["timezone"] = timezone
+        if currency:
+            payload["currency"] = currency
+        return self.post("/api/v1/tenants", payload)
+
+    def list_tenants(self) -> ApiResponse:
+        return self.get("/api/v1/tenants")
+
+    def get_tenant(self, tenant_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/tenants/{tenant_id}")
+
+    def get_tenant_profile(self, tenant_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/tenants/{tenant_id}/profile")
+
+    def update_tenant_profile(self, tenant_id: str, profile_data: Dict[str, Any]) -> ApiResponse:
+        return self.put(f"/api/v1/tenants/{tenant_id}/profile", profile_data)
+
+    def list_tenant_members(self, tenant_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/tenants/{tenant_id}/members")
+
+    def invite_tenant_member(self, tenant_id: str, email: str, role: str = "member") -> ApiResponse:
+        return self.post(f"/api/v1/tenants/{tenant_id}/members", {"email": email, "role": role})
+
+    def remove_tenant_member(self, tenant_id: str, user_id: str) -> ApiResponse:
+        return self.delete(f"/api/v1/tenants/{tenant_id}/members/{user_id}")
+
+    def switch_tenant(self, tenant_id: str) -> ApiResponse:
+        return self.post(f"/api/v1/tenants/{tenant_id}/switch", {})
+
+    def get_tenant_capabilities(self, tenant_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/tenants/{tenant_id}/capabilities")
+
+    # =========================================================================
+    # v4.1 Double-Entry Accounting Helpers
+    # =========================================================================
+    def list_chart_of_accounts(self) -> ApiResponse:
+        return self.get("/api/v1/accounting/accounts")
+
+    def create_account_coa(self, code: str, name: str, account_type: str) -> ApiResponse:
+        return self.post("/api/v1/accounting/accounts", {
+            "code": code,
+            "name": name,
+            "account_type": account_type
+        })
+
+    def delete_account_coa(self, code: str) -> ApiResponse:
+        return self.delete(f"/api/v1/accounting/accounts/{code}")
+
+    def post_journal(self, entry_date: str, description: str, lines: List[Dict[str, Any]],
+                     source_type: str = "MANUAL", source_id: Optional[str] = None) -> ApiResponse:
+        payload = {
+            "entry_date": entry_date,
+            "description": description,
+            "lines": lines,
+            "source_type": source_type,
+            "source_id": source_id
+        }
+        return self.post("/api/v1/accounting/journals", payload)
+
+    def list_journals(self) -> ApiResponse:
+        return self.get("/api/v1/accounting/journals")
+
+    def get_journal(self, journal_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/accounting/journals/{journal_id}")
+
+    def update_journal(self, journal_id: str, data: Dict[str, Any]) -> ApiResponse:
+        return self.put(f"/api/v1/accounting/journals/{journal_id}", data)
+
+    def delete_journal(self, journal_id: str) -> ApiResponse:
+        return self.delete(f"/api/v1/accounting/journals/{journal_id}")
+
+    def reverse_journal(self, journal_id: str, reason: str = "Reversal") -> ApiResponse:
+        return self.post(f"/api/v1/accounting/journals/{journal_id}/reverse", {"reason": reason})
+
+    def get_trial_balance(self) -> ApiResponse:
+        return self.get("/api/v1/accounting/trial-balance")
+
+    def calculate_tax(self, amount: int, tax_type: str, is_inclusive: bool = False) -> ApiResponse:
+        return self.post("/api/v1/accounting/tax/calculate", {
+            "amount": amount,
+            "tax_type": tax_type,
+            "is_inclusive": is_inclusive
+        })
+
+    # =========================================================================
+    # v4.1 Commercial Invoicing Helpers
+    # =========================================================================
+    def create_invoice(self, customer_name: str, items: List[Dict[str, Any]],
+                       due_date: Optional[str] = None, currency: str = "IDR", tax_type: str = "PPN_11_EXCL",
+                       customer_address: str = "", customer_email: str = "") -> ApiResponse:
+        payload = {
+            "customer_name": customer_name,
+            "customer_address": customer_address,
+            "customer_email": customer_email,
+            "items": items,
+            "due_date": due_date or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "currency": currency,
+            "tax_type": tax_type
+        }
+        return self.post("/api/v1/invoices", payload)
+
+    def list_invoices(self) -> ApiResponse:
+        return self.get("/api/v1/invoices")
+
+    def get_invoice(self, invoice_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/invoices/{invoice_id}")
+
+    def update_invoice(self, invoice_id: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> ApiResponse:
+        payload = dict(data or {})
+        payload.update(kwargs)
+        return self.put(f"/api/v1/invoices/{invoice_id}", payload)
+
+    def issue_invoice(self, invoice_id: str, idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        return self.post(f"/api/v1/invoices/{invoice_id}/issue", {}, headers=headers)
+
+    def void_invoice(self, invoice_id: str, reason: str = "Voided") -> ApiResponse:
+        return self.post(f"/api/v1/invoices/{invoice_id}/void", {"reason": reason})
+
+    # =========================================================================
+    # v4.1 Receivables & Payments Helpers
+    # =========================================================================
+    def list_receivables(self) -> ApiResponse:
+        return self.get("/api/v1/receivables")
+
+    def get_receivable_aging(self) -> ApiResponse:
+        return self.get("/api/v1/receivables/aging")
+
+    def allocate_payment(self, invoice_id: str, amount: int, payment_method: str = "BANK_TRANSFER",
+                         payment_date: Optional[str] = None, reference: Optional[str] = None,
+                         idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload: Dict[str, Any] = {
+            "invoice_id": invoice_id,
+            "amount": amount,
+            "payment_method": payment_method,
+        }
+        if payment_date is not None:
+            payload["payment_date"] = payment_date
+        if reference is not None:
+            payload["reference"] = reference
+        return self.post("/api/v1/payments", payload, headers=headers)
+
+    # =========================================================================
+    # v4.1 Transactional Outbox Helpers
+    # =========================================================================
+    def list_outbox_events(self) -> ApiResponse:
+        return self.get("/api/v1/outbox/events")
+
+    def process_outbox(self, simulate_sidecar_failure: bool = False) -> ApiResponse:
+        return self.post("/api/v1/outbox/process", {"simulate_sidecar_failure": simulate_sidecar_failure})
+
+    # =========================================================================
+    # v4.1 System & Schema Probes
+    # =========================================================================
+    def get_system_schema(self) -> ApiResponse:
+        return self.get("/api/v1/system/schema")
+
+    def check_client_isolation(self, non_existent_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/system/client-check?probe_id={non_existent_id}")
 
 
 class TapReporter:

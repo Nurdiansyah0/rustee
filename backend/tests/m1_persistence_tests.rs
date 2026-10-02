@@ -42,7 +42,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     assert!(pragmas.foreign_keys);
     assert_eq!(pragmas.synchronous, 1); // 1 = NORMAL
 
-    // 2. Verify all 15 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences)
+    // 2. Verify all 29 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table)
     let table_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%';"
     )
@@ -50,7 +50,10 @@ async fn test_pool_pragmas_and_migration_execution() {
     .await
     .expect("Failed to query tables");
 
-    assert_eq!(table_count, 15, "Expected 15 domain tables after v3.1.0 migration");
+    assert_eq!(
+        table_count, 29,
+        "Expected 29 domain tables after v4.1 core foundation, accounting, invoicing, and outbox migrations"
+    );
 
     // 3. Verify mandatory composite and acceleration indexes
     let required_indexes = [
@@ -77,6 +80,29 @@ async fn test_pool_pragmas_and_migration_execution() {
         "idx_subscription_events_user",
         "idx_device_installations_user",
         "idx_user_preferences_user",
+        // v4.1 Milestone 1 additions:
+        "idx_tenants_slug",
+        "idx_tenants_status",
+        "idx_business_profiles_tenant",
+        "idx_memberships_user",
+        "idx_memberships_tenant",
+        "idx_memberships_user_status",
+        // v4.1 Milestone 2 additions:
+        "idx_coa_tenant",
+        "idx_coa_tenant_code",
+        "idx_coa_tenant_type",
+        "idx_journals_tenant",
+        "idx_journals_tenant_date",
+        "idx_journals_tenant_entry_number",
+        "idx_journals_source",
+        "idx_journal_lines_journal",
+        "idx_journal_lines_tenant_account",
+        "idx_tax_rules_tenant",
+        // v4.1 Milestone 4 additions:
+        "idx_outbox_events_status_retry",
+        "idx_outbox_events_tenant_created",
+        "idx_outbox_events_aggregate",
+        "idx_outbox_events_tenant_status",
     ];
 
     for idx_name in required_indexes {
@@ -820,15 +846,16 @@ async fn test_migration_0003_v3_1_0_schema_upgrade() {
         r#"
         INSERT INTO sync_cursors (user_id, last_cursor, updated_at)
         VALUES ('u_v310', 42, '2026-09-17T01:00:00Z')
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to insert sync_cursor");
 
-    let last_cursor: i64 = sqlx::query_scalar("SELECT last_cursor FROM sync_cursors WHERE user_id = 'u_v310'")
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to fetch sync_cursor");
+    let last_cursor: i64 =
+        sqlx::query_scalar("SELECT last_cursor FROM sync_cursors WHERE user_id = 'u_v310'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to fetch sync_cursor");
     assert_eq!(last_cursor, 42);
 }

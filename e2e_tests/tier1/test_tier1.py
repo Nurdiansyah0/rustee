@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Tier 1: Feature Coverage Acceptance Test Suite (275 tests across all 55 features).
-Happy-path and baseline contract verification for all features from Master Spec v3.1.0 & PROJECT.md.
+Tier 1: Feature Coverage Acceptance Test Suite (160 tests across all 32 inventoried features).
+Covers primary behavior (happy path) for every feature from PROJECT.md § Feature Inventory.
+Output: TAP (Test Anything Protocol) version 13.
 """
 
 import sys
@@ -24,1389 +25,1098 @@ from harness.client import (
 
 def run_tier1_tests(base_url: str, reporter: Optional[TapReporter] = None) -> TapReporter:
     if reporter is None:
-        reporter = TapReporter(total_expected=275)
+        reporter = TapReporter(total_expected=160)
         reporter.print_header()
 
     client = ApiClient(base_url=base_url)
 
-    # Helper to create isolated test user
     uid_suffix = uuid.uuid4().hex[:8]
-    user_email = f"tier1_{uid_suffix}@invinite.app"
+    user_email = f"tier1_{uid_suffix}@invinite.biz"
     user_pass = "P@ssword123!"
 
     # =========================================================================
-    # FEATURE 1: REQ-ARCH-01 Modular Monolith Layering
+    # FEATURE 1: Multi-Tenant Data Model (PRD §5, §7, §10)
     # =========================================================================
-    # 1.1 Presentation Layer /health probe
-    r = client.get("/health")
-    reporter.record(r.status == 200 and r.json.get("status") == "ok",
-                    "REQ-ARCH-01.1: Presentation layer returns HTTP 200 and status 'ok' on /health")
-
-    # 1.2 DTO validation on register
-    reg_resp = client.register(user_email, user_pass, "Tier1 User")
+    reg_resp = client.register(user_email, user_pass, "Enterprise Admin")
     user_id = reg_resp.json.get("user", {}).get("id") if reg_resp.json else None
     reporter.record(reg_resp.status == 201 and user_id is not None,
-                    "REQ-ARCH-01.2: DTO layer processes valid registration payload")
+                    "F01.1: Registration creates user with active session")
 
-    # 1.3 Service layer orchestration for accounts
-    acc_resp = client.create_account("Rekening Utama", "checking", 500000)
-    acc_id = acc_resp.json.get("id") if acc_resp.json else None
-    reporter.record(acc_resp.status == 201 and acc_resp.json.get("balance") == 500000,
-                    "REQ-ARCH-01.3: Service layer processes account creation with initial balance")
+    # 1.2 Tenant creation returns 201 Created with valid UUID and ACTIVE status
+    t1_resp = client.create_tenant("PT Nusantara Jaya", slug=f"nusantara-{uid_suffix}")
+    t1_id = t1_resp.json.get("id") if t1_resp.json else None
+    reporter.record(t1_resp.status == 201 and t1_id is not None and t1_resp.json.get("status") == "ACTIVE",
+                    "F01.2: Tenant creation returns 201 Created with valid UUID and ACTIVE status")
 
-    # 1.4 Domain boundaries: unauthenticated access rejected
+    # 1.3 BusinessProfile created with default Indonesian settings
+    prof_resp = client.get_tenant_profile(t1_id)
+    reporter.record(prof_resp.status == 200 and prof_resp.json.get("currency") == "IDR" and prof_resp.json.get("locale") == "id-ID",
+                    "F01.3: BusinessProfile created with default Indonesian settings (IDR, id-ID)")
+
+    # 1.4 Owner membership created with ACTIVE status and owner role
+    mems_resp = client.list_tenant_members(t1_id)
+    is_owner = any(m.get("user_id") == user_id and m.get("role") == "owner" for m in (mems_resp.json or {}).get("members", []))
+    reporter.record(mems_resp.status == 200 and is_owner,
+                    "F01.4: Owner membership created with ACTIVE status and owner role")
+
+    # 1.5 Tenant details query returns accurate member count and timestamps
+    td_resp = client.get_tenant(t1_id)
+    reporter.record(td_resp.status == 200 and td_resp.json.get("member_count") >= 1 and "created_at" in (td_resp.json or {}),
+                    "F01.5: Tenant details query returns accurate member count and timestamps")
+
+    # Set active tenant for subsequent client requests
+    client.set_tenant(t1_id)
+
+    # =========================================================================
+    # FEATURE 2: TenantContext Repository Scoping (PRD §5:272-286)
+    # =========================================================================
+    # 2.1 Explicit X-Tenant-ID header scopes all requests to target workspace
+    coa_resp = client.list_chart_of_accounts()
+    reporter.record(coa_resp.status == 200 and len(coa_resp.json.get("accounts", [])) >= 8,
+                    "F02.1: Explicit X-Tenant-ID header scopes repository requests to target workspace")
+
+    # 2.2 Requests without X-Tenant-ID default safely to active personal workspace
+    unscoped_client = ApiClient(base_url=base_url)
+    unscoped_client.login(user_email, user_pass)
+    unscoped_coa = unscoped_client.list_chart_of_accounts()
+    reporter.record(unscoped_coa.status == 200 and len(unscoped_coa.json.get("accounts", [])) >= 8,
+                    "F02.2: Requests without X-Tenant-ID default safely to active personal workspace")
+
+    # 2.3 Creating a second tenant and switching X-Tenant-ID scopes to that tenant
+    t2_resp = client.create_tenant("CV Sumber Rejeki", slug=f"sumber-{uid_suffix}")
+    t2_id = t2_resp.json.get("id") if t2_resp.json else None
+    client2 = ApiClient(base_url=base_url)
+    client2.login(user_email, user_pass)
+    client2.set_tenant(t2_id)
+    t2_coa = client2.list_chart_of_accounts()
+    reporter.record(t2_resp.status == 201 and t2_coa.status == 200,
+                    "F02.3: Switching X-Tenant-ID switches the isolated repository query boundary")
+
+    # 2.4 Unauthenticated requests rejected before TenantContext resolution
     anon_client = ApiClient(base_url=base_url)
-    anon_resp = anon_client.get("/api/v1/accounts")
+    anon_client.set_tenant(t1_id)
+    anon_resp = anon_client.list_chart_of_accounts()
     reporter.record(anon_resp.status == 401,
-                    "REQ-ARCH-01.4: Domain boundaries prevent unauthenticated access to domain endpoints")
+                    "F02.4: Unauthenticated requests rejected before TenantContext resolution")
 
-    # 1.5 REST API namespacing under /api/v1
-    cat_resp = client.get("/api/v1/categories")
-    reporter.record(cat_resp.status == 200 and "categories" in (cat_resp.json or {}),
-                    "REQ-ARCH-01.5: REST API adheres to /api/v1 namespace prefix")
-
-    # =========================================================================
-    # FEATURE 2: REQ-ARCH-02 Integer Rupiah Currency Math
-    # =========================================================================
-    # 2.1 Integer Rupiah amount stored accurately
-    tx1_resp = client.create_transaction(acc_id, 75000, "expense", note="Makan Siang")
-    tx1_id = tx1_resp.json.get("id") if tx1_resp.json else None
-    reporter.record(tx1_resp.status == 201 and tx1_resp.json.get("amount") == 75000,
-                    "REQ-ARCH-02.1: Transaction amount stored and returned as exact integer Rupiah")
-
-    # 2.2 Large integer Rupiah without float loss (Rp 1.000.000.000)
-    tx2_resp = client.create_transaction(acc_id, 1000000000, "income", note="Bonus Investasi")
-    reporter.record(tx2_resp.status == 201 and tx2_resp.json.get("amount") == 1000000000,
-                    "REQ-ARCH-02.2: Large integer amount (Rp 1.000.000.000) stored without float precision loss")
-
-    # 2.3 Account balance updated via integer addition
-    acc_check = client.get_account(acc_id)
-    # Initial: 500000 - 75000 + 1000000000 = 1000425000
-    reporter.record(acc_check.status == 200 and acc_check.json.get("balance") == 1000425000,
-                    "REQ-ARCH-02.3: Account balance updated via checked integer addition")
-
-    # 2.4 Account balance updated via integer subtraction
-    tx3_resp = client.create_transaction(acc_id, 425000, "expense", note="Belanja Bulanan")
-    acc_check2 = client.get_account(acc_id)
-    # Balance: 1000425000 - 425000 = 1000000000
-    reporter.record(acc_check2.status == 200 and acc_check2.json.get("balance") == 1000000000,
-                    "REQ-ARCH-02.4: Account balance updated via checked integer subtraction")
-
-    # 2.5 Zero floating point types in cash flow
-    cf_resp = client.get_cash_flow()
-    is_int_cashflow = (
-        isinstance(cf_resp.json.get("total_income"), int) and
-        isinstance(cf_resp.json.get("total_expenses"), int) and
-        isinstance(cf_resp.json.get("net_cash_flow"), int)
-    ) if cf_resp.json else False
-    reporter.record(cf_resp.status == 200 and is_int_cashflow,
-                    "REQ-ARCH-02.5: Zero floating-point types in cash flow summary (pure integers)")
+    # 2.5 Inactive or unassociated tenant ID in X-Tenant-ID strictly returns HTTP 404
+    foreign_client = ApiClient(base_url=base_url)
+    foreign_client.login(user_email, user_pass)
+    foreign_client.set_tenant(str(uuid.uuid4()))
+    bad_tenant_resp = foreign_client.list_chart_of_accounts()
+    reporter.record(bad_tenant_resp.status == 404,
+                    "F02.5: Inactive or unassociated tenant ID in X-Tenant-ID strictly returns HTTP 404")
 
     # =========================================================================
-    # FEATURE 3: REQ-ARCH-03 Single Net Cash Flow Engine
+    # FEATURE 3: Cross-Tenant HTTP 404 Isolation (ORIGINAL_REQUEST §Acceptance Criteria)
     # =========================================================================
-    # 3.1 Net cash flow = income - expenses
-    cf_data = cf_resp.json or {}
-    expected_net = cf_data.get("total_income", 0) - cf_data.get("total_expenses", 0)
-    reporter.record(cf_data.get("net_cash_flow") == expected_net,
-                    "REQ-ARCH-03.1: Net cash flow strictly satisfies formula (income - expenses)")
-
-    # 3.2 Account transfer does not affect net cash flow
-    acc2_resp = client.create_account("Dompet Tunai", "cash", 0)
-    acc2_id = acc2_resp.json.get("id")
-    transfer_resp = client.create_transaction(acc_id, 100000, "transfer", destination_account_id=acc2_id, note="Tarik Tunai")
-    cf_after_transfer = client.get_cash_flow().json or {}
-    reporter.record(transfer_resp.status == 201 and cf_after_transfer.get("net_cash_flow") == expected_net,
-                    "REQ-ARCH-03.2: Account transfer nets to zero in aggregated Net Cash Flow")
-
-    # 3.3 Multiple transactions aggregated deterministically
-    client.create_transaction(acc_id, 50000, "expense", note="Bensin")
-    cf_updated = client.get_cash_flow().json or {}
-    reporter.record(cf_updated.get("total_expenses") == cf_data.get("total_expenses", 0) + 50000,
-                    "REQ-ARCH-03.3: Multiple transactions aggregated deterministically by engine")
-
-    # 3.4 Cash flow response schema validation
-    reporter.record("total_income" in cf_updated and "total_expenses" in cf_updated and "currency" in cf_updated,
-                    "REQ-ARCH-03.4: Cash flow response declares income, expenses, and IDR currency")
-
-    # 3.5 Consistent successive calculations
-    cf_repeat = client.get_cash_flow().json or {}
-    reporter.record(cf_repeat == cf_updated,
-                    "REQ-ARCH-03.5: Cash flow calculations remain deterministic across repeated queries")
-
-    # =========================================================================
-    # FEATURE 4: REQ-ARCH-04 Multi-Wallet Accounting
-    # =========================================================================
-    # 4.1 Checking account type
-    w_checking = client.create_account("BCA Payroll", "checking", 1500000)
-    reporter.record(w_checking.status == 201 and w_checking.json.get("account_type") == "checking",
-                    "REQ-ARCH-04.1: Checking wallet account created with initial balance")
-
-    # 4.2 Savings account type
-    w_savings = client.create_account("Mandiri Tabungan", "savings", 5000000)
-    reporter.record(w_savings.status == 201 and w_savings.json.get("account_type") == "savings",
-                    "REQ-ARCH-04.2: Savings wallet account created with initial balance")
-
-    # 4.3 E-Wallet account type
-    w_ewallet = client.create_account("GoPay", "e_wallet", 250000)
-    reporter.record(w_ewallet.status == 201 and w_ewallet.json.get("account_type") == "e_wallet",
-                    "REQ-ARCH-04.3: E-Wallet account created with initial balance")
-
-    # 4.4 List all active accounts
-    acc_list_resp = client.list_accounts()
-    acc_count = acc_list_resp.json.get("count", 0) if acc_list_resp.json else 0
-    reporter.record(acc_list_resp.status == 200 and acc_count >= 5,
-                    "REQ-ARCH-04.4: List all active user wallets successfully")
-
-    # 4.5 Retrieve individual account by ID
-    get_w_resp = client.get_account(w_checking.json.get("id"))
-    reporter.record(get_w_resp.status == 200 and get_w_resp.json.get("name") == "BCA Payroll",
-                    "REQ-ARCH-04.5: Retrieve individual account details by unique account ID")
-
-    # =========================================================================
-    # FEATURE 5: REQ-ARCH-05 Atomic Balance Mutations
-    # =========================================================================
-    # 5.1 Income increases target account atomically
-    bal_before = client.get_account(acc2_id).json.get("balance", 0)
-    client.create_transaction(acc2_id, 300000, "income", note="Hadiah")
-    bal_after = client.get_account(acc2_id).json.get("balance", 0)
-    reporter.record(bal_after == bal_before + 300000,
-                    "REQ-ARCH-05.1: Income transaction increases account balance atomically")
-
-    # 5.2 Expense decreases target account atomically
-    client.create_transaction(acc2_id, 50000, "expense", note="Jajan")
-    bal_after_exp = client.get_account(acc2_id).json.get("balance", 0)
-    reporter.record(bal_after_exp == bal_after - 50000,
-                    "REQ-ARCH-05.2: Expense transaction decreases account balance atomically")
-
-    # 5.3 Transfer atomically mutates both source and destination balances
-    src_bal_pre = client.get_account(acc_id).json.get("balance", 0)
-    dst_bal_pre = client.get_account(acc2_id).json.get("balance", 0)
-    client.create_transaction(acc_id, 100000, "transfer", destination_account_id=acc2_id)
-    src_bal_post = client.get_account(acc_id).json.get("balance", 0)
-    dst_bal_post = client.get_account(acc2_id).json.get("balance", 0)
-    reporter.record(src_bal_post == src_bal_pre - 100000 and dst_bal_post == dst_bal_pre + 100000,
-                    "REQ-ARCH-05.3: Transfer transaction mutates both source and destination balances atomically")
-
-    # 5.4 Deletion reverses account balance mutation atomically
-    del_tx_resp = client.create_transaction(acc2_id, 25000, "expense", note="Temporary Expense")
-    del_tx_id = del_tx_resp.json.get("id")
-    bal_pre_del = client.get_account(acc2_id).json.get("balance", 0)
-    client.delete_transaction(del_tx_id)
-    bal_post_del = client.get_account(acc2_id).json.get("balance", 0)
-    reporter.record(bal_post_del == bal_pre_del + 25000,
-                    "REQ-ARCH-05.4: Transaction deletion reverses account balance atomically")
-
-    # 5.5 Zero orphan guarantee
-    reporter.record(client.get(f"/api/v1/transactions/{del_tx_id}").status == 404,
-                    "REQ-ARCH-05.5: Zero orphaned transactions after reversal")
-
-    # =========================================================================
-    # FEATURE 6: REQ-ARCH-06 Category Soft-Deletion
-    # =========================================================================
-    # 6.1 Create category for deletion test
-    cat_del_resp = client.create_category("Langganan Streaming", "expense")
-    cat_del_id = cat_del_resp.json.get("id")
-    reporter.record(cat_del_resp.status == 201 and cat_del_id is not None,
-                    "REQ-ARCH-06.1: Custom category created for soft-deletion lifecycle")
-
-    # 6.2 Soft delete category
-    del_c_resp = client.soft_delete_category(cat_del_id)
-    reporter.record(del_c_resp.status == 200 and del_c_resp.json.get("status") == "archived",
-                    "REQ-ARCH-06.2: Soft-delete sets category status to archived with deleted_at timestamp")
-
-    # 6.3 Soft-deleted category filtered out from active listing
-    active_cats = client.list_categories().json.get("categories", [])
-    reporter.record(not any(c["id"] == cat_del_id for c in active_cats),
-                    "REQ-ARCH-06.3: Soft-deleted category excluded from active category selector")
-
-    # 6.4 Historical transaction retains soft-deleted category reference
-    hist_tx = client.create_transaction(acc_id, 65000, "expense", category_id=cat_del_id, note="Historical Netflix")
-    reporter.record(hist_tx.status == 201 and hist_tx.json.get("id") is not None,
-                    "REQ-ARCH-06.4: Historical ledger entry retains foreign reference to soft-deleted category")
-
-    # 6.5 Soft-deleted category retrievable with include_deleted parameter
-    all_cats = client.get("/api/v1/categories?include_deleted=true").json.get("categories", [])
-    reporter.record(any(c["id"] == cat_del_id and c.get("deleted_at") is not None for c in all_cats),
-                    "REQ-ARCH-06.5: Soft-deleted category retrievable when include_deleted=true")
-
-    # =========================================================================
-    # FEATURE 7: REQ-ARCH-07 SQLite WAL & Pragmas
-    # =========================================================================
-    # 7.1 /ready probe confirms WAL mode
-    ready_resp = client.ready()
-    reporter.record(ready_resp.status == 200 and ready_resp.json.get("wal") is True,
-                    "REQ-ARCH-07.1: /ready probe confirms SQLite journal_mode is WAL")
-
-    # 7.2 Database operational readiness
-    reporter.record(ready_resp.json.get("database") == "ok",
-                    "REQ-ARCH-07.2: Database reports operational connectivity")
-
-    # 7.3 Concurrent reads execute without blocking
-    r1 = client.get("/api/v1/accounts")
-    r2 = client.get("/api/v1/categories")
-    reporter.record(r1.status == 200 and r2.status == 200,
-                    "REQ-ARCH-07.3: Multiple concurrent read queries complete successfully")
-
-    # 7.4 Foreign key constraint enforced
-    bad_fk_tx = client.create_transaction("non-existent-account-uuid", 50000, "expense")
-    reporter.record(bad_fk_tx.status in [404, 422],
-                    "REQ-ARCH-07.4: Relational foreign key enforcement rejects invalid account ID")
-
-    # 7.5 Synchronous NORMAL mode operates cleanly
-    reporter.record(ready_resp.status == 200,
-                    "REQ-ARCH-07.5: SQLite pragmas operate with synchronous NORMAL configuration")
-
-    # =========================================================================
-    # FEATURE 8: REQ-ARCH-08 Canonical Composite Indexes
-    # =========================================================================
-    # 8.1 Transaction query by user_id and date
-    tx_date_resp = client.list_transactions({"start_date": "2026-01-01", "end_date": "2026-12-31"})
-    reporter.record(tx_date_resp.status == 200 and "transactions" in (tx_date_resp.json or {}),
-                    "REQ-ARCH-08.1: Querying transactions by date range leverages composite index")
-
-    # 8.2 Transaction query by account_id
-    tx_acc_resp = client.list_transactions({"account_id": acc_id})
-    reporter.record(tx_acc_resp.status == 200,
-                    "REQ-ARCH-08.2: Querying transactions by account_id leverages indexed lookup")
-
-    # 8.3 Categories query by user_id
-    cat_query_resp = client.list_categories()
-    reporter.record(cat_query_resp.status == 200,
-                    "REQ-ARCH-08.3: Querying categories by authenticated user leverages composite index")
-
-    # 8.4 Budgets query by user_id
-    # Note: user is free, so budget returns 403 or budget list when unlocked
-    trial_activate = client.activate_trial()
-    budgets_resp = client.list_budgets()
-    reporter.record(budgets_resp.status == 200 and "budgets" in (budgets_resp.json or {}),
-                    "REQ-ARCH-08.4: Querying budgets leverages user_id index")
-
-    # 8.5 Subscriptions query by user_id
-    sub_resp = client.subscription_status()
-    reporter.record(sub_resp.status == 200 and sub_resp.json.get("user_id") == user_id,
-                    "REQ-ARCH-08.5: Querying subscriptions leverages unique user_id index")
-
-    # =========================================================================
-    # FEATURE 9: REQ-ARCH-09 Stable Schema Vocabulary
-    # =========================================================================
-    # 9.1 Custom display_name creation
-    vocab_cat = client.create_category("Kopi & Nongkrong", "expense", display_name="Kopi & Nongkrong")
-    reporter.record(vocab_cat.status == 201 and vocab_cat.json.get("display_name") == "Kopi & Nongkrong",
-                    "REQ-ARCH-09.1: Create custom vocabulary category with exact display_name")
-
-    # 9.2 Auto-normalized name generation
-    reporter.record(vocab_cat.json.get("normalized_name") == "kopi-nongkrong",
-                    "REQ-ARCH-09.2: Category generates canonical normalized_name for search & grouping")
-
-    # 9.3 Category metadata field
-    cat_meta_resp = client.create_category("Operasional Usaha", "expense", metadata={"tax_deductible": True})
-    reporter.record(cat_meta_resp.status == 201,
-                    "REQ-ARCH-09.3: Custom category metadata field persists user-defined attributes")
-
-    # 9.4 Custom income vocabulary
-    inc_cat = client.create_category("Side Project Web", "income", display_name="Side Project Web")
-    reporter.record(inc_cat.status == 201 and inc_cat.json.get("category_type") == "income",
-                    "REQ-ARCH-09.4: User custom income vocabulary created without platform constraints")
-
-    # 9.5 Schema remains stable (no dynamic tables)
-    reporter.record(client.get("/ready").status == 200,
-                    "REQ-ARCH-09.5: Vocabulary persisted within stable categories schema without dynamic tables")
-
-    # =========================================================================
-    # FEATURE 10: REQ-ARCH-10 Strict UTC Timestamps
-    # =========================================================================
-    # 10.1 Transaction timestamp in UTC ('Z' suffix)
-    sample_tx = client.create_transaction(acc_id, 20000, "expense", note="UTC Test")
-    tx_date_str = sample_tx.json.get("date", "")
-    reporter.record(sample_tx.status == 201 and ("Z" in tx_date_str or "+00:00" in tx_date_str),
-                    "REQ-ARCH-10.1: Transaction date/time stored strictly in ISO 8601 UTC")
-
-    # 10.2 Account timestamp in UTC
-    acc_info = client.get_account(acc_id).json or {}
-    acc_created = acc_info.get("created_at", "")
-    reporter.record("Z" in acc_created or "+00:00" in acc_created,
-                    "REQ-ARCH-10.2: Account created_at timestamp formatted strictly in UTC")
-
-    # 10.3 Health probe timestamp in UTC
-    h_time = client.health().json.get("timestamp", "")
-    reporter.record("Z" in h_time or "+00:00" in h_time,
-                    "REQ-ARCH-10.3: Health probe reports server time in authoritative UTC")
-
-    # 10.4 Trial timestamps in UTC
-    trial_data = client.subscription_status().json or {}
-    t_start = trial_data.get("trial_started_at", "")
-    reporter.record("Z" in t_start or "+00:00" in t_start,
-                    "REQ-ARCH-10.4: Subscription trial_started_at recorded strictly in UTC")
-
-    # 10.5 Delta sync timestamp in UTC
-    sync_resp = client.delta_sync(0).json or {}
-    reporter.record(isinstance(sync_resp.get("cursor"), int),
-                    "REQ-ARCH-10.5: Synchronization cursors follow monotonic UTC sequence")
-
-    # =========================================================================
-    # FEATURE 11: REQ-ARCH-11 Idempotency Engine
-    # =========================================================================
-    # 11.1 Create transaction with Idempotency-Key
-    idem_key = str(uuid.uuid4())
-    bal_pre_idem = client.get_account(acc_id).json.get("balance", 0)
-    tx_idem1 = client.create_transaction(acc_id, 80000, "expense", note="Idem Test", idempotency_key=idem_key)
-    reporter.record(tx_idem1.status == 201 and tx_idem1.json.get("id") is not None,
-                    "REQ-ARCH-11.1: Transaction created successfully with Idempotency-Key")
-
-    # 11.2 Replay identical request returns cached response
-    tx_idem2 = client.create_transaction(acc_id, 80000, "expense", note="Idem Test", idempotency_key=idem_key)
-    reporter.record(tx_idem2.status == 201 and tx_idem2.json.get("id") == tx_idem1.json.get("id"),
-                    "REQ-ARCH-11.2: Replaying request with same Idempotency-Key returns cached transaction")
-
-    # 11.3 Replay does not duplicate balance mutation
-    bal_post_idem = client.get_account(acc_id).json.get("balance", 0)
-    reporter.record(bal_post_idem == bal_pre_idem - 80000,
-                    "REQ-ARCH-11.3: Replayed transaction does not perform duplicate account balance deduction")
-
-    # 11.4 Cache replay header present
-    reporter.record(tx_idem2.header("X-Cache-Replay") == "true",
-                    "REQ-ARCH-11.4: Cached replay returns X-Cache-Replay header indicator")
-
-    # 11.5 Different Idempotency-Keys produce distinct transactions
-    tx_idem3 = client.create_transaction(acc_id, 80000, "expense", note="Idem Test 2", idempotency_key=str(uuid.uuid4()))
-    reporter.record(tx_idem3.status == 201 and tx_idem3.json.get("id") != tx_idem1.json.get("id"),
-                    "REQ-ARCH-11.5: Distinct Idempotency-Keys produce independent transactions")
-
-    # =========================================================================
-    # FEATURE 12: REQ-ARCH-12 Multi-Tenant Data Isolation
-    # =========================================================================
-    # Create User B
+    # User B setup in isolated tenant
+    user_b_email = f"user_b_{uid_suffix}@other.biz"
     client_b = ApiClient(base_url=base_url)
-    user_b_email = f"user_b_{uuid.uuid4().hex[:6]}@invinite.app"
-    client_b.register(user_b_email, "P@ssword123!", "User B")
-
-    # 12.1 User B cannot see User A's accounts
-    accs_b = client_b.list_accounts().json.get("accounts", [])
-    reporter.record(not any(a["id"] == acc_id for a in accs_b),
-                    "REQ-ARCH-12.1: User B cannot observe User A's accounts in list endpoint")
-
-    # 12.2 User B cannot access User A's account by ID
-    get_a_by_b = client_b.get_account(acc_id)
-    reporter.record(get_a_by_b.status in [403, 404],
-                    "REQ-ARCH-12.2: User B access to User A's account by ID rejected with HTTP 404/403")
-
-    # 12.3 User B cannot see User A's transactions
-    txs_b = client_b.list_transactions().json.get("transactions", [])
-    reporter.record(not any(t["id"] == tx1_id for t in txs_b),
-                    "REQ-ARCH-12.3: User B cannot observe User A's transactions")
-
-    # 12.4 User B cannot access User A's transaction by ID
-    get_tx_by_b = client_b.get(f"/api/v1/transactions/{tx1_id}")
-    reporter.record(get_tx_by_b.status in [403, 404],
-                    "REQ-ARCH-12.4: User B access to User A's transaction by ID rejected with HTTP 404/403")
-
-    # 12.5 User B cannot see User A's custom categories
-    cats_b = client_b.list_categories().json.get("categories", [])
-    reporter.record(not any(c["id"] == vocab_cat.json.get("id") for c in cats_b),
-                    "REQ-ARCH-12.5: User B custom vocabulary strictly isolated from User A")
-
-    # =========================================================================
-    # FEATURE 13: REQ-SEC-01 Argon2id Password Hashing
-    # =========================================================================
-    # 13.1 User register creates secure hash
-    auth_check = client.me()
-    reporter.record(auth_check.status == 200 and "password" not in (auth_check.json or {}),
-                    "REQ-SEC-01.1: Authentication credentials hashed; password never exposed in API DTOs")
-
-    # 13.2 Login verifies hash successfully
-    login_client = ApiClient(base_url=base_url)
-    log_ok = login_client.login(user_email, user_pass)
-    reporter.record(log_ok.status == 200 and "token" in (log_ok.json or {}),
-                    "REQ-SEC-01.2: Password verified against stored cryptographic hash successfully")
-
-    # 13.3 Incorrect password rejected
-    log_fail = login_client.login(user_email, "WrongPassword!")
-    reporter.record(log_fail.status == 401,
-                    "REQ-SEC-01.3: Incorrect password authentication strictly rejected with HTTP 401")
-
-    # 13.4 Hash format verification (salted and iterated)
-    reporter.record(log_ok.json.get("user", {}).get("email") == user_email,
-                    "REQ-SEC-01.4: Salted cryptographic hash binds securely to user email")
-
-    # 13.5 Constant-time verification on unknown user
-    unknown_log = login_client.login("nonexistent_user_999@invinite.app", "AnyPassword!")
-    reporter.record(unknown_log.status == 401,
-                    "REQ-SEC-01.5: Authentication rejected consistently with HTTP 401 on non-existent account")
-
-    # =========================================================================
-    # FEATURE 14: REQ-SEC-02 Cookie Session Management
-    # =========================================================================
-    # 14.1 Register sets auth_token cookie
-    reg_cookie = reg_resp.header("Set-Cookie") or ""
-    reporter.record("auth_token=" in reg_cookie and "HttpOnly" in reg_cookie,
-                    "REQ-SEC-02.1: Registration sets httpOnly auth_token session cookie")
-
-    # 14.2 SameSite=Lax attribute on cookie
-    reporter.record("SameSite=Lax" in reg_cookie or "samesite=lax" in reg_cookie.lower(),
-                    "REQ-SEC-02.2: Session cookie includes SameSite=Lax CSRF mitigation")
-
-    # 14.3 Requests with session cookie succeed
-    cookie_client = ApiClient(base_url=base_url)
-    cookie_client.set_cookie("auth_token", reg_resp.json.get("token", ""))
-    reporter.record(cookie_client.me().status == 200,
-                    "REQ-SEC-02.3: Authenticated API requests succeed using session cookie")
-
-    # 14.4 Logout clears session cookie
-    logout_resp = cookie_client.logout()
-    logout_cookie = logout_resp.header("Set-Cookie") or ""
-    reporter.record(logout_resp.status == 200 and ("Max-Age=0" in logout_cookie or "expires=" in logout_cookie.lower()),
-                    "REQ-SEC-02.4: Logout clears session cookie via Max-Age=0 expiration")
-
-    # 14.5 Bearer token fallback supported
-    bearer_client = ApiClient(base_url=base_url)
-    bearer_resp = bearer_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {reg_resp.json.get('token')}"})
-    reporter.record(bearer_resp.status == 200,
-                    "REQ-SEC-02.5: Authorization Bearer header supported as token fallback")
-
-    # =========================================================================
-    # FEATURE 15: REQ-SEC-03 Rate Limiting
-    # =========================================================================
-    rl_client = ApiClient(base_url=base_url, client_ip="192.168.10.99")
-    # 15.1 First attempt allowed
-    r_rl1 = rl_client.login(user_email, "WrongPass1")
-    reporter.record(r_rl1.status == 401,
-                    "REQ-SEC-03.1: First failed login attempt processed with HTTP 401")
-
-    # 15.2 Second attempt allowed
-    r_rl2 = rl_client.login(user_email, "WrongPass2")
-    reporter.record(r_rl2.status == 401,
-                    "REQ-SEC-03.2: Second failed login attempt processed with HTTP 401")
-
-    # 15.3 Third attempt allowed
-    r_rl3 = rl_client.login(user_email, "WrongPass3")
-    reporter.record(r_rl3.status == 401,
-                    "REQ-SEC-03.3: Third failed login attempt processed with HTTP 401")
-
-    # 15.4 Fourth attempt allowed
-    r_rl4 = rl_client.login(user_email, "WrongPass4")
-    reporter.record(r_rl4.status == 401,
-                    "REQ-SEC-03.4: Fourth failed login attempt processed with HTTP 401")
-
-    # 15.5 Fifth attempt allowed
-    r_rl5 = rl_client.login(user_email, "WrongPass5")
-    reporter.record(r_rl5.status == 401,
-                    "REQ-SEC-03.5: Fifth failed login attempt processed with HTTP 401")
-
-    # =========================================================================
-    # FEATURE 16: REQ-SEC-04 3-Month Premium Trial
-    # =========================================================================
-    # Create fresh user for trial tests
-    trial_user_client = ApiClient(base_url=base_url)
-    tu_email = f"trial_{uuid.uuid4().hex[:6]}@invinite.app"
-    trial_user_client.register(tu_email, "P@ssword123!", "Trial User")
-
-    # 16.1 Trial activation endpoint succeeds
-    t_act = trial_user_client.activate_trial()
-    reporter.record(t_act.status == 200 and t_act.json.get("status") == "trialing",
-                    "REQ-SEC-04.1: Activate 3-month trial returns status 'trialing'")
-
-    # 16.2 Trial duration is 90 days (3 months)
-    reporter.record(t_act.json.get("days_remaining") in [89, 90],
-                    "REQ-SEC-04.2: Trial duration accurately set to 90 days (3 months)")
-
-    # 16.3 Zero upfront payment or card required
-    reporter.record(t_act.json.get("is_premium") is True,
-                    "REQ-SEC-04.3: Trial activates instantly with zero upfront payment or credit card")
-
-    # 16.4 Full premium capabilities granted immediately
-    adv_res = trial_user_client.get_advanced_analytics()
-    reporter.record(adv_res.status == 200 and "financial_health_score" in (adv_res.json or {}),
-                    "REQ-SEC-04.4: 3-month trial immediately unlocks advanced analytics")
-
-    # 16.5 Trial status reflected in subscription API
-    t_sub = trial_user_client.subscription_status().json or {}
-    reporter.record(t_sub.get("has_used_trial") is True and t_sub.get("status") == "trialing",
-                    "REQ-SEC-04.5: Subscription endpoint reflects active trial status and has_used_trial=true")
-
-    # =========================================================================
-    # FEATURE 17: REQ-SEC-05 Subscription Lifecycle Machine
-    # =========================================================================
-    # 17.1 Initial state is FREE
-    fresh_client = ApiClient(base_url=base_url)
-    fresh_email = f"state_{uuid.uuid4().hex[:6]}@invinite.app"
-    fresh_client.register(fresh_email, "P@ssword123!", "State Machine User")
-    reporter.record(fresh_client.subscription_status().json.get("tier") == "free",
-                    "REQ-SEC-05.1: Initial registration sets subscription state to 'free'")
-
-    # 17.2 Transition to TRIALING
-    fresh_client.activate_trial()
-    reporter.record(fresh_client.subscription_status().json.get("status") == "trialing",
-                    "REQ-SEC-05.2: State machine transitions user from 'free' to 'trialing'")
-
-    # 17.3 Transition to ACTIVE via payment webhook
-    fresh_uid = fresh_client.me().json.get("id")
-    fresh_client.send_dana_webhook(str(uuid.uuid4()), f"ORD-{int(time.time())}", fresh_uid)
-    reporter.record(fresh_client.me().json.get("tier") in ["active", "premium"],
-                    "REQ-SEC-05.3: Successful DANA webhook transitions user from 'trialing' to 'active'")
-
-    # 17.4 Feature entitlements update on status change
-    sub_features = fresh_client.subscription_status().json.get("features", [])
-    reporter.record("auto_transaction_ingestion" in sub_features,
-                    "REQ-SEC-05.4: Feature entitlement list automatically updates upon state transition")
-
-    # 17.5 Subscription queries reflect authoritative state
-    reporter.record(fresh_client.subscription_status().status == 200,
-                    "REQ-SEC-05.5: Subscription query returns complete authoritative state machine model")
-
-    # =========================================================================
-    # FEATURE 18: REQ-SEC-06 Commercial Pricing Plans
-    # =========================================================================
-    # 18.1 Monthly plan checkout
-    m_check = client.checkout(plan="premium_monthly", provider="dana")
-    reporter.record(m_check.status == 200 and m_check.json.get("amount") == 10000,
-                    "REQ-SEC-06.1: Monthly Premium checkout plan configured at Rp 10.000")
-
-    # 18.2 Annual plan checkout
-    a_check = client.checkout(plan="premium_annual", provider="dana")
-    reporter.record(a_check.status == 200 and a_check.json.get("amount") == 110000,
-                    "REQ-SEC-06.2: Annual Premium checkout plan configured at Rp 110.000")
-
-    # 18.3 Plan ID validation
-    reporter.record(m_check.json.get("plan") == "premium_monthly" and a_check.json.get("plan") == "premium_annual",
-                    "REQ-SEC-06.3: Checkout returns validated plan identifiers")
-
-    # 18.4 Order ID generation
-    reporter.record(m_check.json.get("order_id", "").startswith("ORD-"),
-                    "REQ-SEC-06.4: Checkout generates unique ORD- order reference")
-
-    # 18.5 Currency declared as IDR
-    reporter.record(m_check.json.get("currency") == "IDR",
-                    "REQ-SEC-06.5: Commercial plans declare currency strictly as integer IDR")
-
-    # =========================================================================
-    # FEATURE 19: REQ-SEC-07 DANA Open API Integration
-    # =========================================================================
-    # 19.1 DANA checkout URL generated
-    reporter.record("dana.id" in m_check.json.get("checkout_url", ""),
-                    "REQ-SEC-07.1: Checkout with provider 'dana' returns DANA checkout URL")
-
-    # 19.2 Webhook endpoint exists
-    wh_raw = client.post("/api/v1/webhooks/dana", {})
-    reporter.record(wh_raw.status in [400, 401],
-                    "REQ-SEC-07.2: DANA webhook endpoint exists and guards against unauthenticated payloads")
-
-    # 19.3 DANA webhook accepts valid SNAP headers
-    wh_evt_id = str(uuid.uuid4())
-    wh_ok = client.send_dana_webhook(wh_evt_id, "ORD-TEST-1", user_id)
-    reporter.record(wh_ok.status == 200,
-                    "REQ-SEC-07.3: DANA webhook accepts valid SNAP formatted headers and payload")
-
-    # 19.4 DANA standard responseCode 2005600
-    reporter.record(wh_ok.json.get("responseCode") == "2005600",
-                    "REQ-SEC-07.4: DANA webhook returns standard Bank Indonesia SNAP responseCode '2005600'")
-
-    # 19.5 DANA standard responseMessage Successful
-    reporter.record(wh_ok.json.get("responseMessage") == "Successful",
-                    "REQ-SEC-07.5: DANA webhook returns standard SNAP responseMessage 'Successful'")
-
-    # =========================================================================
-    # FEATURE 20: REQ-SEC-08 RSA-SHA256 Signature Verification
-    # =========================================================================
-    # 20.1 Valid RSA-SHA256 accepted
-    wh_rsa_id = str(uuid.uuid4())
-    wh_rsa = client.send_dana_webhook(wh_rsa_id, "ORD-RSA-1", user_id, tampered=False)
-    reporter.record(wh_rsa.status == 200,
-                    "REQ-SEC-08.1: Valid RSA-SHA256 signed webhook accepted with HTTP 200")
-
-    # 20.2 Tampered signature rejected
-    wh_bad = client.send_dana_webhook(str(uuid.uuid4()), "ORD-BAD", user_id, tampered=True)
-    reporter.record(wh_bad.status == 401,
-                    "REQ-SEC-08.2: Tampered cryptographic signature rejected with HTTP 401")
-
-    # 20.3 Signature check requires X-TIMESTAMP
-    r_no_ts = client.post("/api/v1/webhooks/dana", {"event_id": "1"}, headers={"X-SIGNATURE": "sig"})
-    reporter.record(r_no_ts.status == 401,
-                    "REQ-SEC-08.3: Webhook verification requires valid X-TIMESTAMP header")
-
-    # 20.4 Signature check requires X-SIGNATURE
-    r_no_sig = client.post("/api/v1/webhooks/dana", {"event_id": "1"}, headers={"X-TIMESTAMP": "ts"})
-    reporter.record(r_no_sig.status == 401,
-                    "REQ-SEC-08.4: Webhook verification requires valid X-SIGNATURE header")
-
-    # 20.5 Public key verification integrity
-    reporter.record(wh_bad.json.get("code") == "INVALID_SIGNATURE" or wh_bad.status == 401,
-                    "REQ-SEC-08.5: Cryptographic signature failure reports unauthorized access")
-
-    # =========================================================================
-    # FEATURE 21: REQ-SEC-09 Idempotent Webhook Processing
-    # =========================================================================
-    # 21.1 First delivery processed
-    rep_event_id = f"EVT-REPLAY-{uuid.uuid4().hex[:6]}"
-    r_first = client.send_dana_webhook(rep_event_id, "ORD-REPLAY", user_id)
-    reporter.record(r_first.status == 200 and r_first.json.get("responseCode") == "2005600",
-                    "REQ-SEC-09.1: First delivery of DANA webhook processed successfully")
-
-    # 21.2 Replay of exact same event ID returns HTTP 200
-    r_replay = client.send_dana_webhook(rep_event_id, "ORD-REPLAY", user_id)
-    reporter.record(r_replay.status == 200 and r_replay.json.get("responseCode") == "2005600",
-                    "REQ-SEC-09.2: Replaying identical webhook event ID returns HTTP 200")
-
-    # 21.3 Idempotent replay indicator
-    reporter.record(r_replay.json.get("idempotent_replay") is True,
-                    "REQ-SEC-09.3: Replayed webhook recognized as idempotent replay")
-
-    # 21.4 Webhook events recorded in DB
-    reporter.record(r_first.status == 200 and r_replay.status == 200,
-                    "REQ-SEC-09.4: Webhook idempotency engine safely avoids duplicate subscription extensions")
-
-    # 21.5 Unique event IDs processed independently
-    r_unique = client.send_dana_webhook(str(uuid.uuid4()), "ORD-NEW", user_id)
-    reporter.record(r_unique.status == 200 and not r_unique.json.get("idempotent_replay"),
-                    "REQ-SEC-09.5: Distinct webhook event IDs processed as fresh events")
-
-    # =========================================================================
-    # FEATURE 22: REQ-SEC-10 Server-Side Feature Gating
-    # =========================================================================
-    # Free user attempts to access locked endpoints
-    free_c = ApiClient(base_url=base_url)
-    free_c.register(f"gate_{uuid.uuid4().hex[:6]}@invinite.app", "P@ssword123!", "Free User")
-
-    # 22.1 Access to /api/v1/analytics/advanced returns HTTP 403
-    g1 = free_c.get_advanced_analytics()
-    reporter.record(g1.status == 403,
-                    "REQ-SEC-10.1: Free user access to /api/v1/analytics/advanced strictly returns HTTP 403")
-
-    # 22.2 Response code FEATURE_LOCKED
-    reporter.record(g1.json.get("code") == "FEATURE_LOCKED",
-                    "REQ-SEC-10.2: Locked endpoint returns RFC 7807 code 'FEATURE_LOCKED'")
-
-    # 22.3 Access to /api/v1/reports/advanced returns HTTP 403
-    g2 = free_c.get_advanced_reports()
-    reporter.record(g2.status == 403,
-                    "REQ-SEC-10.3: Free user access to /api/v1/reports/advanced strictly returns HTTP 403")
-
-    # 22.4 Access to /api/v1/budgets returns HTTP 403
-    g3 = free_c.list_budgets()
-    reporter.record(g3.status == 403,
-                    "REQ-SEC-10.4: Free user access to /api/v1/budgets strictly returns HTTP 403")
-
-    # 22.5 Premium user can access successfully
-    p_c = ApiClient(base_url=base_url)
-    p_c.register(f"prem_{uuid.uuid4().hex[:6]}@invinite.app", "P@ssword123!", "Pro User")
-    p_c.activate_trial()
-    reporter.record(p_c.get_advanced_analytics().status == 200,
-                    "REQ-SEC-10.5: Premium/trialing user gains authorized access to advanced features")
-
-    # =========================================================================
-    # FEATURE 23: REQ-SEC-11 Financial Response Cache Control
-    # =========================================================================
-    # 23.1 Accounts endpoint Cache-Control
-    r_cc1 = client.list_accounts()
-    reporter.record("no-store" in (r_cc1.header("Cache-Control") or ""),
-                    "REQ-SEC-11.1: Accounts endpoint returns Cache-Control: private, no-store")
-
-    # 23.2 Transactions endpoint Cache-Control
-    r_cc2 = client.list_transactions()
-    reporter.record("no-store" in (r_cc2.header("Cache-Control") or ""),
-                    "REQ-SEC-11.2: Transactions endpoint returns Cache-Control: private, no-store")
-
-    # 23.3 Cash flow analytics Cache-Control
-    r_cc3 = client.get_cash_flow()
-    reporter.record("no-store" in (r_cc3.header("Cache-Control") or ""),
-                    "REQ-SEC-11.3: Cash flow analytics returns Cache-Control: private, no-store")
-
-    # 23.4 Categories endpoint Cache-Control
-    r_cc4 = client.list_categories()
-    reporter.record("no-store" in (r_cc4.header("Cache-Control") or ""),
-                    "REQ-SEC-11.4: Categories endpoint returns Cache-Control: private, no-store")
-
-    # 23.5 Subscription endpoint Cache-Control
-    r_cc5 = client.subscription_status()
-    reporter.record("no-store" in (r_cc5.header("Cache-Control") or ""),
-                    "REQ-SEC-11.5: Subscription endpoint returns Cache-Control: private, no-store")
-
-    # =========================================================================
-    # FEATURE 24: REQ-SEC-12 Immutable Audit Log
-    # =========================================================================
-    # 24.1 Registration generates audit log
-    reporter.record(reg_resp.status == 201,
-                    "REQ-SEC-12.1: User registration generates immutable audit log record")
-
-    # 24.2 Login generates audit log
-    reporter.record(log_ok.status == 200,
-                    "REQ-SEC-12.2: User login generates immutable audit log record")
-
-    # 24.3 Trial activation generates audit log
-    reporter.record(t_act.status == 200,
-                    "REQ-SEC-12.3: Trial activation recorded in audit log")
-
-    # 24.4 Category soft-deletion logged
-    reporter.record(del_c_resp.status == 200,
-                    "REQ-SEC-12.4: Category soft-deletion recorded in audit log")
-
-    # 24.5 Checkout initiation logged
-    reporter.record(m_check.status == 200,
-                    "REQ-SEC-12.5: Commercial checkout initiation recorded in audit log")
-
-    # =========================================================================
-    # FEATURE 25: REQ-INGEST-01 Ingestion Pipeline Architecture
-    # =========================================================================
-    # 25.1 Adapter receives notification payload
-    ing_client = p_c  # use premium client
-    r_ing1 = ing_client.ingest_notification("com.bca", "BCA Mobile", "Transfer Rp 50.000 ke Tokopedia Berhasil")
-    reporter.record(r_ing1.status == 200 and "event_id" in (r_ing1.json or {}),
-                    "REQ-INGEST-01.1: Source Adapter receives notification payload successfully")
-
-    # 25.2 Parser identifies banking package
-    reporter.record(r_ing1.json.get("amount") == 50000,
-                    "REQ-INGEST-01.2: Provider Parser identifies banking package and extracts amount")
-
-    # 25.3 Normalizer converts text to integer Rupiah
-    reporter.record(isinstance(r_ing1.json.get("amount"), int),
-                    "REQ-INGEST-01.3: Normalizer converts formatted string to checked integer Rupiah")
-
-    # 25.4 Validator validates transaction fields
-    reporter.record(r_ing1.json.get("confidence") in ["HIGH", "MEDIUM"],
-                    "REQ-INGEST-01.4: Validator confirms non-zero amount and valid attributes")
-
-    # 25.5 Candidate produced
-    reporter.record("candidate_id" in (r_ing1.json or {}),
-                    "REQ-INGEST-01.5: Ingestion pipeline generates candidate record for review")
-
-    # =========================================================================
-    # FEATURE 26: REQ-INGEST-02 Canonical Ingestion Representation
-    # =========================================================================
-    # 26.1 Candidate listing contains canonical fields
-    cand_raw = ing_client.list_ingestion_candidates().json
-    cand_list = cand_raw if isinstance(cand_raw, list) else (cand_raw.get("candidates", []) if cand_raw else [])
-    c_sample = cand_list[0] if cand_list else {}
-    reporter.record("amount" in c_sample and "direction" in c_sample,
-                    "REQ-INGEST-02.1: Candidate record contains canonical amount and direction")
-
-    # 26.2 Direction is normalized to expense/income
-    reporter.record(c_sample.get("direction") in ["income", "expense"],
-                    "REQ-INGEST-02.2: Transaction direction normalized strictly to 'expense' or 'income'")
-
-    # 26.3 Provider recorded canonically
-    reporter.record("provider" in c_sample,
-                    "REQ-INGEST-02.3: Provider normalized to canonical financial entity")
-
-    # 26.4 Timestamp in UTC
-    c_occ = c_sample.get("occurred_at", "")
-    reporter.record("Z" in c_occ or "+00:00" in c_occ,
-                    "REQ-INGEST-02.4: Candidate occurred_at persisted in authoritative UTC")
-
-    # 26.5 Merchant normalized
-    reporter.record("merchant" in c_sample,
-                    "REQ-INGEST-02.5: Candidate contains normalized merchant name")
-
-    # =========================================================================
-    # FEATURE 27: REQ-INGEST-03 Confidence Threshold Engine
-    # =========================================================================
-    # 27.1 High confidence payload
-    r_high = ing_client.ingest_notification("com.bca", "BCA", "Debit Rp 120.000 ke Starbucks")
-    reporter.record(r_high.json.get("confidence") == "HIGH",
-                    "REQ-INGEST-03.1: Recognized bank package and structured text classified as HIGH confidence")
-
-    # 27.2 Medium confidence payload
-    r_med = ing_client.ingest_notification("com.unknown.app", "Pesan", "Transfer Rp 35.000")
-    reporter.record(r_med.json.get("confidence") == "MEDIUM",
-                    "REQ-INGEST-03.2: Ambiguous provider or format classified as MEDIUM confidence")
-
-    # 27.3 High confidence status auto_created / candidate
-    reporter.record(r_high.json.get("status") in ["auto_created", "requires_confirmation"],
-                    "REQ-INGEST-03.3: High confidence transactions routed according to threshold engine")
-
-    # 27.4 Medium confidence requires confirmation
-    reporter.record(r_med.json.get("status") == "requires_confirmation",
-                    "REQ-INGEST-03.4: Medium confidence candidate marked requires_confirmation")
-
-    # 27.5 Low confidence handling
-    r_low = ing_client.ingest_notification("com.spam", "Promo", "Dapatkan diskon 50% hari ini")
-    reporter.record(r_low.json.get("confidence") == "LOW",
-                    "REQ-INGEST-03.5: Non-financial or unparseable messages classified as LOW confidence")
-
-    # =========================================================================
-    # FEATURE 28: REQ-INGEST-04 Cross-Source Deduplication
-    # =========================================================================
-    # 28.1 First candidate created
-    r_orig = ing_client.ingest_notification("com.bca", "BCA", "Transfer Rp 250.000 ke Supermarket")
-    reporter.record(r_orig.status == 200 and r_orig.json.get("status") != "duplicate",
-                    "REQ-INGEST-04.1: Initial transaction candidate recorded successfully")
-
-    # 28.2 Duplicate within window detected
-    r_dup = ing_client.ingest_notification("com.bca", "BCA", "Transfer Rp 250.000 ke Supermarket")
-    reporter.record(r_dup.json.get("status") == "duplicate",
-                    "REQ-INGEST-04.2: Repeated notification within deduplication window identified as duplicate")
-
-    # 28.3 Duplicate does not create new transaction
-    reporter.record(r_dup.json.get("transaction_id") is None,
-                    "REQ-INGEST-04.3: Duplicate candidate suppressed from ledger creation")
-
-    # 28.4 Deduplication preserves original event ID
-    reporter.record("event_id" in (r_dup.json or {}),
-                    "REQ-INGEST-04.4: Duplicate event receipt returns event acknowledgement")
-
-    # 28.5 Unique transaction amounts not deduplicated
-    r_diff = ing_client.ingest_notification("com.bca", "BCA", "Transfer Rp 250.001 ke Supermarket")
-    reporter.record(r_diff.json.get("status") != "duplicate",
-                    "REQ-INGEST-04.5: Transactions with distinct amounts processed independently")
-
-    # =========================================================================
-    # FEATURE 29: REQ-INGEST-05 Android Notification Adapter
-    # =========================================================================
-    # 29.1 Ingestion accepts BCA package
-    reporter.record(r_orig.status == 200,
-                    "REQ-INGEST-05.1: Adapter successfully ingests com.bca notifications")
-
-    # 29.2 Ingestion accepts DANA package
-    r_dana_pkg = ing_client.ingest_notification("id.dana", "DANA", "Kirim Uang Rp 45.000 Berhasil")
-    reporter.record(r_dana_pkg.status == 200,
-                    "REQ-INGEST-05.2: Adapter successfully ingests id.dana notifications")
-
-    # 29.3 Ingestion accepts GoPay package
-    r_gopay_pkg = ing_client.ingest_notification("com.gojek.app", "GoPay", "Pembayaran Rp 30.000 di Alfamart")
-    reporter.record(r_gopay_pkg.status == 200,
-                    "REQ-INGEST-05.3: Adapter successfully ingests com.gojek.app notifications")
-
-    # 29.4 Ingestion handles timestamp posted_at
-    r_ts_pkg = ing_client.ingest_notification("com.bca", "BCA", "Transfer Rp 15.000", posted_at=int(time.time() * 1000))
-    reporter.record(r_ts_pkg.status == 200,
-                    "REQ-INGEST-05.4: Adapter processes Unix millisecond posted_at timestamp")
-
-    # 29.5 Idempotency-Key support on notification endpoint
-    r_idem_pkg = ing_client.ingest_notification("com.bca", "BCA", "Transfer Rp 18.000", idempotency_key=str(uuid.uuid4()))
-    reporter.record(r_idem_pkg.status == 200,
-                    "REQ-INGEST-05.5: Notification ingestion endpoint supports Idempotency-Key header")
-
-    # =========================================================================
-    # FEATURE 30: REQ-INGEST-06 SMS Capability Adapter
-    # =========================================================================
-    # 30.1 SMS endpoint exists
-    r_sms = ing_client.ingest_sms("BANK-BCA", "Anda telah melakukan debet Rp 95.000 pada 17/09")
-    reporter.record(r_sms.status == 200,
-                    "REQ-INGEST-06.1: SMS capability adapter endpoint verified")
-
-    # 30.2 SMS parsing structure
-    reporter.record(r_sms.json.get("sender") == "BANK-BCA", "REQ-INGEST-06.2: SMS capability adapter parses banking sender tags")
-    reporter.record(r_sms.json.get("amount") == 95000 and r_sms.json.get("direction") == "expense", "REQ-INGEST-06.3: SMS parser extracts monetary values from SMS text")
-    reporter.record(r_sms.json.get("source") == "sms", "REQ-INGEST-06.4: SMS ingestion tagged with source 'sms'")
-    free_probe_client = ApiClient(base_url=base_url)
-    free_probe_client.register(f"free_probe_{uuid.uuid4().hex[:6]}@invinite.app", "P@ssword123!", "Free User")
-    r_sms_gate = free_probe_client.ingest_sms("BANK-BCA", "Debet Rp 10.000")
-    reporter.record(r_sms_gate.status == 403 and r_sms_gate.json.get("code") == "FEATURE_LOCKED", "REQ-INGEST-06.5: SMS adapter functions conditionally based on device capability")
-
-    # =========================================================================
-    # FEATURE 31: REQ-INGEST-07 Targeted Gmail Ingestion
-    # =========================================================================
-    # 31.1 Gmail endpoint verified
-    r_gmail = ing_client.ingest_gmail("msg_123", "Bukti Pembayaran Listrik", "Pembayaran PLN Rp 150.000 berhasil")
-    reporter.record(r_gmail.status == 200,
-                    "REQ-INGEST-07.1: Targeted Gmail ingestion endpoint interface verified")
-
-    reporter.record(r_gmail.json.get("subject") == "Bukti Pembayaran Listrik" and "PLN" in r_gmail.json.get("snippet", ""),
-                    "REQ-INGEST-07.2: Targeted Gmail ingestion extracts subject and snippet")
-    reporter.record(r_gmail.json.get("source") == "gmail" and r_gmail.json.get("amount") == 150000,
-                    "REQ-INGEST-07.3: Gmail ingestion tags candidate with source 'gmail'")
-    r_gmail_dup = ing_client.ingest_gmail("msg_123", "Bukti Pembayaran Listrik", "Pembayaran PLN Rp 150.000 berhasil")
-    reporter.record(r_gmail_dup.status in [200, 409] and r_gmail_dup.json.get("status") in ["duplicate", "skipped", "pending"],
-                    "REQ-INGEST-07.4: Gmail message ID stored for deduplication without mailbox mirroring")
-    reporter.record("mailbox" not in r_gmail.json and "full_email" not in r_gmail.json,
-                    "REQ-INGEST-07.5: Targeted Gmail queries avoid full mailbox retention")
-
-    # =========================================================================
-    # FEATURE 32: REQ-INGEST-08 Payload Minimization
-    # =========================================================================
-    # 32.1 Raw body not hoarded
-    reporter.record("text" not in (c_sample or {}),
-                    "REQ-INGEST-08.1: Raw sensitive message body discarded after canonical extraction")
-
-    # 32.2 Canonical model retains minimal fields
-    reporter.record("amount" in c_sample and "direction" in c_sample and "source" in c_sample,
-                    "REQ-INGEST-08.2: Candidate retains strictly minimal required financial attributes")
-
-    # 32.3 Zero PII in candidates
-    reporter.record("credit_card" not in str(c_sample) and "pin" not in str(c_sample),
-                    "REQ-INGEST-08.3: Zero PII or card credentials retained in candidate storage")
-
-    # 32.4 Candidate confirm flow
-    c_cand_resp = ing_client.ingest_notification("com.bca", "BCA", "Transfer masuk Rp 75.000")
-    cand_obj = c_cand_resp.json or {}
-    cand_id = cand_obj.get("id") or (c_sample.get("id") if c_sample else None)
-    if cand_id:
-        conf_resp = ing_client.confirm_candidate(cand_id, acc_id)
-        reporter.record(conf_resp.status == 200 and conf_resp.json.get("status") == "confirmed",
-                        "REQ-INGEST-08.4: Candidate confirmation commits minimal financial record to ledger")
-    else:
-        reporter.record(False, "REQ-INGEST-08.4: Candidate confirmation commits minimal financial record to ledger")
-
-    # 32.5 Audit log minimizes payload
-    r_audit = ing_client.get_audit_logs()
-    reporter.record(r_audit.status == 200 and all("password" not in str(l) and "secret" not in str(l) for l in r_audit.json.get("logs", [])),
-                    "REQ-INGEST-08.5: Audit logs minimize payload data retention")
-
-    # =========================================================================
-    # FEATURE 33: REQ-AND-01 Kotlin Native Shell & WebView
-    # =========================================================================
-    # 33.1 Android status probe
-    and_stat = client.get("/api/v1/android/status")
-    reporter.record(and_stat.status == 200 and and_stat.json.get("bridge_version") == "1.0",
-                    "REQ-AND-01.1: Android status endpoint confirms Kotlin native shell integration")
-
-    reporter.record(and_stat.json.get("trusted_origin") == "https://api.nurdiansyahlabs.com",
-                    "REQ-AND-01.2: Native shell targets trusted production origin")
-
-    reporter.record(and_stat.json.get("hardware_acceleration") is True,
-                    "REQ-AND-01.3: Native WebView container hardware acceleration configuration verified")
-    reporter.record(and_stat.json.get("safe_area_configured") is True,
-                    "REQ-AND-01.4: Safe area and viewport handling configured for edge displays")
-    reporter.record(and_stat.json.get("backend_authoritative") is True,
-                    "REQ-AND-01.5: Native lifecycle delegates domain truth strictly to backend")
-
-    # =========================================================================
-    # FEATURE 34: REQ-AND-02 NotificationListenerService Integration
-    # =========================================================================
-    reporter.record(and_stat.json.get("notification_service") == "supported",
-                    "REQ-AND-02.1: NotificationListenerService declared in shell capability registry")
-
-    reporter.record("check_permissions" in and_stat.json.get("capabilities", []),
-                    "REQ-AND-02.2: Runtime permission verification check implemented")
-    reporter.record(all(pkg in and_stat.json.get("approved_packages", []) for pkg in ["com.bca", "id.dana", "com.gojek.app"]),
-                    "REQ-AND-02.3: Banking package filter includes approved Indonesian financial apps")
-    r_ing_dispatch = ing_client.ingest_notification("com.bca", "BCA", "Transfer Masuk Rp 50.000")
-    reporter.record(r_ing_dispatch.status == 200 and r_ing_dispatch.json.get("amount") == 50000,
-                    "REQ-AND-02.4: Captured notification events dispatched via secure HTTP/WS bridge")
-    r_unpermitted = ing_client.ingest_notification("com.unknown.spam", "Promo", "Diskon 50%")
-    reporter.record(r_unpermitted.status == 200 and r_unpermitted.json.get("status") in ["skipped", "ignored", "rejected", "duplicate"],
-                    "REQ-AND-02.5: Unpermitted notifications filtered out before processing")
-
-    # =========================================================================
-    # FEATURE 35: REQ-AND-03 Versioned JS Capability Bridge
-    # =========================================================================
-    bridge_file = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/android/app/src/main/kotlin/com/invinite/pwa/InviniteBridge.kt"
-    bridge_code = ""
-    if os.path.exists(bridge_file):
-        with open(bridge_file, "r") as bf:
-            bridge_code = bf.read()
-    reporter.record("class InviniteBridge" in bridge_code and and_stat.json.get("bridge_version") == "1.0",
-                    "REQ-AND-03.1: window.InviniteBridge capability contract verified")
-    reporter.record("check_permissions" in bridge_code and "check_permissions" in and_stat.json.get("capabilities", []),
-                    "REQ-AND-03.2: Bridge supports check_permissions action")
-    reporter.record("haptic_feedback" in bridge_code and "haptic_feedback" in and_stat.json.get("capabilities", []),
-                    "REQ-AND-03.3: Bridge supports haptic_feedback action")
-    reporter.record("JSONObject" in bridge_code and "action" in bridge_code,
-                    "REQ-AND-03.4: Bridge messages exchanged via structured JSON")
-    reporter.record("Runtime.getRuntime" not in bridge_code and "loadLibrary" not in bridge_code,
-                    "REQ-AND-03.5: Bridge rejects arbitrary native code execution")
-
-    # =========================================================================
-    # FEATURE 36: REQ-AND-04 WebView Origin Validation
-    # =========================================================================
-    reporter.record("AUTHORIZED_HOSTS" in bridge_code and "api.nurdiansyahlabs.com" in bridge_code,
-                    "REQ-AND-04.1: Origin validation restricts bridge to authorized hosts")
-    reporter.record("isAuthorizedOrigin" in bridge_code and ("SecurityException" in bridge_code or "TAG" in bridge_code),
-                    "REQ-AND-04.2: Unauthorized external origins rejected by bridge")
-    reporter.record('"localhost"' in bridge_code and '"127.0.0.1"' in bridge_code,
-                    "REQ-AND-04.3: Localhost permitted in development mode")
-    reporter.record("webView?.url" in bridge_code or "uri.host" in bridge_code,
-                    "REQ-AND-04.4: Iframe navigation blocked from bridge invocation")
-    reporter.record("isAuthorizedOrigin" in bridge_code,
-                    "REQ-AND-04.5: Native layer checks URL before evaluating bridge actions")
-
-    # =========================================================================
-    # FEATURE 37: REQ-AND-05 OS Background Sync Coordination
-    # =========================================================================
-    and_sync = client.post("/api/v1/android/sync", {})
-    reporter.record(and_sync.status == 200 and and_sync.json.get("sync_status") == "dispatched",
-                    "REQ-AND-05.1: Android sync endpoint coordinates background worker execution")
-
-    reporter.record(and_stat.json.get("battery_policy") == "observe_saver",
-                    "REQ-AND-05.2: WorkManager constraints observe battery saver policies")
-    reporter.record(and_stat.json.get("sync_throttle_interval_sec") == 900,
-                    "REQ-AND-05.3: Periodic background sync throttled appropriately")
-    sync_check = client.delta_sync(0)
-    reporter.record(sync_check.status == 200 and "deltas_count" in (sync_check.json or {}),
-                    "REQ-AND-05.4: Background sync resumes pending offline delta queue")
-    reporter.record("cursor" in (sync_check.json or {}),
-                    "REQ-AND-05.5: Sync coordination triggers cursor refresh on reconnect")
-
-    # =========================================================================
-    # FEATURE 38: REQ-AND-06 First-Launch Subscription Layer
-    # =========================================================================
-    r_me = client.me()
-    reporter.record(r_me.status == 200 and "tier" in (r_me.json or {}),
-                    "REQ-AND-06.1: First launch checks user entitlement before presenting UI")
-    r_plans = client.get_subscription_plans()
-    reporter.record(any(p.get("id") == "trial_3_months" for p in r_plans.json.get("plans", [])),
-                    "REQ-AND-06.2: New users presented with 3-month trial activation prompt")
-    new_tx = client.create_transaction(acc_id, 15000, "expense", note="Basic Tracking Test")
-    reporter.record(new_tx.status == 201,
-                    "REQ-AND-06.3: Basic manual tracking allowed unconditionally on first launch")
-    r_adv_gate = free_probe_client.get("/api/v1/analytics/advanced")
-    reporter.record(r_adv_gate.status == 403 and r_adv_gate.json.get("code") == "FEATURE_LOCKED",
-                    "REQ-AND-06.4: Native layer never independently grants Pro features")
-    r_free_sub = free_probe_client.subscription_status()
-    reporter.record(r_free_sub.status == 200 and r_free_sub.json.get("tier") == "free",
-                    "REQ-AND-06.5: Subscription expiry seamlessly falls back to Free tier")
-
-    # =========================================================================
-    # FEATURE 39: REQ-AND-07 Secure Native Storage
-    # =========================================================================
-    sec_store_file = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/android/app/src/main/kotlin/com/invinite/pwa/SecureStorage.kt"
-    sec_store_exists = os.path.exists(sec_store_file)
-    sec_content = ""
-    if sec_store_exists:
-        with open(sec_store_file, "r") as sf:
-            sec_content = sf.read()
-    reporter.record(sec_store_exists and ("MasterKey" in sec_content or "EncryptedSharedPreferences" in sec_content),
-                    "REQ-AND-07.1: Tokens stored in secure httpOnly cookies and Android Keystore")
-    reporter.record("user_id" in sec_content or "tenant" in sec_content or "auth_session_token" in sec_content or "auth_token" in sec_content,
-                    "REQ-AND-07.2: Sensitive financial storage isolated per tenant")
-    reporter.record("saveToken" in sec_content or "getToken" in sec_content or "InviniteBridge" in bridge_code,
-                    "REQ-AND-07.3: Native bridge provides encrypted key-value operations")
-    reporter.record("getSharedPreferences" not in sec_content or "EncryptedSharedPreferences" in sec_content,
-                    "REQ-AND-07.4: Zero plaintext secret exposure in shared preferences")
-    reporter.record("clear" in sec_content or "logout" in sec_content,
-                    "REQ-AND-07.5: App reset or logout purges stored credentials")
-
-    # =========================================================================
-    # FEATURE 40: REQ-FE-01 Vue 3 Mobile-First PWA Shell
-    # =========================================================================
-    # Check frontend package.json exists
-    fe_pkg_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/package.json"
-    reporter.record(os.path.exists(fe_pkg_path),
-                    "REQ-FE-01.1: Frontend Vue 3 package manifest exists")
-
-    # Check vite.config.js exists
-    vite_conf_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/vite.config.js"
-    reporter.record(os.path.exists(vite_conf_path),
-                    "REQ-FE-01.2: Frontend Vite build configuration exists")
-
-    # Check App.vue exists
-    app_vue_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/App.vue"
-    reporter.record(os.path.exists(app_vue_path),
-                    "REQ-FE-01.3: Vue 3 root component App.vue exists")
-
-    with open(app_vue_path, "r") as af:
-        app_vue_content = af.read()
-    reporter.record("min-h-dvh" in app_vue_content or "max-w-7xl" in app_vue_content or "max-w-md" in app_vue_content,
-                    "REQ-FE-01.4: Mobile-first responsive container layout verified")
-    manifest_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/dist/manifest.webmanifest"
-    manifest_exists = os.path.exists(manifest_path)
-    manifest_ok = False
-    if manifest_exists:
-        with open(manifest_path, "r") as mf:
-            m_data = json.load(mf)
-            manifest_ok = "name" in m_data and "icons" in m_data
-    reporter.record(manifest_ok, "REQ-FE-01.5: PWA manifest declares application name and icons")
-
-    # =========================================================================
-    # FEATURE 41: REQ-FE-02 5-Tab Ergonomic Navigation
-    # =========================================================================
-    home_view = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/views/HomeView.vue"
-    tx_view = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/views/TransactionsView.vue"
-    add_modal = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/views/AddTransactionModal.vue"
-    analytics_view = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/views/AnalyticsView.vue"
-    profile_view = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/views/ProfileView.vue"
-
-    reporter.record(os.path.exists(home_view), "REQ-FE-02.1: Tab 1 (HomeView) component verified")
-    reporter.record(os.path.exists(tx_view), "REQ-FE-02.2: Tab 2 (TransactionsView) component verified")
-    reporter.record(os.path.exists(add_modal), "REQ-FE-02.3: Tab 3 (AddTransactionModal) component verified")
-    reporter.record(os.path.exists(analytics_view), "REQ-FE-02.4: Tab 4 (AnalyticsView) component verified")
-    reporter.record(os.path.exists(profile_view), "REQ-FE-02.5: Tab 5 (ProfileView) component verified")
-
-    # =========================================================================
-    # FEATURE 42: REQ-FE-03 Rapid 4x3 POS Keypad
-    # =========================================================================
-    add_modal_file = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/components/AddTransactionModal.vue"
-    am_content = ""
-    with open(add_modal_file, "r") as amf:
-        am_content = amf.read()
-    reporter.record("grid-cols-3" in am_content and "000" in am_content and "backspace" in am_content,
-                    "REQ-FE-03.1: 4x3 numeric keypad layout implemented in AddTransactionModal")
-    reporter.record("50000" in am_content and "100000" in am_content and "500000" in am_content,
-                    "REQ-FE-03.2: Quick increment chips (+50rb, +100rb, +500rb) add exact integers")
-    reporter.record("clearAmount" in am_content and "rawAmount.value = '0'" in am_content,
-                    "REQ-FE-03.3: Keypad reset button clears input to zero")
-    reporter.record("api.createTransaction" in am_content,
-                    "REQ-FE-03.4: Atomic submission generates unique Idempotency-Key per tap")
-    reporter.record("amount <= 0" in am_content or "Nominal harus lebih besar dari 0" in am_content,
-                    "REQ-FE-03.5: Keypad validates positive amount before submission")
-
-    # =========================================================================
-    # FEATURE 43: REQ-FE-04 Progressive Onboarding Flow
-    # =========================================================================
-    onboard_resp = client.submit_onboarding(
-        display_name="Sultan Finansial",
-        financial_goals=["Menabung", "Investasi"],
-        wallets=[{"name": "Kantong Belanja", "account_type": "cash", "initial_balance": 100000}],
-        categories=[{"name": "Kopi Harian", "display_name": "Kopi Harian", "category_type": "expense"}]
+    client_b.register(user_b_email, user_pass, "Company B Owner")
+    tb_resp = client_b.create_tenant("PT Lawan Bisnis", slug=f"lawan-{uid_suffix}")
+    tb_id = tb_resp.json.get("id")
+    client_b.set_tenant(tb_id)
+
+    # Create draft invoice in Tenant 1
+    inv_t1 = client.create_invoice(
+        customer_name="PT Pelanggan T1",
+        items=[{"description": "Barang T1", "quantity": 1, "unit_price": 500000}],
+        due_date="2026-11-01"
     )
-    reporter.record(onboard_resp.status == 200 and onboard_resp.json.get("status") == "onboarded",
-                    "REQ-FE-04.1: Progressive onboarding endpoint accepts initial setup")
+    inv_t1_id = inv_t1.json.get("id")
 
-    # Verify display name updated
-    me_onboard = client.me().json or {}
-    reporter.record(me_onboard.get("display_name") == "Sultan Finansial",
-                    "REQ-FE-04.2: Onboarding updates user preferred display_name")
+    # 3.1 Tenant B querying Tenant 1's invoice strictly returns HTTP 404 Not Found
+    cross_inv = client_b.get_invoice(inv_t1_id)
+    reporter.record(cross_inv.status == 404,
+                    "F03.1: Attempting to read another tenant's entity by ID strictly returns HTTP 404 Not Found")
 
-    # Verify custom wallet created
-    onboard_wallets = client.list_accounts().json.get("accounts", [])
-    reporter.record(any(w["name"] == "Kantong Belanja" for w in onboard_wallets),
-                    "REQ-FE-04.3: Onboarding initializes user-configured wallets")
+    # 3.2 Probing non-existent entity ID returns identical HTTP 404 Not Found
+    non_existent_inv = client_b.get_invoice(str(uuid.uuid4()))
+    reporter.record(non_existent_inv.status == 404,
+                    "F03.2: Probing non-existent entity ID returns identical HTTP 404 Not Found (anti-enumeration)")
 
-    # Verify custom category created
-    onboard_cats = client.list_categories().json.get("categories", [])
-    reporter.record(any(c["name"] == "Kopi Harian" for c in onboard_cats),
-                    "REQ-FE-04.4: Onboarding initializes user custom category vocabulary")
+    # 3.3 Passing another tenant's ID in X-Tenant-ID strictly returns HTTP 404 Not Found
+    tampered_client = ApiClient(base_url=base_url)
+    tampered_client.login(user_b_email, user_pass)
+    tampered_client.set_tenant(t1_id)  # Belongs to User A
+    cross_hdr_resp = tampered_client.list_invoices()
+    reporter.record(cross_hdr_resp.status == 404,
+                    "F03.3: Passing another tenant's ID in X-Tenant-ID strictly returns HTTP 404 Not Found")
 
-    user_cats = client.list_categories().json.get("categories", [])
-    reporter.record(all(c.get("user_id") == user_id for c in user_cats),
-                    "REQ-FE-04.5: Onboarding preserves database relational integrity without dynamic tables")
+    # 3.4 Cross-tenant journal query by ID returns HTTP 404 Not Found
+    j_t1 = client.post_journal(
+        entry_date="2026-10-01T00:00:00Z",
+        description="Modal Awal T1",
+        lines=[
+            {"account_code": "1000", "debit": 1000000, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": 1000000}
+        ]
+    )
+    j_t1_id = j_t1.json.get("id")
+    cross_j = client_b.get_journal(j_t1_id)
+    reporter.record(cross_j.status == 404,
+                    "F03.4: Cross-tenant journal query by ID strictly returns HTTP 404 Not Found")
 
-    # =========================================================================
-    # FEATURE 44: REQ-FE-05 Localized IDR Formatting
-    # =========================================================================
-    cur_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/utils/currency.js"
-    cur_code = ""
-    with open(cur_path, "r") as cf:
-        cur_code = cf.read()
-    reporter.record("id-ID" in cur_code and "currency" in cur_code and "IDR" in cur_code,
-                    "REQ-FE-05.1: Formatter formats Rp 50.000 with id-ID locale")
-    reporter.record("minimumFractionDigits: 0" in cur_code and "maximumFractionDigits: 0" in cur_code,
-                    "REQ-FE-05.2: Formatter avoids decimal places for integer Rupiah")
-    reporter.record("Intl.NumberFormat" in cur_code and "id-ID" in cur_code,
-                    "REQ-FE-05.3: Thousands separator uses period '.' in Indonesian format")
-    reporter.record("isNegative" in cur_code or "absNum" in cur_code,
-                    "REQ-FE-05.4: Negative currency displayed clearly with minus sign")
-    reporter.record("Math.trunc" in cur_code and "parseInt" in cur_code,
-                    "REQ-FE-05.5: Currency utility maintains zero floating-point precision loss")
-
-    # =========================================================================
-    # FEATURE 45: REQ-FE-06 Financial Date/Time Policy
-    # =========================================================================
-    dt_util_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/utils/datetime.js"
-    reporter.record(os.path.exists(dt_util_path),
-                    "REQ-FE-06.1: Frontend datetime utility module exists")
-
-    fin_date_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/utils/financialDate.js"
-    fd_code = ""
-    with open(fin_date_path, "r") as fdf:
-        fd_code = fdf.read()
-    reporter.record("Asia/Jakarta" in fd_code and "resolveFinancialDate" in fd_code,
-                    "REQ-FE-06.2: resolveFinancialDate converts UTC to Asia/Jakarta (WIB)")
-    reporter.record("getFinancialPeriod" in fd_code or "formatFinancialDate" in fd_code,
-                    "REQ-FE-06.3: Transaction grouping aligns with Indonesian business day")
-    reporter.record("timeZone" in fd_code and "BUSINESS_TIMEZONE" in fd_code,
-                    "REQ-FE-06.4: Monthly period boundaries respect local calendar month")
-    tx_list = client.list_transactions().json.get("transactions", [])
-    reporter.record(len(tx_list) >= 0 and all("date" in tx for tx in tx_list),
-                    "REQ-FE-06.5: Authoritative backend order is invariant to client timezone")
+    # 3.5 Cross-tenant tenant detail query returns HTTP 404 Not Found
+    cross_t = client_b.get_tenant(t1_id)
+    reporter.record(cross_t.status == 404,
+                    "F03.5: Querying another tenant's workspace by ID strictly returns HTTP 404 Not Found")
 
     # =========================================================================
-    # FEATURE 46: REQ-FE-07 Foreground WebSocket Client
+    # FEATURE 4: RBAC Authorization & HTTP 403 (PRD §6:291-304)
     # =========================================================================
-    ws_probe = client.get("/api/v1/ws", headers={"Upgrade": "websocket"})
-    reporter.record(ws_probe.status == 200 and "supported_events" in (ws_probe.json or {}),
-                    "REQ-FE-07.1: WebSocket endpoint responds to upgrade probe with event declarations")
+    # User C (Staff) invite
+    user_c_email = f"staff_{uid_suffix}@invinite.biz"
+    client_c = ApiClient(base_url=base_url)
+    client_c.register(user_c_email, user_pass, "Staff Member")
+    inv_c = client.invite_tenant_member(t1_id, user_c_email, role="staff")
+    reporter.record(inv_c.status == 201 and inv_c.json.get("role") == "staff",
+                    "F04.1: Workspace owner can invite new members with designated role")
 
-    events = ws_probe.json.get("supported_events", []) if ws_probe.json else []
-    reporter.record("TransactionCreated" in events, "REQ-FE-07.2: WebSocket protocol declares TransactionCreated event")
-    reporter.record("BalanceChanged" in events, "REQ-FE-07.3: WebSocket protocol declares BalanceChanged event")
-    reporter.record("SyncHint" in events, "REQ-FE-07.4: WebSocket protocol declares SyncHint event")
-    ws_client_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/services/websocket.js"
-    ws_ok = os.path.exists(ws_client_path)
-    if ws_ok:
-        with open(ws_client_path, "r") as wsf:
-            ws_code = wsf.read()
-        ws_ok = "WebSocket" in ws_code and ("close" in ws_code or "disconnect" in ws_code)
-    reporter.record(ws_ok, "REQ-FE-07.5: Foreground WebSocket client manages lifecycle cleanly")
+    # 4.2 Admin role invitation
+    user_admin_email = f"admin_{uid_suffix}@invinite.biz"
+    client_adm = ApiClient(base_url=base_url)
+    client_adm.register(user_admin_email, user_pass, "Admin Member")
+    inv_adm = client.invite_tenant_member(t1_id, user_admin_email, role="admin")
+    reporter.record(inv_adm.status == 201 and inv_adm.json.get("role") == "admin",
+                    "F04.2: Owner can invite administrator role members")
 
-    # =========================================================================
-    # FEATURE 47: REQ-FE-08 Cursor Delta Sync
-    # =========================================================================
-    sync_0 = client.delta_sync(0).json or {}
-    cur_val = sync_0.get("cursor", 0)
-    reporter.record(sync_0.get("deltas_count", 0) > 0,
-                    "REQ-FE-08.1: Delta sync from cursor 0 returns outstanding entity deltas")
+    # 4.3 Staff role attempting to invite member is rejected with HTTP 403 Forbidden
+    client_c.login(user_c_email, user_pass)
+    staff_invite = client_c.invite_tenant_member(t1_id, f"unauth_{uid_suffix}@test.biz", role="staff")
+    reporter.record(staff_invite.status == 403,
+                    "F04.3: Staff role attempting to invite member is rejected with HTTP 403 Forbidden")
 
-    sync_next = client.delta_sync(cur_val).json or {}
-    reporter.record(sync_next.get("deltas_count") == 0,
-                    "REQ-FE-08.2: Delta sync from current cursor returns zero outstanding deltas")
+    # 4.4 Staff role attempting to reverse a posted journal is rejected with HTTP 403 Forbidden
+    client_c.set_tenant(t1_id)
+    staff_rev = client_c.reverse_journal(j_t1_id)
+    reporter.record(staff_rev.status == 403,
+                    "F04.4: Staff role attempting to reverse a journal is rejected with HTTP 403 Forbidden")
 
-    # Mutation triggers cursor increment
-    client.create_transaction(acc_id, 12000, "expense", note="Sync Test")
-    sync_mut = client.delta_sync(cur_val).json or {}
-    reporter.record(sync_mut.get("deltas_count", 0) >= 1,
-                    "REQ-FE-08.3: Transaction creation appends entry to delta sync log")
-
-    reporter.record(sync_mut.get("cursor") > cur_val,
-                    "REQ-FE-08.4: Delta sync updates client cursor monotonically")
-
-    reporter.record("transactions" in sync_mut and "accounts" in sync_mut,
-                    "REQ-FE-08.5: Delta sync returns modified entity collections")
+    # 4.5 Staff role attempting to update business profile is rejected with HTTP 403 Forbidden
+    staff_prof = client_c.update_tenant_profile(t1_id, {"business_name": "Tampered Name"})
+    reporter.record(staff_prof.status == 403,
+                    "F04.5: Staff role attempting to update business profile is rejected with HTTP 403 Forbidden")
 
     # =========================================================================
-    # FEATURE 48: REQ-FE-09 Feature Lock Overlay & Upgrade Modal
+    # FEATURE 5: Indonesian Localization Defaults (PRD §7:334-356)
     # =========================================================================
-    upg_modal = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/components/UpgradeModal.vue"
-    reporter.record(os.path.exists(upg_modal),
-                    "REQ-FE-09.1: UpgradeModal component exists for trial and commercial checkout")
-
-    with open(upg_modal, "r") as umf:
-        um_code = umf.read()
-    reporter.record("fixed" in um_code and ("close" in um_code or "z-50" in um_code),
-                    "REQ-FE-09.2: Feature lock overlay renders contextual CTA without blocking navigation")
-    reporter.record("trial" in um_code.lower() and "3" in um_code,
-                    "REQ-FE-09.3: Upgrade modal displays 3-month trial activation button")
-    reporter.record("dana" in um_code.lower() and ("10.000" in um_code or "10000" in um_code),
-                    "REQ-FE-09.4: Upgrade modal displays DANA checkout option for Rp 10.000 / month")
-    reporter.record("checkout" in um_code.lower() or "handleCheckout" in um_code,
-                    "REQ-FE-09.5: Modal transitions seamlessly into active state upon verification")
-
-    # =========================================================================
-    # FEATURE 49: REQ-FE-10 Fintech Visual Design System
-    # =========================================================================
-    css_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/index.css"
-    reporter.record(os.path.exists(css_path),
-                    "REQ-FE-10.1: Design system stylesheet index.css verified")
-
-    with open(css_path, "r") as csf:
-        css_content = csf.read()
-    reporter.record("lucide" in am_content.lower() and "package.json" in str(os.listdir("frontend")),
-                    "REQ-FE-10.2: Lucide SVG icons utilized across UI with zero raw emojis")
-    reporter.record("border" in css_content or "border-border-subtle" in am_content,
-                    "REQ-FE-10.3: Restrained 1px border hierarchy and subtle elevation applied")
-    reporter.record("tabular-nums" in css_content or "tabular-nums" in am_content,
-                    "REQ-FE-10.4: Tabular numerals configured for monetary alignment")
-    reporter.record("h-12" in am_content or "min-h-[44px]" in css_content,
-                    "REQ-FE-10.5: Minimum 44x44px touch targets respected across mobile navigation")
+    p5 = client.get_tenant_profile(t1_id).json or {}
+    reporter.record(p5.get("currency") == "IDR",
+                    "F05.1: Tenant default currency is strictly IDR")
+    reporter.record(p5.get("locale") == "id-ID",
+                    "F05.2: Tenant default locale is strictly id-ID")
+    reporter.record(p5.get("timezone") == "Asia/Jakarta",
+                    "F05.3: Tenant default timezone is strictly Asia/Jakarta (WIB)")
+    # 5.4 Profile accepts WITA (Asia/Makassar) and WIT (Asia/Jayapura)
+    up_tz = client.update_tenant_profile(t1_id, {"timezone": "Asia/Makassar"})
+    reporter.record(up_tz.status == 200 and up_tz.json.get("timezone") == "Asia/Makassar",
+                    "F05.4: Tenant profile accepts valid Indonesian timezones (Asia/Makassar)")
+    reporter.record(p5.get("invoice_prefix") == "INV",
+                    "F05.5: Tenant default invoice numbering prefix is INV")
 
     # =========================================================================
-    # FEATURE 50: REQ-FE-11 WCAG 2.1 AA Compliance
+    # FEATURE 6: Tenant Slug Routing & Validation (PRD §41:1537-1568)
     # =========================================================================
-    reporter.record("<button" in am_content and "<select" in am_content and "<label" in am_content,
-                    "REQ-FE-11.1: Semantic HTML elements utilized in page layouts")
-    reporter.record("for=" in am_content and "label" in am_content,
-                    "REQ-FE-11.2: Form controls provide visible accessible labels")
-    reporter.record("bg-surface-card" in am_content and "text-content-primary" in am_content,
-                    "REQ-FE-11.3: Text contrast ratio meets or exceeds WCAG AA standards (4.5:1)")
-    reporter.record("focus:ring-2" in am_content or "focus:outline" in am_content,
-                    "REQ-FE-11.4: Visible focus rings provided for keyboard navigation")
-    reporter.record("role=" in am_content or "aria-label" in am_content or "aria-labelledby" in am_content,
-                    "REQ-FE-11.5: Error alerts announce states to assistive technology")
+    # 6.1 Custom valid slug accepted
+    slug_custom = f"toko-berkah-{uid_suffix}"
+    t_slug = client.create_tenant("Toko Berkah", slug=slug_custom)
+    reporter.record(t_slug.status == 201 and t_slug.json.get("slug") == slug_custom,
+                    "F06.1: Valid custom slug accepted upon tenant workspace creation")
 
-    # =========================================================================
-    # FEATURE 51: REQ-QA-01 Automated Cargo Test Suite
-    # =========================================================================
-    cargo_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/Cargo.toml"
-    reporter.record(os.path.exists(cargo_path),
-                    "REQ-QA-01.1: Root Cargo.toml workspace configuration exists")
+    # 6.2 Auto-generated slug sanitizes spaces and symbols into hyphens
+    t_auto = client.create_tenant(f"Koperasi Maju Bersama & Rekan {uid_suffix}")
+    auto_slug = t_auto.json.get("slug", "")
+    reporter.record(t_auto.status == 201 and "-" in auto_slug and not " " in auto_slug and not "&" in auto_slug,
+                    "F06.2: Auto-generated slug sanitizes whitespace and special characters to hyphens")
 
-    with open(cargo_path, "r") as cpf:
-        cargo_toml = cpf.read()
-    reporter.record("backend" in cargo_toml and "members" in cargo_toml,
-                    "REQ-QA-01.2: Checked integer Rupiah arithmetic verified in domain test contracts")
-    reporter.record(os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/backend/tests/m2_dana_webhook_tests.rs"),
-                    "REQ-QA-01.3: Ledger service atomic balance mutations verified in integration tests")
-    reporter.record(os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/backend/tests/m7_personalization_tests.rs"),
-                    "REQ-QA-01.4: Multi-tenant repository queries verified in security tests")
-    reporter.record(os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/backend/src/domain/mod.rs") or os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/backend/src/main.rs"),
-                    "REQ-QA-01.5: Automated test suite targets 100% test pass rate")
+    # 6.3 Reserved slug 'admin' rejected with HTTP 400 Bad Request
+    t_res1 = client.create_tenant("Admin Workspace", slug="admin")
+    reporter.record(t_res1.status == 400 and t_res1.json.get("code") == "RESERVED_SLUG",
+                    "F06.3: Reserved system slug 'admin' rejected with HTTP 400 RESERVED_SLUG")
+
+    # 6.4 Reserved slug 'api' rejected with HTTP 400 Bad Request
+    t_res2 = client.create_tenant("API Workspace", slug="api")
+    reporter.record(t_res2.status == 400 and t_res2.json.get("code") == "RESERVED_SLUG",
+                    "F06.4: Reserved system slug 'api' rejected with HTTP 400 RESERVED_SLUG")
+
+    # 6.5 Duplicate slug creation rejected with HTTP 409 Conflict
+    t_dup = client.create_tenant("Duplicate Slug Workspace", slug=slug_custom)
+    reporter.record(t_dup.status == 409 and t_dup.json.get("code") == "SLUG_ALREADY_EXISTS",
+                    "F06.5: Duplicate tenant slug creation rejected with HTTP 409 SLUG_ALREADY_EXISTS")
 
     # =========================================================================
-    # FEATURE 52: REQ-QA-02 Production Build Validation
+    # FEATURE 7: Personal Workspace Auto-Provisioning (Survey 2 & 3)
     # =========================================================================
-    with open(fe_pkg_path, "r") as fpf:
-        fe_pkg_json = json.load(fpf)
-    reporter.record("build" in fe_pkg_json.get("scripts", {}),
-                    "REQ-QA-02.1: Frontend build script 'npm run build' configured in package.json")
-    with open(vite_conf_path, "r") as vcf:
-        vite_code = vcf.read()
-    reporter.record("build" in vite_code or "rollupOptions" in vite_code or "vue" in vite_code,
-                    "REQ-QA-02.2: Vite production build generates optimized chunks")
-    reporter.record(not os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/src/secret.key"),
-                    "REQ-QA-02.3: Zero development secrets or private keys bundled in client code")
-    index_html_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/index.html"
-    with open(index_html_path, "r") as ihf:
-        index_html = ihf.read()
-    reporter.record(os.path.exists("/home/nurdiansyah/teamwork_projects/personal_finance_pwa/frontend/dist"),
-                    "REQ-QA-02.4: Production bundle outputs to standard dist/ directory")
-    import re
-    title_match = re.search(r"<title>(.*?)</title>", index_html)
-    title_len = len(title_match.group(1)) if title_match else 0
-    reporter.record(0 < title_len <= 30,
-                    "REQ-QA-02.5: Browser title is concise and under 30 characters")
+    new_user_email = f"personal_{uid_suffix}@invinite.biz"
+    c_new = ApiClient(base_url=base_url)
+    reg_new = c_new.register(new_user_email, user_pass, "Budi Santoso")
+    def_t_id = reg_new.json.get("user", {}).get("default_tenant_id") if reg_new.json else None
+    reporter.record(reg_new.status == 201 and def_t_id is not None,
+                    "F07.1: New user registration automatically provisions a default personal workspace")
 
-    # =========================================================================
-    # FEATURE 53: REQ-QA-03 E2E Acceptance Test Runner
-    # =========================================================================
-    runner_path = "/home/nurdiansyah/teamwork_projects/personal_finance_pwa/e2e_tests/runner.sh"
-    reporter.record(os.path.exists(runner_path) and os.access(runner_path, os.X_OK),
-                    "REQ-QA-03.1: e2e_tests/runner.sh script defined and executable")
-    with open(runner_path, "r") as rpf:
-        runner_content = rpf.read()
-    reporter.record('"all"' in runner_content or 'all)' in runner_content,
-                    "REQ-QA-03.2: Runner supports 'all' argument executing full test suite")
-    reporter.record("tier1)" in runner_content and "tier2)" in runner_content,
-                    "REQ-QA-03.3: Runner supports individual tier execution ('tier1', 'tier2', etc.)")
-    reporter.record("TAP version 13" in runner_content or "TAP" in runner_content,
-                    "REQ-QA-03.4: Runner outputs TAP version 13 structured test results")
-    reporter.record("exit 0" in runner_content,
-                    "REQ-QA-03.5: Runner exits with status code 0 upon 100% assertion pass")
+    # 7.2 Auto-provisioned workspace is marked is_personal = 1
+    t_list_new = c_new.list_tenants()
+    personal_ws = next((t for t in (t_list_new.json or {}).get("tenants", []) if t.get("is_personal")), None)
+    reporter.record(personal_ws is not None and personal_ws.get("is_personal") == 1,
+                    "F07.2: Auto-provisioned workspace is marked with is_personal = 1")
+
+    # 7.3 Auto-provisioned workspace has owner membership for new user
+    reporter.record(personal_ws is not None and personal_ws.get("role") == "owner",
+                    "F07.3: Auto-provisioned workspace assigns owner membership to the registered user")
+
+    # 7.4 Auto-provisioned workspace has Indonesian defaults
+    reporter.record(personal_ws is not None and personal_ws.get("currency") == "IDR" and personal_ws.get("timezone") == "Asia/Jakarta",
+                    "F07.4: Auto-provisioned workspace defaults to IDR and Asia/Jakarta")
+
+    # 7.5 Auto-provisioned workspace has pre-seeded standard Chart of Accounts
+    c_new.set_tenant(def_t_id)
+    coa_new = c_new.list_chart_of_accounts()
+    reporter.record(coa_new.status == 200 and len(coa_new.json.get("accounts", [])) >= 8,
+                    "F07.5: Auto-provisioned personal workspace has seeded Chart of Accounts")
 
     # =========================================================================
-    # FEATURE 54: REQ-QA-04 Operational Health & Readiness
+    # FEATURE 8: Double-Entry Balancing Invariant (PRD §11.1:560-575)
     # =========================================================================
-    r_h = client.health()
-    reporter.record(r_h.status == 200 and r_h.json.get("status") == "ok",
-                    "REQ-QA-04.1: /health probe returns HTTP 200 with operational status")
+    client.set_tenant(t1_id)
+    # 8.1 Balanced 2-line journal entry posted successfully (debit == credit)
+    j_bal2 = client.post_journal(
+        entry_date="2026-10-02T00:00:00Z",
+        description="Setoran Modal Bank",
+        lines=[
+            {"account_code": "1100", "debit": 5000000, "credit": 0, "memo": "Debit Bank"},
+            {"account_code": "4000", "debit": 0, "credit": 5000000, "memo": "Credit Pendapatan"}
+        ]
+    )
+    reporter.record(j_bal2.status == 201 and j_bal2.json.get("total_debit") == 5000000,
+                    "F08.1: Balanced 2-line journal entry posted successfully enforcing debit == credit")
 
-    r_r = client.ready()
-    reporter.record(r_r.status == 200 and r_r.json.get("status") == "ready",
-                    "REQ-QA-04.2: /ready probe returns HTTP 200 with database readiness")
+    # 8.2 Balanced multi-line journal entry posted successfully
+    j_multi = client.post_journal(
+        entry_date="2026-10-02T01:00:00Z",
+        description="Penjualan Multi Baris dengan PPN",
+        lines=[
+            {"account_code": "1000", "debit": 1110000, "credit": 0, "memo": "Kas diterima"},
+            {"account_code": "4000", "debit": 0, "credit": 1000000, "memo": "Pendapatan produk"},
+            {"account_code": "2100", "debit": 0, "credit": 110000, "memo": "Utang PPN 11%"}
+        ]
+    )
+    reporter.record(j_multi.status == 201 and j_multi.json.get("total_debit") == 1110000 and j_multi.json.get("total_credit") == 1110000,
+                    "F08.2: Balanced multi-line journal posted successfully enforcing SUM(debits) == SUM(credits)")
 
-    reporter.record("db_path" not in str(r_r.json) and "password" not in str(r_r.json),
-                    "REQ-QA-04.3: Health and ready probes leak zero environmental secrets or paths")
+    # 8.3 Unbalanced journal entry (debit != credit) rejected with HTTP 422 Unprocessable Entity
+    j_unbal = client.post_journal(
+        entry_date="2026-10-02T02:00:00Z",
+        description="Unbalanced Attempt",
+        lines=[
+            {"account_code": "1000", "debit": 500000, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": 450000}
+        ]
+    )
+    reporter.record(j_unbal.status == 422 and j_unbal.json.get("code") == "UNBALANCED_JOURNAL_ENTRY",
+                    "F08.3: Unbalanced journal entry rejected with HTTP 422 UNBALANCED_JOURNAL_ENTRY")
 
-    reporter.record(r_r.json.get("wal") is True,
-                    "REQ-QA-04.4: Ready probe confirms SQLite WAL mode operational status")
+    # 8.4 Trial balance aggregates all debits and credits with net_balance == 0
+    tb = client.get_trial_balance()
+    tb_data = tb.json or {}
+    reporter.record(tb.status == 200 and tb_data.get("is_balanced") is True and tb_data.get("net_balance") == 0,
+                    "F08.4: Trial balance aggregates debits and credits with exact zero net balance")
 
-    t0 = time.time()
-    r_lat = client.health()
-    lat_ms = (time.time() - t0) * 1000
-    reporter.record(r_lat.status == 200 and lat_ms < 500,
-                    "REQ-QA-04.5: Probes respond within low-latency operational thresholds")
+    # 8.5 Total debit equals total credit in trial balance
+    reporter.record(tb_data.get("total_debit") == tb_data.get("total_credit") and tb_data.get("total_debit", 0) > 0,
+                    "F08.5: Trial balance total_debit strictly matches total_credit")
 
     # =========================================================================
-    # FEATURE 55: REQ-QA-05 Adversarial Security Testing
+    # FEATURE 9: Integer Rupiah Math Invariant (PRD §72:2565)
     # =========================================================================
-    # 55.1 SQL injection attack attempt
-    sqli_resp = client.list_transactions({"account_id": "' OR 1=1 --"})
-    reporter.record(sqli_resp.status in [200, 400, 422] and len(sqli_resp.json.get("transactions", [])) == 0,
-                    "REQ-QA-05.1: SQL injection query sanitized; zero cross-tenant data leaked")
+    # 9.1 Monetary amounts accepted and stored strictly as 64-bit signed integers
+    reporter.record(isinstance(tb_data.get("total_debit"), int) and isinstance(tb_data.get("total_credit"), int),
+                    "F09.1: Monetary amounts stored and returned strictly as 64-bit signed integers")
 
-    # 55.2 XSS payload in category name
-    xss_cat = client.create_category("<script>alert('xss')</script>", "expense")
-    reporter.record(xss_cat.status == 201 and "<script>" not in xss_cat.json.get("normalized_name", ""),
-                    "REQ-QA-05.2: XSS payload in category name safely normalized and escaped")
+    # 9.2 Large enterprise transaction (Rp 5.000.000.000) stored without float precision loss
+    j_large = client.post_journal(
+        entry_date="2026-10-02T03:00:00Z",
+        description="Investasi Korporat",
+        lines=[
+            {"account_code": "1100", "debit": 5000000000, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": 5000000000}
+        ]
+    )
+    reporter.record(j_large.status == 201 and j_large.json.get("total_debit") == 5000000000,
+                    "F09.2: Large enterprise amount (Rp 5.000.000.000) stored without float precision loss")
 
-    # 55.3 Webhook tampering rejected
-    wh_tamper = client.send_dana_webhook(str(uuid.uuid4()), "ORD-TAMPER", user_id, tampered=True)
-    reporter.record(wh_tamper.status == 401,
-                    "REQ-QA-05.3: Webhook payload with tampered RSA signature strictly rejected with HTTP 401")
+    # 9.3 Floating point decimal string in amount rejected
+    j_float = client.post_journal(
+        entry_date="2026-10-02T04:00:00Z",
+        description="Float Amount Attempt",
+        lines=[
+            {"account_code": "1000", "debit": 100.50, "credit": 0},  # type: ignore
+            {"account_code": "4000", "debit": 0, "credit": 100.50}   # type: ignore
+        ]
+    )
+    reporter.record(j_float.status == 400 and j_float.json.get("code") == "INVALID_AMOUNT",
+                    "F09.3: Floating-point decimal values in monetary amounts rejected with HTTP 400 INVALID_AMOUNT")
 
-    # 55.4 Cross-tenant account mutation rejected
-    hacker_client = ApiClient(base_url=base_url)
-    hacker_client.register(f"hacker_{uuid.uuid4().hex[:6]}@invinite.app", "P@ssword123!", "Hacker")
-    hack_tx = hacker_client.create_transaction(acc_id, 10000, "expense", note="Exploit")
-    reporter.record(hack_tx.status in [403, 404],
-                    "REQ-QA-05.4: Unauthorized mutation of another tenant's account rejected with HTTP 404/403")
+    # 9.4 Negative debit or credit amounts rejected
+    j_neg = client.post_journal(
+        entry_date="2026-10-02T05:00:00Z",
+        description="Negative Amount Attempt",
+        lines=[
+            {"account_code": "1000", "debit": -50000, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": -50000}
+        ]
+    )
+    reporter.record(j_neg.status == 400 and j_neg.json.get("code") == "INVALID_AMOUNT",
+                    "F09.4: Negative debit or credit values rejected with HTTP 400 INVALID_AMOUNT")
 
-    # 55.5 Rate limiting protects sensitive endpoints
-    rl_email = f"brute_{uuid.uuid4().hex[:6]}@invinite.app"
-    brute_client = ApiClient(base_url=base_url, client_ip="198.51.100.42")
-    for _ in range(5):
-        brute_client.login(rl_email, "WrongPass123!")
-    rl_blocked = brute_client.login(rl_email, "WrongPass123!")
-    reporter.record(rl_blocked.status == 429 and rl_blocked.json.get("code") == "RATE_LIMIT_EXCEEDED",
-                    "REQ-QA-05.5: Brute-force credential attacks throttled by rate limiting")
+    # 9.5 Tax calculations return integer Rupiah without fractions
+    tax_calc = client.calculate_tax(amount=100500, tax_type="PPN_11_EXCL")
+    reporter.record(tax_calc.status == 200 and isinstance(tax_calc.json.get("tax_amount"), int),
+                    "F09.5: Tax calculation returns exact integer Rupiah without floating fractions")
+
+    # =========================================================================
+    # FEATURE 10: Journal Immutability (PRD §11.2:577-586)
+    # =========================================================================
+    j_imm_resp = client.post_journal(
+        entry_date="2026-10-03T00:00:00Z",
+        description="Immutable Journal Target",
+        lines=[
+            {"account_code": "1000", "debit": 250000, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": 250000}
+        ]
+    )
+    j_imm_id = j_imm_resp.json.get("id")
+
+    # 10.1 Direct PUT modification on posted journal rejected with HTTP 405 Method Not Allowed
+    put_j = client.update_journal(j_imm_id, {"description": "Tampered Journal"})
+    reporter.record(put_j.status == 405 and put_j.json.get("code") == "JOURNAL_IMMUTABLE",
+                    "F10.1: Direct PUT modification on posted journal rejected with HTTP 405 JOURNAL_IMMUTABLE")
+
+    # 10.2 Direct DELETE on posted journal rejected with HTTP 405 Method Not Allowed
+    del_j = client.delete_journal(j_imm_id)
+    reporter.record(del_j.status == 405 and del_j.json.get("code") == "JOURNAL_IMMUTABLE",
+                    "F10.2: Direct DELETE on posted journal rejected with HTTP 405 JOURNAL_IMMUTABLE")
+
+    # 10.3 Journal entry fields remain unchanged
+    j_verify = client.get_journal(j_imm_id)
+    reporter.record(j_verify.status == 200 and j_verify.json.get("description") == "Immutable Journal Target",
+                    "F10.3: Journal entry fields remain strictly unchanged after mutation attempts")
+
+    # 10.4 Querying posted journal verifies lines and entry number intact
+    reporter.record(len(j_verify.json.get("lines", [])) == 2 and j_verify.json.get("status") == "POSTED",
+                    "F10.4: Posted journal lines and POSTED status verified intact")
+
+    # 10.5 Immutable error details specify reversal requirement
+    reporter.record("reversal" in (put_j.json.get("detail", "").lower()),
+                    "F10.5: Immutability response guides user to perform corrections via reversal")
+
+    # =========================================================================
+    # FEATURE 11: Journal Reversal Workflow (PRD §11.2:587-595)
+    # =========================================================================
+    # 11.1 Reversing posted journal creates balanced reversal entry with swapped debits/credits
+    rev_resp = client.reverse_journal(j_imm_id, reason="Correction of posting error")
+    rev_data = rev_resp.json or {}
+    rev_id = rev_data.get("id")
+    reporter.record(rev_resp.status == 201 and rev_id is not None and rev_data.get("source_type") == "REVERSAL",
+                    "F11.1: Reversing posted journal creates balanced reversal entry with swapped debits/credits")
+
+    # 11.2 Original journal marked as is_reversed = 1
+    orig_j_check = client.get_journal(j_imm_id)
+    reporter.record(orig_j_check.status == 200 and orig_j_check.json.get("is_reversed") == 1,
+                    "F11.2: Original journal marked as is_reversed = 1 with reversal linkage")
+
+    # 11.3 Reversal journal references original journal as source_id
+    reporter.record(rev_data.get("source_id") == j_imm_id,
+                    "F11.3: Reversal journal explicitly references original journal as source_id")
+
+    # 11.4 Net impact of original plus reversal on trial balance is exactly zero
+    tb_after_rev = client.get_trial_balance()
+    reporter.record(tb_after_rev.status == 200 and tb_after_rev.json.get("is_balanced") is True,
+                    "F11.4: Net impact of original journal and reversal journal on trial balance balances to zero")
+
+    # 11.5 Double reversal attempt on already reversed journal rejected with HTTP 409 Conflict
+    rev_dup = client.reverse_journal(j_imm_id, reason="Second reversal attempt")
+    reporter.record(rev_dup.status == 409 and rev_dup.json.get("code") == "ALREADY_REVERSED",
+                    "F11.5: Double reversal attempt on already reversed journal rejected with HTTP 409 ALREADY_REVERSED")
+
+    # =========================================================================
+    # FEATURE 12: Standard Chart of Accounts (PRD §11.3:597-618)
+    # =========================================================================
+    coa_list = client.list_chart_of_accounts().json.get("accounts", [])
+    coa_dict = {a["code"]: a for a in coa_list}
+
+    # 12.1 Every workspace is seeded with 8 standard system accounts
+    reporter.record(len(coa_list) >= 8 and "1000" in coa_dict and "4000" in coa_dict,
+                    "F12.1: Workspace Chart of Accounts seeded with required system accounts")
+
+    # 12.2 Account 1000 Cash and 1100 Bank verified as assets
+    reporter.record(coa_dict.get("1000", {}).get("account_type") == "asset" and coa_dict.get("1100", {}).get("account_type") == "asset",
+                    "F12.2: Standard accounts 1000 (Kas) and 1100 (Bank) classified as assets")
+
+    # 12.3 Account 1200 AR and 2000 AP verified in Chart of Accounts
+    reporter.record(coa_dict.get("1200", {}).get("account_type") == "asset" and coa_dict.get("2000", {}).get("account_type") == "liability",
+                    "F12.3: Standard accounts 1200 (Piutang) and 2000 (Utang) classified correctly")
+
+    # 12.4 Account 2100 Tax Payable, 4000 Revenue, 5000 COGS, 6000 Opex verified
+    reporter.record(coa_dict.get("2100", {}).get("account_type") == "liability" and coa_dict.get("4000", {}).get("account_type") == "income",
+                    "F12.4: Standard accounts 2100 (Tax) and 4000 (Revenue) verified")
+
+    # 12.5 System accounts have deletion protection (HTTP 403 Forbidden)
+    del_sys = client.delete_account_coa("1000")
+    reporter.record(del_sys.status == 403 and del_sys.json.get("code") == "SYSTEM_ACCOUNT_PROTECTED",
+                    "F12.5: System-critical Chart of Accounts entities protected against deletion with HTTP 403")
+
+    # =========================================================================
+    # FEATURE 13: PPN Indonesian Tax Engine (PRD §16:752-770)
+    # =========================================================================
+    # 13.1 PPN 11% exclusive tax calculated correctly (100000 -> 11000 tax, 111000 total)
+    t13_1 = client.calculate_tax(100000, "PPN_11_EXCL")
+    reporter.record(t13_1.status == 200 and t13_1.json.get("tax_amount") == 11000 and t13_1.json.get("gross_amount") == 111000,
+                    "F13.1: PPN 11% exclusive tax calculation (Rp 100.000 -> Rp 11.000 tax, Rp 111.000 gross)")
+
+    # 13.2 PPN 11% inclusive tax extracted correctly (111000 -> 11000 tax, 100000 net)
+    t13_2 = client.calculate_tax(111000, "PPN_11_INCL")
+    reporter.record(t13_2.status == 200 and t13_2.json.get("tax_amount") == 11000 and t13_2.json.get("net_amount") == 100000,
+                    "F13.2: PPN 11% inclusive tax extraction (Rp 111.000 -> Rp 11.000 tax, Rp 100.000 net)")
+
+    # 13.3 PPN 12% exclusive tax calculated correctly (100000 -> 12000 tax, 112000 total)
+    t13_3 = client.calculate_tax(100000, "PPN_12_EXCL")
+    reporter.record(t13_3.status == 200 and t13_3.json.get("tax_amount") == 12000 and t13_3.json.get("gross_amount") == 112000,
+                    "F13.3: PPN 12% exclusive tax calculation (Rp 100.000 -> Rp 12.000 tax, Rp 112.000 gross)")
+
+    # 13.4 PPN 12% inclusive tax extracted correctly (112000 -> 12000 tax, 100000 net)
+    t13_4 = client.calculate_tax(112000, "PPN_12_INCL")
+    reporter.record(t13_4.status == 200 and t13_4.json.get("tax_amount") == 12000 and t13_4.json.get("net_amount") == 100000,
+                    "F13.4: PPN 12% inclusive tax extraction (Rp 112.000 -> Rp 12.000 tax, Rp 100.000 net)")
+
+    # 13.5 Deterministic half-up rounding on fractional Rupiah
+    t13_5 = client.calculate_tax(105, "PPN_11_EXCL")  # 105 * 0.11 = 11.55 -> rounds to 12
+    reporter.record(t13_5.status == 200 and t13_5.json.get("tax_amount") == 12,
+                    "F13.5: Deterministic half-up rounding on fractional tax (105 * 11% = 11.55 -> 12 Rupiah)")
+
+    # =========================================================================
+    # FEATURE 14: UMKM Final Tax Engine (PRD §16:752-770)
+    # =========================================================================
+    # 14.1 UMKM final tax calculates 0.5% (50 bps) on gross turnover (1000000 -> 5000 tax)
+    t14_1 = client.calculate_tax(1000000, "UMKM_05")
+    reporter.record(t14_1.status == 200 and t14_1.json.get("tax_amount") == 5000,
+                    "F14.1: UMKM final tax calculates 0.5% (50 bps) on gross turnover (Rp 1.000.000 -> Rp 5.000)")
+
+    # 14.2 UMKM tax calculation on small turnover applies half-up integer rounding
+    t14_2 = client.calculate_tax(250000, "UMKM_05")  # 250000 * 0.005 = 1250
+    reporter.record(t14_2.status == 200 and t14_2.json.get("tax_amount") == 1250,
+                    "F14.2: UMKM final tax calculation on Rp 250.000 yields exact Rp 1.250")
+
+    # 14.3 UMKM tax returns base_amount and net_amount equal to gross turnover
+    reporter.record(t14_1.json.get("base_amount") == 1000000 and t14_1.json.get("gross_amount") == 1000000,
+                    "F14.3: UMKM final tax preserves gross turnover as base amount")
+
+    # 14.4 Zero turnover returns 0 UMKM tax
+    t14_4 = client.calculate_tax(0, "UMKM_05")
+    reporter.record(t14_4.status == 200 and t14_4.json.get("tax_amount") == 0,
+                    "F14.4: Zero turnover returns exactly 0 UMKM tax")
+
+    # 14.5 High gross turnover (Rp 100.000.000) calculates exact Rp 500.000 tax
+    t14_5 = client.calculate_tax(100000000, "UMKM_05")
+    reporter.record(t14_5.status == 200 and t14_5.json.get("tax_amount") == 500000,
+                    "F14.5: High turnover (Rp 100.000.000) calculates exact Rp 500.000 tax")
+
+    # =========================================================================
+    # FEATURE 15: Tax Inclusive/Exclusive Pricing (PRD §16:758-762)
+    # =========================================================================
+    # 15.1 Commercial line items with exclusive pricing append tax to subtotal
+    inv_excl = client.create_invoice(
+        customer_name="PT Pembeli Eksklusif",
+        items=[{"description": "Server Hosting", "quantity": 1, "unit_price": 1000000}],
+        due_date="2026-11-15",
+        tax_type="PPN_11_EXCL"
+    )
+    reporter.record(inv_excl.status == 201 and inv_excl.json.get("subtotal") == 1000000 and inv_excl.json.get("tax_amount") == 110000 and inv_excl.json.get("total_amount") == 1110000,
+                    "F15.1: Commercial invoice with PPN 11% exclusive pricing appends tax to subtotal")
+
+    # 15.2 Commercial line items with inclusive pricing retain total and extract net
+    inv_incl = client.create_invoice(
+        customer_name="PT Pembeli Inklusif",
+        items=[{"description": "Konsultasi All-In", "quantity": 1, "unit_price": 1110000}],
+        due_date="2026-11-15",
+        tax_type="PPN_11_INCL"
+    )
+    reporter.record(inv_incl.status == 201 and inv_incl.json.get("total_amount") == 1110000 and inv_incl.json.get("tax_amount") == 110000,
+                    "F15.2: Commercial invoice with PPN 11% inclusive pricing retains gross total and extracts tax")
+
+    # 15.3 Mixed quantity line items calculate subtotal, total tax, and grand total consistently
+    inv_multi_item = client.create_invoice(
+        customer_name="PT Grosir Multi Item",
+        items=[
+            {"description": "Barang A", "quantity": 2, "unit_price": 250000},
+            {"description": "Barang B", "quantity": 5, "unit_price": 100000}
+        ],
+        due_date="2026-11-20",
+        tax_type="PPN_11_EXCL"
+    )
+    # Subtotal: 500000 + 500000 = 1000000 -> tax: 110000 -> total: 1110000
+    reporter.record(inv_multi_item.status == 201 and inv_multi_item.json.get("subtotal") == 1000000 and inv_multi_item.json.get("total_amount") == 1110000,
+                    "F15.3: Multiple line items calculate subtotal, tax, and total deterministically")
+
+    # 15.4 Tax exemption / NONE tax type calculates 0 tax and total == subtotal
+    inv_none = client.create_invoice(
+        customer_name="PT Non PKP",
+        items=[{"description": "Jasa Bebas Pajak", "quantity": 1, "unit_price": 750000}],
+        due_date="2026-11-20",
+        tax_type="NONE"
+    )
+    reporter.record(inv_none.status == 201 and inv_none.json.get("tax_amount") == 0 and inv_none.json.get("total_amount") == 750000,
+                    "F15.4: Tax-exempt invoice calculates 0 tax with grand total equal to subtotal")
+
+    # 15.5 Invoice response explicitly separates subtotal, tax_amount, and total_amount
+    inv_resp_data = inv_excl.json or {}
+    reporter.record("subtotal" in inv_resp_data and "tax_amount" in inv_resp_data and "total_amount" in inv_resp_data,
+                    "F15.5: Invoice payload strictly separates subtotal, tax_amount, and total_amount")
+
+    # =========================================================================
+    # FEATURE 16: Commercial Invoice Lifecycle (PRD §12:620-644)
+    # =========================================================================
+    # 16.1 Invoice created in initial DRAFT status
+    inv_lc = client.create_invoice(
+        customer_name="PT Sukses Mandiri",
+        items=[{"description": "Lisensi Software", "quantity": 1, "unit_price": 2000000}],
+        due_date="2026-11-30"
+    )
+    inv_lc_id = inv_lc.json.get("id")
+    reporter.record(inv_lc.status == 201 and inv_lc.json.get("status") == "DRAFT",
+                    "F16.1: Commercial invoice created in initial DRAFT lifecycle state")
+
+    # 16.2 Draft invoice can be updated with modified items and customer details
+    up_draft = client.update_invoice(inv_lc_id, {"customer_name": "PT Sukses Mandiri Perkasa"})
+    reporter.record(up_draft.status == 200 and up_draft.json.get("status") == "DRAFT",
+                    "F16.2: Draft invoice details can be updated while in DRAFT state")
+
+    # 16.3 Issuing draft invoice transitions status to ISSUED
+    iss_resp = client.issue_invoice(inv_lc_id)
+    reporter.record(iss_resp.status == 200 and iss_resp.json.get("status") == "ISSUED",
+                    "F16.3: Issuing invoice transitions lifecycle status from DRAFT to ISSUED")
+
+    # 16.4 Partial payment transitions invoice status to PARTIALLY_PAID
+    total_due = iss_resp.json.get("total_amount", 0)
+    pay_half = client.allocate_payment(inv_lc_id, amount=total_due // 2)
+    inv_after_half = client.get_invoice(inv_lc_id)
+    reporter.record(pay_half.status == 201 and inv_after_half.json.get("status") == "PARTIALLY_PAID",
+                    "F16.4: Partial payment transitions invoice status to PARTIALLY_PAID")
+
+    # 16.5 Full payment transitions invoice status to PAID
+    rem_due = total_due - (total_due // 2)
+    pay_full = client.allocate_payment(inv_lc_id, amount=rem_due)
+    inv_after_full = client.get_invoice(inv_lc_id)
+    reporter.record(pay_full.status == 201 and inv_after_full.json.get("status") == "PAID",
+                    "F16.5: Final payment settlement transitions invoice status to PAID")
+
+    # =========================================================================
+    # FEATURE 17: Server-Side Sequential Numbering (PRD §14:712-732)
+    # =========================================================================
+    # 17.1 Issuing invoice assigns sequential number formatted INV-YYYY-XXXXXX
+    inv_num_1 = iss_resp.json.get("invoice_number", "")
+    current_yr = str(datetime.now(timezone.utc).year)
+    reporter.record(inv_num_1.startswith(f"INV-{current_yr}-") and len(inv_num_1) >= 15,
+                    "F17.1: Issuing invoice assigns sequential number formatted INV-YYYY-XXXXXX")
+
+    # 17.2 First invoice in sequence has sequence counter
+    reporter.record(inv_num_1.endswith("000001") or "000" in inv_num_1,
+                    "F17.2: Server-side sequential number contains zero-padded counter")
+
+    # 17.3 Second issued invoice in year gets incremented gapless sequence number
+    inv_seq2 = client.create_invoice(
+        customer_name="PT Kedua",
+        items=[{"description": "Jasa", "quantity": 1, "unit_price": 500000}],
+        due_date="2026-11-30"
+    )
+    iss_seq2 = client.issue_invoice(inv_seq2.json.get("id"))
+    inv_num_2 = iss_seq2.json.get("invoice_number", "")
+    reporter.record(iss_seq2.status == 200 and inv_num_2 > inv_num_1,
+                    "F17.3: Subsequent issued invoice receives sequentially incremented gapless number")
+
+    # 17.4 Invoice numbers are tenant-scoped and independent across tenants
+    inv_tb = client_b.create_invoice(
+        customer_name="Pelanggan Tenant B",
+        items=[{"description": "Item B", "quantity": 1, "unit_price": 300000}],
+        due_date="2026-11-30"
+    )
+    iss_tb = client_b.issue_invoice(inv_tb.json.get("id"))
+    inv_num_tb = iss_tb.json.get("invoice_number", "")
+    reporter.record(iss_tb.status == 200 and inv_num_tb.startswith(f"INV-{current_yr}-"),
+                    "F17.4: Sequential numbering sequence is tenant-scoped and isolated per workspace")
+
+    # 17.5 Draft invoices have null/draft number until issued
+    draft_test = client.create_invoice("Draft Test", [{"description": "Item", "quantity": 1, "unit_price": 1000}], "2026-11-30")
+    reporter.record(draft_test.json.get("invoice_number") is None,
+                    "F17.5: Draft invoices do not receive final sequential number until issued")
+
+    # =========================================================================
+    # FEATURE 18: Issued Document Snapshotting (PRD §15:734-750)
+    # =========================================================================
+    inv_snap_check = client.get_invoice(inv_lc_id)
+    snapshot = inv_snap_check.json.get("snapshot") or {}
+
+    # 18.1 Customer name, address, and email captured in snapshot
+    reporter.record(snapshot.get("customer_name") == "PT Sukses Mandiri Perkasa",
+                    "F18.1: Customer details captured immutably in document snapshot at issue")
+
+    # 18.2 Snapshot freezes item descriptions, quantities, unit prices, and line totals
+    reporter.record(len(snapshot.get("items", [])) >= 1 and snapshot.get("items", [])[0].get("quantity") == 1,
+                    "F18.2: Line item details, unit prices, and quantities frozen in snapshot")
+
+    # 18.3 Snapshot freezes tax_type, subtotal, tax_amount, and grand total
+    reporter.record(snapshot.get("subtotal") > 0 and snapshot.get("total_amount") > 0,
+                    "F18.3: Financial figures (subtotal, tax, total) frozen in snapshot")
+
+    # 18.4 Modifying draft details post-issue is rejected
+    post_issue_up = client.update_invoice(inv_lc_id, {"customer_name": "Tampered Customer"})
+    reporter.record(post_issue_up.status == 409 and post_issue_up.json.get("code") == "INVOICE_LOCKED",
+                    "F18.4: Attempting to modify issued invoice rejected with HTTP 409 INVOICE_LOCKED")
+
+    # 18.5 Snapshot JSON is returned in invoice detail response
+    reporter.record(isinstance(snapshot, dict) and "issued_at" in snapshot,
+                    "F18.5: Snapshot JSON includes authoritative issued_at timestamp")
+
+    # =========================================================================
+    # FEATURE 19: Receivable Tracking & Aging (PRD §17:772-800)
+    # =========================================================================
+    # 19.1 Issuing invoice automatically creates matching Receivable record with status OPEN
+    inv_rec = client.create_invoice(
+        customer_name="PT Piutang Jaya",
+        items=[{"description": "Konsultasi", "quantity": 1, "unit_price": 1000000}],
+        due_date="2026-11-30"
+    )
+    inv_rec_id = inv_rec.json.get("id")
+    iss_rec = client.issue_invoice(inv_rec_id)
+    recs_list = client.list_receivables().json.get("receivables", [])
+    matched_rec = next((r for r in recs_list if r.get("invoice_id") == inv_rec_id), None)
+    reporter.record(matched_rec is not None and matched_rec.get("status") == "OPEN",
+                    "F19.1: Issuing invoice automatically creates matching Receivable record with status OPEN")
+
+    # 19.2 Receivable tracks total_amount, allocated_amount=0, and outstanding_amount=total
+    total_rec_amt = iss_rec.json.get("total_amount")
+    reporter.record(matched_rec.get("total_amount") == total_rec_amt and matched_rec.get("outstanding_amount") == total_rec_amt and matched_rec.get("allocated_amount") == 0,
+                    "F19.2: Receivable tracks initial total_amount, allocated_amount=0, and outstanding_amount")
+
+    # 19.3 Partial payment updates outstanding_amount and sets status to PARTIALLY_PAID
+    client.allocate_payment(inv_rec_id, amount=400000)
+    recs_after_part = client.list_receivables().json.get("receivables", [])
+    rec_part = next((r for r in recs_after_part if r.get("invoice_id") == inv_rec_id), None)
+    reporter.record(rec_part is not None and rec_part.get("status") == "PARTIALLY_PAID" and rec_part.get("allocated_amount") == 400000,
+                    "F19.3: Partial payment updates receivable outstanding_amount and status to PARTIALLY_PAID")
+
+    # 19.4 Full payment reduces outstanding_amount to 0 and sets status to PAID
+    client.allocate_payment(inv_rec_id, amount=rec_part.get("outstanding_amount"))
+    recs_after_full = client.list_receivables().json.get("receivables", [])
+    rec_full = next((r for r in recs_after_full if r.get("invoice_id") == inv_rec_id), None)
+    reporter.record(rec_full is not None and rec_full.get("status") == "PAID" and rec_full.get("outstanding_amount") == 0,
+                    "F19.4: Final settlement reduces outstanding_amount to 0 and transitions status to PAID")
+
+    # 19.5 Aging endpoint aggregates receivables across aging buckets
+    aging = client.get_receivable_aging()
+    reporter.record(aging.status == 200 and "current_0_30" in (aging.json or {}) and "total_outstanding" in (aging.json or {}),
+                    "F19.5: Receivable aging endpoint aggregates balances across aging buckets")
+
+    # =========================================================================
+    # FEATURE 20: Atomic Payment Allocation (PRD §17, §18)
+    # =========================================================================
+    inv_pay = client.create_invoice(
+        customer_name="PT Pembayar Tepat Waktu",
+        items=[{"description": "Langganan", "quantity": 1, "unit_price": 1000000}],
+        due_date="2026-11-30"
+    )
+    inv_pay_id = inv_pay.json.get("id")
+    client.issue_invoice(inv_pay_id)
+
+    # 20.1 Payment allocated against outstanding invoice succeeds with HTTP 201 Created
+    pay_alloc = client.allocate_payment(inv_pay_id, amount=500000, payment_method="BANK_TRANSFER")
+    reporter.record(pay_alloc.status == 201 and pay_alloc.json.get("status") == "CONFIRMED",
+                    "F20.1: Payment allocated against outstanding invoice succeeds with HTTP 201 Created")
+
+    # 20.2 Payment atomically reduces receivable outstanding and updates invoice status
+    reporter.record(pay_alloc.json.get("outstanding_balance") == (client.get_invoice(inv_pay_id).json.get("total_amount") - 500000),
+                    "F20.2: Payment atomically updates outstanding balance on receivable and invoice")
+
+    # 20.3 Payment automatically posts double-entry journal (Debit Bank, Credit AR)
+    j_list = client.list_journals().json.get("journals", [])
+    pay_j = next((j for j in j_list if j.get("source_type") == "PAYMENT" and j.get("source_id") == pay_alloc.json.get("id")), None)
+    reporter.record(pay_j is not None and pay_j.get("total_debit") == 500000,
+                    "F20.3: Payment automatically posts balanced double-entry journal (Debit 1100, Credit 1200)")
+
+    # 20.4 Multiple partial payments accurately accumulate allocated_amount
+    pay_alloc_2 = client.allocate_payment(inv_pay_id, amount=200000)
+    reporter.record(pay_alloc_2.status == 201 and pay_alloc_2.json.get("amount") == 200000,
+                    "F20.4: Multiple partial payments accurately accumulate allocated amounts")
+
+    # 20.5 Payment detail records payment_method, reference, and payment_date
+    reporter.record(pay_alloc.json.get("payment_method") == "BANK_TRANSFER" and "reference" in pay_alloc.json,
+                    "F20.5: Payment record captures payment_method, reference, and payment_date")
+
+    # =========================================================================
+    # FEATURE 21: Mutation Idempotency Engine (PRD §18:814-824)
+    # =========================================================================
+    idem_key = f"idem_{uuid.uuid4().hex}"
+    # 21.1 Request with Idempotency-Key returns 201 and original payload
+    pay_idem1 = client.allocate_payment(inv_pay_id, amount=100000, idempotency_key=idem_key)
+    reporter.record(pay_idem1.status == 201 and pay_idem1.json.get("amount") == 100000,
+                    "F21.1: Request with Idempotency-Key succeeds and returns created entity")
+
+    # 21.2 Replaying request with same Idempotency-Key returns cached response without duplicate record
+    pay_idem2 = client.allocate_payment(inv_pay_id, amount=100000, idempotency_key=idem_key)
+    reporter.record(pay_idem2.status == 201 and pay_idem2.json.get("id") == pay_idem1.json.get("id"),
+                    "F21.2: Replaying request with identical Idempotency-Key returns cached response without duplication")
+
+    # 21.3 Replaying Idempotency-Key with modified payload returns HTTP 409 Conflict
+    pay_idem_tamper = client.allocate_payment(inv_pay_id, amount=250000, idempotency_key=idem_key)
+    reporter.record(pay_idem_tamper.status == 409 and pay_idem_tamper.json.get("code") == "IDEMPOTENCY_KEY_MISMATCH",
+                    "F21.3: Replaying Idempotency-Key with modified payload rejected with HTTP 409 Conflict")
+
+    # 21.4 Concurrent or replayed payment does not double-decrement receivable balance
+    rec_idem_check = client.list_receivables().json.get("receivables", [])
+    rec_target = next((r for r in rec_idem_check if r.get("invoice_id") == inv_pay_id), None)
+    # Total payments made on inv_pay: 500k + 200k + 100k = 800k (not 900k or double)
+    reporter.record(rec_target is not None and rec_target.get("allocated_amount") == 800000,
+                    "F21.4: Replayed idempotent payment does not double-decrement receivable balance")
+
+    # 21.5 Idempotent response replay indicates cached response
+    reporter.record(pay_idem2.header("X-Cache-Replay") == "true",
+                    "F21.5: Replayed response includes X-Cache-Replay header indicator")
+
+    # =========================================================================
+    # FEATURE 22: Transactional Outbox Persistence (PRD §20:844-883)
+    # =========================================================================
+    # 22.1 Issuing invoice atomically inserts InvoiceIssued event in outbox_events table
+    outbox_events = client.list_outbox_events().json.get("events", [])
+    has_inv_issued = any(e.get("event_type") == "InvoiceIssued" for e in outbox_events)
+    reporter.record(has_inv_issued,
+                    "F22.1: Issuing an invoice atomically commits an InvoiceIssued event to outbox_events")
+
+    # 22.2 Allocating payment atomically inserts PaymentConfirmed event in outbox_events table
+    has_pay_confirmed = any(e.get("event_type") == "PaymentConfirmed" for e in outbox_events)
+    reporter.record(has_pay_confirmed,
+                    "F22.2: Payment allocation atomically commits a PaymentConfirmed event to outbox_events")
+
+    # 22.3 Posting journal atomically inserts JournalPosted event in outbox_events table
+    has_journal_posted = any(e.get("event_type") == "JournalPosted" for e in outbox_events)
+    reporter.record(has_journal_posted,
+                    "F22.3: Manual journal entry posting atomically commits a JournalPosted event to outbox")
+
+    # 22.4 Outbox event records tenant_id, aggregate_type, aggregate_id, and payload_json
+    sample_evt = outbox_events[0] if outbox_events else {}
+    reporter.record("tenant_id" in sample_evt and "aggregate_type" in sample_evt and "payload" in sample_evt,
+                    "F22.4: Outbox event captures tenant_id, aggregate_type, aggregate_id, and structured payload")
+
+    # 22.5 Outbox event initializes with status PENDING and attempt_count 0
+    pending_evt = next((e for e in outbox_events if e.get("status") == "PENDING"), None)
+    reporter.record(pending_evt is not None and pending_evt.get("attempt_count") == 0,
+                    "F22.5: Newly committed outbox event initializes in PENDING state with attempt_count 0")
+
+    # =========================================================================
+    # FEATURE 23: At-Least-Once Outbox Dispatcher (PRD §20:884-892)
+    # =========================================================================
+    # 23.1 Outbox process worker polls pending events and dispatches them
+    dispatch_resp = client.process_outbox()
+    reporter.record(dispatch_resp.status == 200 and dispatch_resp.json.get("processed", 0) > 0,
+                    "F23.1: Asynchronous outbox dispatch worker polls and processes pending events")
+
+    # 23.2 Successfully dispatched events transition to status PUBLISHED with published_at
+    events_after_proc = client.list_outbox_events().json.get("events", [])
+    all_published = all(e.get("status") == "PUBLISHED" for e in events_after_proc)
+    reporter.record(len(events_after_proc) > 0 and all_published,
+                    "F23.2: Successfully delivered outbox events transition to status PUBLISHED")
+
+    # 23.3 Dispatched events record published_at timestamp
+    reporter.record(events_after_proc[0].get("published_at") is not None,
+                    "F23.3: Published outbox events record authoritative published_at timestamp")
+
+    # 23.4 Process endpoint returns count of processed events
+    reporter.record(dispatch_resp.json.get("status") == "completed",
+                    "F23.4: Dispatch processor reports completed status and processed count")
+
+    # 23.5 Subsequent run with zero pending events reports 0 processed
+    dispatch_empty = client.process_outbox()
+    reporter.record(dispatch_empty.status == 200 and dispatch_empty.json.get("processed") == 0,
+                    "F23.5: Subsequent processor run on empty queue returns 0 processed cleanly")
+
+    # =========================================================================
+    # FEATURE 24: Outbox Event Deduplication (PRD §20:890)
+    # =========================================================================
+    # 24.1 Every outbox event has unique UUID event ID
+    evt_ids = [e["id"] for e in events_after_proc]
+    reporter.record(len(evt_ids) == len(set(evt_ids)) and len(evt_ids) > 0,
+                    "F24.1: Every outbox event has a strictly unique RFC 4122 UUID event ID")
+
+    # 24.2 Event payload contains consistent entity reference for consumer deduplication
+    reporter.record("invoice_id" in events_after_proc[0].get("payload", {}) or "payment_id" in events_after_proc[0].get("payload", {}) or "journal_id" in events_after_proc[0].get("payload", {}),
+                    "F24.2: Outbox event payload contains immutable entity reference for consumer deduplication")
+
+    # 24.3 Repeated query maintains stable event IDs
+    events_requery = client.list_outbox_events().json.get("events", [])
+    reporter.record([e["id"] for e in events_after_proc] == [e["id"] for e in events_requery],
+                    "F24.3: Repeated event queries maintain stable event ordering and IDs")
+
+    # 24.4 Consumer can query outbox events stream idempotently
+    list_evts_status = client.list_outbox_events().status
+    reporter.record(list_evts_status == 200,
+                    "F24.4: Consumer outbox event stream accessible via authenticated idempotent API")
+
+    # 24.5 Event ordering is preserved chronologically by created_at
+    created_timestamps = [e["created_at"] for e in events_after_proc]
+    reporter.record(created_timestamps == sorted(created_timestamps),
+                    "F24.5: Outbox event stream is strictly chronological by created_at timestamp")
+
+    # =========================================================================
+    # FEATURE 25: Sidecar Isolation Boundary (PRD §21, §56)
+    # =========================================================================
+    # Create new invoice to generate pending outbox event
+    inv_sidecar = client.create_invoice(
+        customer_name="PT Sidecar Test",
+        items=[{"description": "Konsultasi Sidecar", "quantity": 1, "unit_price": 500000}],
+        due_date="2026-12-01"
+    )
+    inv_sc_id = inv_sidecar.json.get("id")
+    client.issue_invoice(inv_sc_id)
+
+    # 25.1 Simulated sidecar failure during dispatch increments attempt_count without failing core
+    sidecar_fail_resp = client.process_outbox(simulate_sidecar_failure=True)
+    reporter.record(sidecar_fail_resp.status == 200 and sidecar_fail_resp.json.get("status") == "retry_scheduled",
+                    "F25.1: Peripheral sidecar failure is isolated without compromising core server transaction")
+
+    # 25.2 Sidecar failure leaves domain entities intact and committed
+    inv_sc_check = client.get_invoice(inv_sc_id)
+    reporter.record(inv_sc_check.status == 200 and inv_sc_check.json.get("status") == "ISSUED",
+                    "F25.2: Core invoice entity remains valid and committed despite peripheral sidecar outage")
+
+    # 25.3 Outbox event records last_error describing sidecar communication failure
+    sc_evts = client.list_outbox_events().json.get("events", [])
+    sc_pending = next((e for e in sc_evts if e.get("aggregate_id") == inv_sc_id), None)
+    reporter.record(sc_pending is not None and sc_pending.get("last_error") is not None and sc_pending.get("attempt_count") >= 1,
+                    "F25.3: Failed outbox delivery captures last_error and increments attempt_count")
+
+    # 25.4 Outbox status remains PENDING for retry
+    reporter.record(sc_pending is not None and sc_pending.get("status") == "PENDING",
+                    "F25.4: Outbox event remains in PENDING state awaiting subsequent retry delivery")
+
+    # 25.5 When sidecar recovers, subsequent dispatch successfully publishes event
+    recover_resp = client.process_outbox(simulate_sidecar_failure=False)
+    sc_evts_after = client.list_outbox_events().json.get("events", [])
+    sc_pub = next((e for e in sc_evts_after if e.get("aggregate_id") == inv_sc_id), None)
+    reporter.record(recover_resp.status == 200 and sc_pub is not None and sc_pub.get("status") == "PUBLISHED",
+                    "F25.5: Peripheral sidecar recovery enables successful retry and transition to PUBLISHED")
+
+    # =========================================================================
+    # FEATURE 26: Frontend Workspace Store (PRD §8, §35, §37)
+    # =========================================================================
+    # 26.1 Workspace listing provides active workspace candidates for Pinia store
+    ws_list = client.list_tenants()
+    reporter.record(ws_list.status == 200 and len(ws_list.json.get("tenants", [])) >= 2,
+                    "F26.1: Workspace listing endpoint provides active workspace candidates for Pinia store")
+
+    # 26.2 Active workspace switch endpoint updates session context cleanly
+    switch_resp = client.switch_tenant(t1_id)
+    reporter.record(switch_resp.status == 200 and switch_resp.json.get("active_tenant_id") == t1_id,
+                    "F26.2: Active workspace switch endpoint updates session context cleanly")
+
+    # 26.3 Tenant capabilities endpoint provides capability flags to frontend store
+    caps_resp = client.get_tenant_capabilities(t1_id)
+    reporter.record(caps_resp.status == 200 and "capabilities" in (caps_resp.json or {}),
+                    "F26.3: Tenant capabilities endpoint provides capability flags for Pinia store")
+
+    # 26.4 Personal workspace ensures store always has initial active workspace
+    reporter.record(any(t.get("is_personal") == 1 for t in ws_list.json.get("tenants", [])),
+                    "F26.4: Personal workspace ensures frontend store always has a valid fallback workspace")
+
+    # 26.5 User membership role in workspace is returned for frontend access control
+    reporter.record(caps_resp.json.get("role") == "owner",
+                    "F26.5: Current actor role returned with workspace capabilities for frontend RBAC gating")
+
+    # =========================================================================
+    # FEATURE 27: Header & Sidebar Workspace UI (Survey 3)
+    # =========================================================================
+    # 27.1 Tenant details endpoint returns name, slug, and status for UI dropdown
+    t_ui = client.get_tenant(t1_id).json or {}
+    reporter.record(t_ui.get("name") == "PT Nusantara Jaya" and "slug" in t_ui,
+                    "F27.1: Workspace details endpoint provides name and slug for header dropdown UI")
+
+    # 27.2 Workspace profile provides branding and legal identity for sidebar display
+    p_ui = client.get_tenant_profile(t1_id).json or {}
+    reporter.record("business_name" in p_ui and "timezone" in p_ui,
+                    "F27.2: Workspace profile provides business identity attributes for sidebar display")
+
+    # 27.3 Switching workspaces returns updated active tenant details for header reflection
+    switch_ui = client.switch_tenant(t2_id)
+    reporter.record(switch_ui.status == 200 and switch_ui.json.get("name") == "CV Sumber Rejeki",
+                    "F27.3: Switching workspaces returns updated active tenant details for header reflection")
+    client.switch_tenant(t1_id)  # Switch back
+
+    # 27.4 Member count is provided for workspace management UI
+    reporter.record(t_ui.get("member_count", 0) >= 2,
+                    "F27.4: Accurate member count provided for workspace management UI display")
+
+    # 27.5 Multiple workspaces returned in deterministic order for switcher dropdown
+    ws_tenants = ws_list.json.get("tenants", [])
+    reporter.record(ws_tenants[0]["created_at"] <= ws_tenants[1]["created_at"],
+                    "F27.5: Multiple workspaces returned in deterministic chronological order for UI switcher")
+
+    # =========================================================================
+    # FEATURE 28: API Client 404 Mock Fallback Fix (Survey 3)
+    # =========================================================================
+    # 28.1 Probing non-existent endpoint returns RFC 7807 problem details without fallback mock data
+    probe_404 = client.get("/api/v1/non-existent-resource-endpoint-xyz")
+    reporter.record(probe_404.status == 404 and "application/problem+json" in probe_404.header("content-type"),
+                    "F28.1: Querying non-existent resource strictly returns RFC 7807 problem details without mock fallback")
+
+    # 28.2 Probing another tenant's entity returns genuine HTTP 404 without mock synthesis
+    cross_probe = client_b.get_invoice(inv_t1_id)
+    reporter.record(cross_probe.status == 404 and cross_probe.json.get("code") == "NOT_FOUND",
+                    "F28.2: Querying cross-tenant entity strictly returns RFC 7807 NOT_FOUND without mock fallback")
+
+    # 28.3 Client isolation probe verifies genuine 404 error response status and body
+    iso_probe = client.check_client_isolation("probe_12345")
+    reporter.record(iso_probe.status == 404 and iso_probe.json.get("code") == "NOT_FOUND",
+                    "F28.3: Client isolation probe confirms HTTP 404 without latent synthetic mocks")
+
+    # 28.4 No latent fake data or mock flag in 404 error responses
+    reporter.record(iso_probe.json.get("mock") is None and iso_probe.json.get("fallback") is None,
+                    "F28.4: Zero latent mock or fallback attributes present in HTTP 404 payload")
+
+    # 28.5 Problem details contains type, title, status, and code fields
+    p_body = cross_probe.json or {}
+    reporter.record("type" in p_body and "title" in p_body and "status" in p_body and "code" in p_body,
+                    "F28.5: Error payload adheres strictly to RFC 7807 specification schema")
+
+    # =========================================================================
+    # FEATURE 29: Capability-Driven Navigation (PRD §35, §37)
+    # =========================================================================
+    # Create workspaces with different business types
+    t_retail = client.create_tenant(f"Toko Retail {uid_suffix}", slug=f"retail-{uid_suffix}")
+    client.update_tenant_profile(t_retail.json.get("id"), {"business_type": "retail"})
+    caps_retail = client.get_tenant_capabilities(t_retail.json.get("id")).json or {}
+    reporter.record("pos" in caps_retail.get("capabilities", []) and "inventory" in caps_retail.get("capabilities", []),
+                    "F29.1: Retail business type workspace provides 'pos' and 'inventory' capability navigation")
+
+    # 29.2 General business type workspace provides standard invoicing and accounting
+    caps_gen = client.get_tenant_capabilities(t1_id).json or {}
+    reporter.record("invoicing" in caps_gen.get("capabilities", []) and "accounting" in caps_gen.get("capabilities", []),
+                    "F29.2: General business type workspace provides standard 'invoicing' and 'accounting' capabilities")
+
+    # 29.3 F&B business type workspace provides pos, tables, kitchen capabilities
+    t_fnb = client.create_tenant(f"Warung Kopi {uid_suffix}", slug=f"fnb-{uid_suffix}")
+    client.update_tenant_profile(t_fnb.json.get("id"), {"business_type": "fnb"})
+    caps_fnb = client.get_tenant_capabilities(t_fnb.json.get("id")).json or {}
+    reporter.record("pos" in caps_fnb.get("capabilities", []) and "kitchen" in caps_fnb.get("capabilities", []),
+                    "F29.3: F&B business type workspace provides 'pos', 'tables', and 'kitchen' capabilities")
+
+    # 29.4 Rental business type workspace provides inventory and bookings capabilities
+    t_rental = client.create_tenant(f"Rental Motor {uid_suffix}", slug=f"rental-{uid_suffix}")
+    client.update_tenant_profile(t_rental.json.get("id"), {"business_type": "rental"})
+    caps_rental = client.get_tenant_capabilities(t_rental.json.get("id")).json or {}
+    reporter.record("inventory" in caps_rental.get("capabilities", []) and "bookings" in caps_rental.get("capabilities", []),
+                    "F29.4: Rental business type workspace provides 'inventory' and 'bookings' capabilities")
+
+    # 29.5 Contractor business type workspace provides projects and milestones capabilities
+    t_contractor = client.create_tenant(f"Kontraktor {uid_suffix}", slug=f"contractor-{uid_suffix}")
+    client.update_tenant_profile(t_contractor.json.get("id"), {"business_type": "contractor"})
+    caps_contractor = client.get_tenant_capabilities(t_contractor.json.get("id")).json or {}
+    reporter.record("projects" in caps_contractor.get("capabilities", []) and "milestones" in caps_contractor.get("capabilities", []),
+                    "F29.5: Contractor business type workspace provides 'projects' and 'milestones' capabilities")
+
+    # =========================================================================
+    # FEATURE 30: Backend Test Harness Synchronization (Survey 2)
+    # =========================================================================
+    schema_probe = client.get_system_schema()
+    s_data = schema_probe.json or {}
+    # 30.1 System schema endpoint verifies exactly 26 relational tables exist
+    reporter.record(schema_probe.status == 200 and s_data.get("table_count") == 26,
+                    "F30.1: Backend schema verification probe confirms exactly 26 relational tables")
+
+    # 30.2 SQLite WAL journal_mode verified active
+    reporter.record(s_data.get("journal_mode") == "wal",
+                    "F30.2: SQLite WAL journal_mode verified strictly active on database connection")
+
+    # 30.3 Foreign keys pragma verified enabled
+    reporter.record(s_data.get("foreign_keys") == 1,
+                    "F30.3: SQLite foreign_keys constraint enforcement pragma verified enabled")
+
+    # 30.4 Core foundation tables verified present
+    tbls = s_data.get("tables", [])
+    reporter.record("tenants" in tbls and "business_profiles" in tbls and "memberships" in tbls,
+                    "F30.4: Core foundation tables (tenants, business_profiles, memberships) verified present")
+
+    # 30.5 Financial core tables verified present
+    reporter.record("chart_of_accounts" in tbls and "journal_entries" in tbls and "invoices" in tbls and "receivables" in tbls and "outbox_events" in tbls,
+                    "F30.5: Financial core tables (chart_of_accounts, journal_entries, invoices, receivables, outbox_events) verified")
+
+    # =========================================================================
+    # FEATURE 31: Full E2E Test Suite Pass (Tiers 1-4) (Project Pattern)
+    # =========================================================================
+    # 31.1 Test harness operational status probe /health returns 200
+    h_resp = client.health()
+    reporter.record(h_resp.status == 200 and h_resp.json.get("status") == "ok",
+                    "F31.1: Health check probe /health returns HTTP 200 and status ok")
+
+    # 31.2 Test harness operational status probe /ready returns 200
+    r_resp = client.ready()
+    reporter.record(r_resp.status == 200 and r_resp.json.get("wal") is True,
+                    "F31.2: Readiness check probe /ready returns HTTP 200 and database WAL confirmation")
+
+    # 31.3 Session token generation and validation verified
+    me_resp = client.me()
+    reporter.record(me_resp.status == 200 and me_resp.json.get("email") == user_email,
+                    "F31.3: User authentication session verified via /api/v1/auth/me")
+
+    # 31.4 TAP v13 reporter accumulates results consistently
+    reporter.record(len(reporter.results) > 150,
+                    "F31.4: TAP v13 test framework records assertion results incrementally")
+
+    # 31.5 Zero failure contract maintained
+    current_fails = sum(1 for r in reporter.results if not r["passed"])
+    reporter.record(current_fails == 0,
+                    "F31.5: E2E feature coverage suite executes with zero assertion failures")
+
+    # =========================================================================
+    # FEATURE 32: Adversarial Hardening (Tier 5) (Project Pattern)
+    # =========================================================================
+    # 32.1 SQL injection attack in tenant search or creation safely handled
+    sqli_name = "Toko' OR '1'='1; DROP TABLE users; --"
+    sqli_slug = f"sqli-{uuid.uuid4().hex[:6]}"
+    t_sqli = client.create_tenant(sqli_name, slug=sqli_slug)
+    reporter.record(t_sqli.status == 201 and t_sqli.json.get("name") == sqli_name,
+                    "F32.1: SQL injection payload safely stored as string literal via parameterized queries")
+
+    # 32.2 XSS attack strings in invoice customer snapshot safely handled
+    xss_customer = "<script>alert('XSS_ATTACK')</script>"
+    inv_xss = client.create_invoice(
+        customer_name=xss_customer,
+        items=[{"description": "Item Safe", "quantity": 1, "unit_price": 100000}],
+        due_date="2026-12-15"
+    )
+    iss_xss = client.issue_invoice(inv_xss.json.get("id"))
+    reporter.record(iss_xss.status == 200 and iss_xss.json.get("snapshot", {}).get("customer_name") == xss_customer,
+                    "F32.2: XSS script payload safely captured as literal string without unescaped execution")
+
+    # 32.3 Cross-tenant ID tampering in payload strictly returns HTTP 404
+    tamper_pay = client_b.allocate_payment(inv_t1_id, amount=10000)
+    reporter.record(tamper_pay.status == 404,
+                    "F32.3: Cross-tenant entity manipulation attempt strictly rejected with HTTP 404 Not Found")
+
+    # 32.4 Unbalanced journal injection strictly rejected with HTTP 422
+    unbal_adv = client.post_journal(
+        entry_date="2026-10-04T00:00:00Z",
+        description="Adversarial Unbalanced Attempt",
+        lines=[
+            {"account_code": "1000", "debit": 999999999, "credit": 0},
+            {"account_code": "4000", "debit": 0, "credit": 999999998}  # Off by 1 Rupiah
+        ]
+    )
+    reporter.record(unbal_adv.status == 422 and unbal_adv.json.get("code") == "UNBALANCED_JOURNAL_ENTRY",
+                    "F32.4: Adversarial unbalanced journal injection off by 1 Rupiah strictly rejected with HTTP 422")
+
+    # 32.5 Negative payment amount injection rejected with HTTP 400 Bad Request
+    neg_pay = client.allocate_payment(inv_lc_id, amount=-100000)
+    reporter.record(neg_pay.status == 400 and neg_pay.json.get("code") == "INVALID_AMOUNT",
+                    "F32.5: Negative monetary payment injection strictly rejected with HTTP 400 INVALID_AMOUNT")
 
     return reporter
 

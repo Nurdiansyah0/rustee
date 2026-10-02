@@ -14,6 +14,7 @@
         @select-tab="handleSelectTab"
         @open-add="showAddModal = true"
         @open-upgrade="subscriptionStore.openUpgradeModal()"
+        @open-create-workspace="showCreateWorkspaceModal = true"
         @logout="handleLogout"
       />
 
@@ -25,6 +26,7 @@
           :is-online="isOnline"
           :current-tab="currentTab"
           @open-upgrade="subscriptionStore.openUpgradeModal()"
+          @open-create-workspace="showCreateWorkspaceModal = true"
         />
 
         <!-- View Content Canvas (Isolated Native Momentum Scroll Container) -->
@@ -49,6 +51,76 @@
                 @open-add="showAddModal = true"
                 @refresh="handleTransactionCreated"
               />
+
+              <!-- Invoices & Billing Capability View -->
+              <div
+                v-else-if="currentTab === 'invoices'"
+                key="invoices"
+                class="space-y-4"
+              >
+                <div class="p-6 rounded-2xl bg-surface-card border border-border-subtle shadow-card space-y-4">
+                  <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-brand-muted text-brand-default flex items-center justify-center shrink-0">
+                      <FileText class="w-6 h-6 stroke-[2]" />
+                    </div>
+                    <div>
+                      <h2 class="text-base font-extrabold text-content-primary">Faktur & Tagihan Komersial</h2>
+                      <p class="text-xs text-content-secondary mt-0.5">
+                        Kelola faktur penjualan, status piutang usaha, dan pelunasan termin untuk ruang kerja bisnis.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="p-4 rounded-xl bg-surface-subtle border border-border-subtle text-xs text-content-secondary space-y-2">
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Ruang Kerja Aktif:</span>
+                      <span class="font-bold text-brand-default">{{ workspaceStore.activeTenantName }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Tipe Bisnis:</span>
+                      <span class="capitalize font-medium">{{ workspaceStore.businessType }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Hak Akses:</span>
+                      <span class="capitalize font-medium">{{ workspaceStore.activeRole }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Accounting & Ledger Capability View -->
+              <div
+                v-else-if="currentTab === 'accounting'"
+                key="accounting"
+                class="space-y-4"
+              >
+                <div class="p-6 rounded-2xl bg-surface-card border border-border-subtle shadow-card space-y-4">
+                  <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-brand-muted text-brand-default flex items-center justify-center shrink-0">
+                      <BookOpen class="w-6 h-6 stroke-[2]" />
+                    </div>
+                    <div>
+                      <h2 class="text-base font-extrabold text-content-primary">Buku Kas & Jurnal Akuntansi</h2>
+                      <p class="text-xs text-content-secondary mt-0.5">
+                        Bagan Akun (CoA), entri jurnal berpasangan, neraca saldo, dan kepatuhan pembukuan.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="p-4 rounded-xl bg-surface-subtle border border-border-subtle text-xs text-content-secondary space-y-2">
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Ruang Kerja Aktif:</span>
+                      <span class="font-bold text-brand-default">{{ workspaceStore.activeTenantName }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Tipe Bisnis:</span>
+                      <span class="capitalize font-medium">{{ workspaceStore.businessType }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="font-semibold text-content-primary">Hak Akses:</span>
+                      <span class="capitalize font-medium">{{ workspaceStore.activeRole }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <AnalyticsView
                 v-else-if="currentTab === 'analytics'"
@@ -112,6 +184,13 @@
       @completed="handleOnboardingCompleted"
       @close="showOnboardingModal = false"
     />
+
+    <!-- Multi-Tenant Create Workspace Modal (PRD §5, §7, §8, §69) -->
+    <CreateWorkspaceModal
+      :is-open="showCreateWorkspaceModal"
+      @close="showCreateWorkspaceModal = false"
+      @created="handleWorkspaceCreated"
+    />
   </div>
 </template>
 
@@ -124,7 +203,9 @@ import { useTransactionStore } from '@/stores/transactions'
 import { useAnalyticsStore } from '@/stores/analytics'
 import { useSubscriptionStore } from '@/stores/subscription'
 import { useRealtimeStore } from '@/stores/realtime'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { syncService } from '@/services/sync'
+import { FileText, BookOpen } from 'lucide-vue-next'
 
 import DesktopSidebar from '@/components/layout/DesktopSidebar.vue'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
@@ -138,6 +219,7 @@ import ProfileView from '@/views/ProfileView.vue'
 import AddTransactionModal from '@/components/AddTransactionModal.vue'
 import UpgradeModal from '@/components/UpgradeModal.vue'
 import ProgressiveOnboardingModal from '@/components/ProgressiveOnboardingModal.vue'
+import CreateWorkspaceModal from '@/components/CreateWorkspaceModal.vue'
 
 const authStore = useAuthStore()
 const walletStore = useWalletStore()
@@ -146,23 +228,31 @@ const transactionStore = useTransactionStore()
 const analyticsStore = useAnalyticsStore()
 const subscriptionStore = useSubscriptionStore()
 const realtimeStore = useRealtimeStore()
+const workspaceStore = useWorkspaceStore()
 
 const currentTab = ref('home')
 const showAddModal = ref(false)
 const showOnboardingModal = ref(false)
+const showCreateWorkspaceModal = ref(false)
 const onboardingInitialName = ref('')
 const transactionsViewRef = ref(null)
 const mainScrollRef = ref(null)
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
 
+function handleWorkspaceCreated() {
+  showCreateWorkspaceModal.value = false
+}
+
 // Dynamic Navigation Transition (Compose Navigation Feel)
-const tabOrder = ['home', 'transactions', 'analytics', 'profile']
+const tabOrder = ['home', 'transactions', 'invoices', 'accounting', 'analytics', 'profile']
 const transitionName = ref('slide-left')
 
 const currentTabTitle = computed(() => {
   const titles = {
     home: 'Dashboard Utama',
     transactions: 'Riwayat Transaksi',
+    invoices: 'Faktur & Tagihan Komersial',
+    accounting: 'Buku Kas & Jurnal Akuntansi',
     analytics: 'Analisis & Proyeksi',
     profile: 'Profil & Pengaturan Akun'
   }
@@ -233,6 +323,7 @@ async function handleAuthenticated(authEvent = {}) {
   // 2. Fetch authoritative user states and personalization
   await Promise.allSettled([
     authStore.fetchPersonalization(),
+    workspaceStore.fetchWorkspaces(),
     walletStore.fetchWallets(),
     categoryStore.fetchCategories(),
     analyticsStore.fetchDashboard(),

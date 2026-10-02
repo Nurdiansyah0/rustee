@@ -221,7 +221,10 @@ mod m3_ledger_tests {
                     msg
                 );
             }
-            other => panic!("Expected DuplicateIdempotentKey with mismatch, got: {:?}", other),
+            other => panic!(
+                "Expected DuplicateIdempotentKey with mismatch, got: {:?}",
+                other
+            ),
         }
 
         // 3. Balance must remain unchanged at 1_100_000 (mutation attempt rejected, zero side-effects)

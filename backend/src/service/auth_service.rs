@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -8,6 +9,7 @@ use crate::error::AppError;
 use crate::repository::UserRepository;
 use crate::service::crypto::CryptoService;
 use crate::service::jwt::JwtEngine;
+use crate::service::tenant_service::TenantService;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterRequest {
@@ -215,6 +217,9 @@ impl AuthService {
             .await?;
         }
 
+        // 4. Auto-provision default personal workspace (multi-tenant core foundation)
+        TenantService::provision_personal_workspace(&mut tx, &user_id, display_name).await?;
+
         // Commit transaction
         tx.commit().await?;
 
@@ -331,5 +336,170 @@ impl AuthService {
             user: user_dto,
             permissions,
         })
+    }
+
+    /// Initiates password recovery process (timing-safe against email enumeration)
+    pub async fn forgot_password(&self, email: &str) -> Result<(), AppError> {
+        let normalized_email = email.trim().to_lowercase();
+        if normalized_email.is_empty() || !normalized_email.contains('@') {
+            return Err(AppError::BadRequest(
+                "Format alamat email tidak valid".to_string(),
+                "INVALID_EMAIL",
+            ));
+        }
+
+        let user_opt = self.user_repo.find_by_email(&normalized_email).await.map_err(AppError::from)?;
+
+        match user_opt {
+            Some(user) => {
+                let raw_token = format!(
+                    "{}{}",
+                    Uuid::new_v4().simple(),
+                    Uuid::new_v4().simple()
+                );
+                let mut hasher = Sha256::new();
+                hasher.update(raw_token.as_bytes());
+                let token_hash = format!("{:x}", hasher.finalize());
+
+                let now = Utc::now();
+                let expires_at = (now + chrono::Duration::hours(1)).to_rfc3339();
+                let now_str = now.to_rfc3339();
+                let token_id = format!("rst_{}", &raw_token[..12]);
+
+                // Ensure table exists and insert token
+                let _ = sqlx::query(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash TEXT NOT NULL UNIQUE,
+                        expires_at TEXT NOT NULL,
+                        used_at TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    "#,
+                )
+                .execute(&self.pool)
+                .await;
+
+                let _ = sqlx::query(
+                    r#"
+                    INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    "#,
+                )
+                .bind(&token_id)
+                .bind(&user.id)
+                .bind(&token_hash)
+                .bind(&expires_at)
+                .bind(&now_str)
+                .execute(&self.pool)
+                .await;
+
+                // Send email via EmailService
+                let email_service = crate::service::email_service::EmailService::with_default_config();
+                let _ = email_service
+                    .send_password_recovery(&user.email, &user.display_name, &raw_token)
+                    .await;
+            }
+            None => {
+                // Constant-time dummy verification against timing attacks
+                self.crypto_service
+                    .verify_or_dummy("dummy_timing_safe_pass".to_string(), None)
+                    .await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Completes password recovery using a single-use token
+    pub async fn reset_password(&self, raw_token: &str, new_password: &str) -> Result<(), AppError> {
+        let trimmed_token = raw_token.trim();
+        if trimmed_token.is_empty() {
+            return Err(AppError::BadRequest(
+                "Tautan pemulihan tidak valid".to_string(),
+                "INVALID_TOKEN",
+            ));
+        }
+
+        CryptoService::validate_password_strength(new_password)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(trimmed_token.as_bytes());
+        let token_hash = format!("{:x}", hasher.finalize());
+
+        #[derive(sqlx::FromRow)]
+        struct TokenRow {
+            id: String,
+            user_id: String,
+            expires_at: String,
+            used_at: Option<String>,
+        }
+
+        let token_row = sqlx::query_as::<_, TokenRow>(
+            "SELECT id, user_id, expires_at, used_at FROM password_reset_tokens WHERE token_hash = ?",
+        )
+        .bind(&token_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(format!("Database query failure: {}", e)))?;
+
+        let row = match token_row {
+            Some(r) => r,
+            None => {
+                return Err(AppError::BadRequest(
+                    "Tautan pemulihan tidak valid atau telah kedaluwarsa".to_string(),
+                    "INVALID_OR_EXPIRED_TOKEN",
+                ))
+            }
+        };
+
+        if row.used_at.is_some() {
+            return Err(AppError::BadRequest(
+                "Tautan pemulihan ini telah digunakan".to_string(),
+                "TOKEN_ALREADY_USED",
+            ));
+        }
+
+        let expires_at_dt = chrono::DateTime::parse_from_rfc3339(&row.expires_at)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|_| AppError::Internal("Invalid expiration timestamp".to_string()))?;
+
+        if Utc::now() > expires_at_dt {
+            return Err(AppError::BadRequest(
+                "Tautan pemulihan telah kedaluwarsa (maksimal 1 jam)".to_string(),
+                "TOKEN_EXPIRED",
+            ));
+        }
+
+        let password_hash = self
+            .crypto_service
+            .hash_password(new_password.to_string())
+            .await
+            .map_err(AppError::from)?;
+
+        let now_str = Utc::now().to_rfc3339();
+
+        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+        sqlx::query("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+            .bind(&password_hash)
+            .bind(&now_str)
+            .bind(&row.user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        sqlx::query("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?")
+            .bind(&now_str)
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        tx.commit().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
     }
 }

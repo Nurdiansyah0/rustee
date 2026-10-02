@@ -6,8 +6,7 @@ use crate::repository::{
     category_repo::{CategoryRepository, SqlxCategoryRepository},
     idempotency_repo::{IdempotencyLockResult, IdempotencyRepository, SqlxIdempotencyRepository},
     ingestion_repo::{
-        CreateIngestedTxParams, IngestionRepository, NewIngestionEvent,
-        SqlxIngestionRepository,
+        CreateIngestedTxParams, IngestionRepository, NewIngestionEvent, SqlxIngestionRepository,
     },
     transaction_repo::TransactionRecord,
     DbError,
@@ -257,9 +256,13 @@ impl IngestionService {
                 ParsedSignal {
                     provider: detected_provider.clone(),
                     amount: parse_idr_amount(&combined),
-                    direction: if combined.to_lowercase().contains("masuk") || combined.to_lowercase().contains("terima") {
+                    direction: if combined.to_lowercase().contains("masuk")
+                        || combined.to_lowercase().contains("terima")
+                    {
                         Some(TransactionDirection::Income)
-                    } else if combined.to_lowercase().contains("keluar") || combined.to_lowercase().contains("bayar") {
+                    } else if combined.to_lowercase().contains("keluar")
+                        || combined.to_lowercase().contains("bayar")
+                    {
                         Some(TransactionDirection::Expense)
                     } else {
                         None
@@ -325,7 +328,10 @@ impl IngestionService {
         idempotency_key: Option<&str>,
         payload: SmsPayload,
     ) -> Result<IngestionResponse, IngestionError> {
-        let raw_repr = format!("{}:{}:{:?}", payload.sender, payload.body, payload.received_at);
+        let raw_repr = format!(
+            "{}:{}:{:?}",
+            payload.sender, payload.body, payload.received_at
+        );
         let raw_hash = compute_payload_hash(&raw_repr);
 
         if let Some(key) = idempotency_key {
@@ -366,7 +372,13 @@ impl IngestionService {
         };
 
         let res = self
-            .execute_pipeline_core(user_id, IngestionSource::Sms, &raw_hash, signal, occurred_at)
+            .execute_pipeline_core(
+                user_id,
+                IngestionSource::Sms,
+                &raw_hash,
+                signal,
+                occurred_at,
+            )
             .await;
 
         match res {
@@ -524,24 +536,29 @@ impl IngestionService {
         // Stage 5: Confidence Engine & Account Resolution
         // Attempt to match an active user wallet/account for this provider
         let user_accounts = self.account_repo.list_by_user(user_id, false).await?;
-        let active_accounts: Vec<_> = user_accounts.into_iter().filter(|a| !a.is_archived).collect();
+        let active_accounts: Vec<_> = user_accounts
+            .into_iter()
+            .filter(|a| !a.is_archived)
+            .collect();
 
-        let resolved_account = active_accounts.iter().find(|acc| {
-            let name_lower = acc.name.to_lowercase();
-            let provider_lower = signal.provider.to_lowercase();
-            name_lower.contains(&provider_lower) || provider_lower.contains(&name_lower)
-        }).or_else(|| {
-            // If only 1 account exists, default to it
-            if active_accounts.len() == 1 {
-                active_accounts.first()
-            } else {
-                None
-            }
-        });
+        let resolved_account = active_accounts
+            .iter()
+            .find(|acc| {
+                let name_lower = acc.name.to_lowercase();
+                let provider_lower = signal.provider.to_lowercase();
+                name_lower.contains(&provider_lower) || provider_lower.contains(&name_lower)
+            })
+            .or_else(|| {
+                // If only 1 account exists, default to it
+                if active_accounts.len() == 1 {
+                    active_accounts.first()
+                } else {
+                    None
+                }
+            });
 
         let account_resolved = resolved_account.is_some();
-        let (confidence, requires_confirmation) =
-            evaluate_confidence(&signal, account_resolved);
+        let (confidence, requires_confirmation) = evaluate_confidence(&signal, account_resolved);
 
         // Stage 7: Build Candidate
         let candidate = CanonicalTransactionCandidate {
@@ -639,7 +656,10 @@ impl IngestionService {
                 .map(|c| c.id);
 
             let tx_id = Uuid::new_v4().to_string();
-            let merchant_str = candidate.merchant.clone().unwrap_or_else(|| signal.provider.clone());
+            let merchant_str = candidate
+                .merchant
+                .clone()
+                .unwrap_or_else(|| signal.provider.clone());
             let description = format!("{} via {}", merchant_str, signal.provider);
 
             let mut final_candidate = candidate.clone();
@@ -671,7 +691,10 @@ impl IngestionService {
                 amount,
                 date: occurred_at,
                 description,
-                notes: signal.external_reference.as_ref().map(|r| format!("Ref: {}", r)),
+                notes: signal
+                    .external_reference
+                    .as_ref()
+                    .map(|r| format!("Ref: {}", r)),
                 source: source.to_string(),
                 external_reference: signal.external_reference,
                 merchant: signal.merchant,
@@ -679,7 +702,10 @@ impl IngestionService {
                 ingestion_id: event_id.clone(),
             };
 
-            let (tx_record, _) = self.ingestion_repo.commit_transaction_atomic(&params).await?;
+            let (tx_record, _) = self
+                .ingestion_repo
+                .commit_transaction_atomic(&params)
+                .await?;
 
             Ok(IngestionResponse {
                 event_id,
@@ -759,7 +785,8 @@ impl IngestionService {
 
         for rec in records {
             if let Some(json) = rec.parsed_candidate {
-                if let Ok(candidate) = serde_json::from_str::<CanonicalTransactionCandidate>(&json) {
+                if let Ok(candidate) = serde_json::from_str::<CanonicalTransactionCandidate>(&json)
+                {
                     result.push(candidate);
                 }
             }
@@ -786,9 +813,9 @@ impl IngestionService {
         }
 
         // Deserialize candidate
-        let candidate_json = event
-            .parsed_candidate
-            .ok_or_else(|| IngestionError::InvalidCandidateState("Missing parsed candidate".to_string()))?;
+        let candidate_json = event.parsed_candidate.ok_or_else(|| {
+            IngestionError::InvalidCandidateState("Missing parsed candidate".to_string())
+        })?;
         let mut candidate: CanonicalTransactionCandidate = serde_json::from_str(&candidate_json)
             .map_err(|e| IngestionError::InvalidCandidateState(e.to_string()))?;
 
@@ -820,7 +847,10 @@ impl IngestionService {
         }
 
         let tx_id = Uuid::new_v4().to_string();
-        let merchant_str = candidate.merchant.clone().unwrap_or_else(|| candidate.provider.clone());
+        let merchant_str = candidate
+            .merchant
+            .clone()
+            .unwrap_or_else(|| candidate.provider.clone());
         let description = format!("{} via {}", merchant_str, candidate.provider);
 
         let params = CreateIngestedTxParams {

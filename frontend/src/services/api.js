@@ -21,9 +21,28 @@ function generateUUID() {
   });
 }
 
+function getActiveTenantId() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const directId = localStorage.getItem('invinite_active_tenant_id');
+      if (directId) return directId;
+      const raw = localStorage.getItem('invinite_active_workspace');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.active_tenant_id || null;
+      }
+    }
+  } catch {
+    // Ignore storage parse error
+  }
+  return null;
+}
+
 async function request(path, options = {}) {
+  const activeTenantId = getActiveTenantId();
   const headers = {
     'Content-Type': 'application/json',
+    ...(activeTenantId ? { 'X-Tenant-ID': activeTenantId } : {}),
     ...(options.headers || {}),
   };
 
@@ -35,8 +54,8 @@ async function request(path, options = {}) {
     });
 
     if (!response.ok) {
-      // If Vite proxy returns 502/504 or 404 due to offline backend, fallback to mock
-      if (response.status === 404 || response.status >= 500) {
+      // If Vite proxy returns 502/504 or server 5xx error due to offline backend, fallback to mock
+      if (response.status >= 500) {
         return handleMockApiRequest(path, options);
       }
 
@@ -93,6 +112,18 @@ export const api = {
     }),
 
   getMe: () => request('/api/v1/auth/me'),
+
+  forgotPassword: (email) =>
+    request('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token, password) =>
+    request('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }),
 
   // Accounts
   getAccounts: () => request('/api/v1/accounts'),
@@ -184,4 +215,39 @@ export const api = {
   // Cursor Delta Sync (§25, §26)
   getSync: (cursor = 0) =>
     request(`/api/v1/sync?cursor=${encodeURIComponent(cursor)}`),
+
+  // Tenancy & Workspaces (v4.1 §5, §8, §35)
+  getWorkspaces: () => request('/api/v1/tenants'),
+  createWorkspace: (data) =>
+    request('/api/v1/tenants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getWorkspace: (id) => request(`/api/v1/tenants/${id}`),
+  getWorkspaceProfile: (id) => request(`/api/v1/tenants/${id}/profile`),
+  updateWorkspaceProfile: (id, data) =>
+    request(`/api/v1/tenants/${id}/profile`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getWorkspaceMembers: (id) => request(`/api/v1/tenants/${id}/members`),
+  inviteWorkspaceMember: (id, data) =>
+    request(`/api/v1/tenants/${id}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateWorkspaceMemberRole: (id, userId, role) =>
+    request(`/api/v1/tenants/${id}/members/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+  removeWorkspaceMember: (id, userId) =>
+    request(`/api/v1/tenants/${id}/members/${userId}`, {
+      method: 'DELETE',
+    }),
+  switchWorkspace: (id) =>
+    request(`/api/v1/tenants/${id}/switch`, {
+      method: 'POST',
+    }),
+  getTenantCapabilities: (id) => request(`/api/v1/tenants/${id}/capabilities`),
 };

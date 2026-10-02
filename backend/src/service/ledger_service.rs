@@ -94,7 +94,11 @@ impl CreateTransactionRequest {
         hasher.update(b"|");
         hasher.update(self.notes.as_deref().unwrap_or("").as_bytes());
         hasher.update(b"|");
-        hasher.update(if self.is_recurring.unwrap_or(false) { b"1" } else { b"0" });
+        hasher.update(if self.is_recurring.unwrap_or(false) {
+            b"1"
+        } else {
+            b"0"
+        });
         hex::encode(hasher.finalize())
     }
 }

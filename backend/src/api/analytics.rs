@@ -178,12 +178,11 @@ pub async fn get_advanced_analytics(
         }
 
         if !allowed {
-            if let Ok(Some((tier,))) = sqlx::query_as::<_, (String,)>(
-                "SELECT subscription_tier FROM users WHERE id = ?1",
-            )
-            .bind(&user.user_id)
-            .fetch_optional(&state.pool)
-            .await
+            if let Ok(Some((tier,))) =
+                sqlx::query_as::<_, (String,)>("SELECT subscription_tier FROM users WHERE id = ?1")
+                    .bind(&user.user_id)
+                    .fetch_optional(&state.pool)
+                    .await
             {
                 if tier.eq_ignore_ascii_case("premium") || tier.eq_ignore_ascii_case("trialing") {
                     allowed = true;
@@ -192,9 +191,10 @@ pub async fn get_advanced_analytics(
         }
 
         if allowed {
-            if let Ok((refreshed_token, _)) = state
-                .jwt_engine()
-                .generate_token(&user.user_id, &user.email, &user.role, "premium")
+            if let Ok((refreshed_token, _)) =
+                state
+                    .jwt_engine()
+                    .generate_token(&user.user_id, &user.email, &user.role, "premium")
             {
                 let cookie_val = crate::api::auth::make_auth_cookie(
                     &refreshed_token,
@@ -269,7 +269,16 @@ pub async fn get_advanced_analytics(
     };
 
     // Query spending per category
-    let rows = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            i64,
+        ),
+    >(
         r#"
         SELECT 
             t.category_id,
@@ -292,7 +301,11 @@ pub async fn get_advanced_analytics(
     .unwrap_or_default();
 
     let mut category_spending = Vec::new();
-    let total_exp_float = if monthly_expenses > 0 { monthly_expenses as f64 } else { 1.0 };
+    let total_exp_float = if monthly_expenses > 0 {
+        monthly_expenses as f64
+    } else {
+        1.0
+    };
     for (cat_id, cat_name, cat_color, cat_icon, amount) in rows {
         let pct = ((amount as f64 / total_exp_float) * 1000.0).round() / 10.0;
         category_spending.push(CategorySpendingSummary {
@@ -307,18 +320,38 @@ pub async fn get_advanced_analytics(
 
     // 50/30/20 rule calculation
     let total_income = cash_flow.total_income.0;
-    let total_inc_float = if total_income > 0 { total_income as f64 } else { 1.0 };
+    let total_inc_float = if total_income > 0 {
+        total_income as f64
+    } else {
+        1.0
+    };
     let needs_amount = (monthly_expenses * 60) / 100;
     let wants_amount = monthly_expenses - needs_amount;
-    let savings_amount = if cash_flow.net_cash_flow.0 > 0 { cash_flow.net_cash_flow.0 } else { 0 };
+    let savings_amount = if cash_flow.net_cash_flow.0 > 0 {
+        cash_flow.net_cash_flow.0
+    } else {
+        0
+    };
 
     let rule_50_30_20 = Rule503020Summary {
         needs_amount: Rupiah::new(needs_amount),
-        needs_percent: if total_income > 0 { ((needs_amount as f64 / total_inc_float) * 1000.0).round() / 10.0 } else { 0.0 },
+        needs_percent: if total_income > 0 {
+            ((needs_amount as f64 / total_inc_float) * 1000.0).round() / 10.0
+        } else {
+            0.0
+        },
         wants_amount: Rupiah::new(wants_amount),
-        wants_percent: if total_income > 0 { ((wants_amount as f64 / total_inc_float) * 1000.0).round() / 10.0 } else { 0.0 },
+        wants_percent: if total_income > 0 {
+            ((wants_amount as f64 / total_inc_float) * 1000.0).round() / 10.0
+        } else {
+            0.0
+        },
         savings_amount: Rupiah::new(savings_amount),
-        savings_percent: if total_income > 0 { ((savings_amount as f64 / total_inc_float) * 1000.0).round() / 10.0 } else { 0.0 },
+        savings_percent: if total_income > 0 {
+            ((savings_amount as f64 / total_inc_float) * 1000.0).round() / 10.0
+        } else {
+            0.0
+        },
         target_needs_percent: 50.0,
         target_wants_percent: 30.0,
         target_savings_percent: 20.0,

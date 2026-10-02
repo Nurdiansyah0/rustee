@@ -16,9 +16,7 @@ use crate::api::auth::make_auth_cookie;
 use crate::api::middleware::auth_extractor::{AuthenticatedUser, HasJwtEngine};
 use crate::api::AppState;
 use crate::error::AppError;
-use crate::service::payment_service::{
-    PaymentError, PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE,
-};
+use crate::service::payment_service::{PaymentError, PREMIUM_ANNUAL_PRICE, PREMIUM_MONTHLY_PRICE};
 
 pub const CACHE_CONTROL_VALUE: &str = "private, no-store, must-revalidate";
 
@@ -35,8 +33,10 @@ pub async fn midtrans_webhook_handler(
     _body_bytes: Bytes,
 ) -> Result<StatusCode, AppError> {
     Err(PaymentError::UnsupportedProvider(
-        "Unsupported payment provider 'midtrans'. DANA is the exclusive payment provider.".to_string(),
-    ).into())
+        "Unsupported payment provider 'midtrans'. DANA is the exclusive payment provider."
+            .to_string(),
+    )
+    .into())
 }
 
 /// Webhook handler for Xendit — disabled; DANA is the exclusive payment provider.
@@ -46,10 +46,11 @@ pub async fn xendit_webhook_handler(
     _body_bytes: Bytes,
 ) -> Result<StatusCode, AppError> {
     Err(PaymentError::UnsupportedProvider(
-        "Unsupported payment provider 'xendit'. DANA is the exclusive payment provider.".to_string(),
-    ).into())
+        "Unsupported payment provider 'xendit'. DANA is the exclusive payment provider."
+            .to_string(),
+    )
+    .into())
 }
-
 
 pub async fn get_subscription_status(
     user: AuthenticatedUser,
@@ -141,7 +142,10 @@ pub async fn get_subscription_status(
                         entity_id: s.id.clone(),
                         ip_address: None,
                         user_agent: Some("System-Lazy-Expiry".to_string()),
-                        details: Some("3-month trial expired; reverted to free tier without data loss".to_string()),
+                        details: Some(
+                            "3-month trial expired; reverted to free tier without data loss"
+                                .to_string(),
+                        ),
                     })
                     .await;
 
@@ -154,7 +158,11 @@ pub async fn get_subscription_status(
         } else if s.status == "active" {
             is_pro = true;
             status = "active";
-            amount = if s.amount.0 > 0 { s.amount.0 } else { PREMIUM_MONTHLY_PRICE };
+            amount = if s.amount.0 > 0 {
+                s.amount.0
+            } else {
+                PREMIUM_MONTHLY_PRICE
+            };
         } else {
             status = s.status.as_str();
             is_pro = false;
@@ -301,25 +309,17 @@ pub async fn dana_webhook_handler(
 
     let mut result = state
         .payment_service
-        .handle_dana_webhook(
-            "POST",
-            &full_path,
-            timestamp,
-            signature,
-            payload_str,
-        )
+        .handle_dana_webhook("POST", &full_path, timestamp, signature, payload_str)
         .await;
 
-    if matches!(result, Err(crate::service::payment_service::PaymentError::InvalidSignature)) && path != full_path {
+    if matches!(
+        result,
+        Err(crate::service::payment_service::PaymentError::InvalidSignature)
+    ) && path != full_path
+    {
         result = state
             .payment_service
-            .handle_dana_webhook(
-                "POST",
-                path,
-                timestamp,
-                signature,
-                payload_str,
-            )
+            .handle_dana_webhook("POST", path, timestamp, signature, payload_str)
             .await;
     }
 
@@ -406,8 +406,16 @@ pub async fn simulate_payment_handler(
         cancel_at_period_end: false,
     };
 
-    state.payment_service.subscription_repo.upsert_subscription(&sub).await?;
-    state.payment_service.user_repo.update_tier(&user.user_id, "premium").await?;
+    state
+        .payment_service
+        .subscription_repo
+        .upsert_subscription(&sub)
+        .await?;
+    state
+        .payment_service
+        .user_repo
+        .update_tier(&user.user_id, "premium")
+        .await?;
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
@@ -449,7 +457,10 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/webhooks/xendit", post(xendit_webhook_handler))
         .route("/webhooks/dana", post(dana_webhook_handler))
         .route("/v1.0/debit/notify", post(dana_webhook_handler))
-        .route("/webhooks/dana/disburse", post(dana_disburse_notify_handler))
+        .route(
+            "/webhooks/dana/disburse",
+            post(dana_disburse_notify_handler),
+        )
         .route("/subscription", get(get_subscription_status))
         .route("/subscriptions/status", get(get_subscription_status))
         .route("/subscriptions/checkout", post(checkout_handler))
@@ -458,8 +469,13 @@ pub fn webhooks_router() -> Router<AppState> {
         .route("/subscriptions/trial/activate", post(trial_handler))
         .route("/subscription/trial", post(trial_handler))
         .route("/subscription/trial/activate", post(trial_handler))
-        .route("/subscriptions/simulate-payment", post(simulate_payment_handler))
-        .route("/subscriptions/dana/disburse", post(dana_disburse_to_balance_handler))
+        .route(
+            "/subscriptions/simulate-payment",
+            post(simulate_payment_handler),
+        )
+        .route(
+            "/subscriptions/dana/disburse",
+            post(dana_disburse_to_balance_handler),
+        )
         .route("/disburse/dana", post(dana_disburse_to_balance_handler))
 }
-

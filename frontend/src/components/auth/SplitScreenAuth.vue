@@ -306,6 +306,7 @@ import { Input, Button } from '@/components/ui'
 import FinrepIcon from '@/components/FinrepIcon.vue'
 import LiveDashboardPreview from './LiveDashboardPreview.vue'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
 import {
   AlertCircle,
   ArrowLeft,
@@ -446,8 +447,8 @@ async function handleRecoverySubmit() {
   recoveryEmail.value = email
   recoveryLoading.value = true
   try {
-    // Simulated customer-safe recovery dispatch
-    await new Promise((resolve) => setTimeout(resolve, 450))
+    // Real account recovery request to backend (enterprise rate-limited & enumeration-safe)
+    await api.forgotPassword(email)
     if (!isMounted) return
     recoverySubmitted.value = true
     startResendCooldown(30)
@@ -455,7 +456,7 @@ async function handleRecoverySubmit() {
     confirmationCardRef.value?.focus?.()
   } catch (err) {
     if (isMounted) {
-      recoveryError.value = 'Gagal memproses permintaan pemulihan. Silakan coba sesaat lagi.'
+      recoveryError.value = err?.message || 'Gagal memproses permintaan pemulihan. Silakan coba sesaat lagi.'
     }
   } finally {
     if (isMounted) {
@@ -471,13 +472,14 @@ async function handleResendRecovery() {
   recoveryError.value = ''
 
   try {
-    await new Promise((resolve) => setTimeout(resolve, 350))
+    const email = recoveryEmail.value.trim()
+    await api.forgotPassword(email)
     if (!isMounted) return
     resendSuccessMessage.value = 'Tautan pemulihan baru telah dikirimkan ulang!'
     startResendCooldown(30)
   } catch (err) {
     if (isMounted) {
-      recoveryError.value = 'Gagal mengirim ulang email. Silakan coba beberapa saat lagi.'
+      recoveryError.value = err?.message || 'Gagal mengirim ulang email. Silakan coba beberapa saat lagi.'
     }
   } finally {
     if (isMounted) {

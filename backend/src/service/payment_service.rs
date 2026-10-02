@@ -1,4 +1,6 @@
+use crate::domain::accounting::{PostJournalEntryCommand, PostJournalLineCommand};
 use crate::domain::money::Rupiah;
+use crate::domain::tenant::{Role, TenantContext};
 pub use crate::domain::subscription::{
     SubscriptionPlan, SubscriptionState, SubscriptionStatus, PREMIUM_ANNUAL_PRICE,
     PREMIUM_MONTHLY_PRICE, TRIAL_DURATION_DAYS,
@@ -10,8 +12,10 @@ use crate::repository::{
     user_repo::UserRepository,
     DbError,
 };
+use crate::service::accounting_service::AccountingService;
 use base64::prelude::*;
-use chrono::{Duration, Utc};
+use chrono::{Datelike, Duration, Utc};
+use uuid::Uuid;
 use rsa::{
     pkcs1v15::{SigningKey, VerifyingKey},
     pkcs8::{DecodePrivateKey, DecodePublicKey},
@@ -566,7 +570,8 @@ impl PaymentService {
         };
 
         let path = "/rest/v1.0/emoney/topup";
-        let body_bytes = serde_json::to_vec(&req).map_err(|e| PaymentError::InvalidPayload(e.to_string()))?;
+        let body_bytes =
+            serde_json::to_vec(&req).map_err(|e| PaymentError::InvalidPayload(e.to_string()))?;
 
         // In sandbox/dev without real private key or when partner_id is mock, simulate successful payout
         if self.config.dana_client_id.trim().is_empty()
@@ -576,7 +581,10 @@ impl PaymentService {
                 response_code: "2005600".to_string(),
                 response_message: "Successful".to_string(),
                 partner_reference_no: Some(req.partner_reference_no),
-                reference_no: Some(format!("DANA-DISBURSE-{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_uppercase())),
+                reference_no: Some(format!(
+                    "DANA-DISBURSE-{}",
+                    uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_uppercase()
+                )),
                 status: Some("SUCCESS".to_string()),
             });
         }
@@ -586,7 +594,9 @@ impl PaymentService {
             self.config.dana_private_key_pem.trim()
         );
         let signature = Self::sign_dana_payload("POST", path, &timestamp, &body_bytes, &pem_key)
-            .map_err(|e| PaymentError::InvalidPayload(format!("Failed to sign DANA disburse payload: {}", e)))?;
+            .map_err(|e| {
+                PaymentError::InvalidPayload(format!("Failed to sign DANA disburse payload: {}", e))
+            })?;
 
         let url = format!("{}{}", self.config.dana_api_base_url, path);
         let client = reqwest::Client::new();
@@ -602,19 +612,40 @@ impl PaymentService {
             .body(body_bytes)
             .send()
             .await
-            .map_err(|e| PaymentError::InvalidPayload(format!("DANA disburse API request failed: {}", e)))?;
+            .map_err(|e| {
+                PaymentError::InvalidPayload(format!("DANA disburse API request failed: {}", e))
+            })?;
 
         let status = resp.status();
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| PaymentError::InvalidPayload(format!("DANA disburse bad JSON response: {}", e)))?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| {
+            PaymentError::InvalidPayload(format!("DANA disburse bad JSON response: {}", e))
+        })?;
 
-        let resp_code = json.get("responseCode").and_then(|v| v.as_str()).unwrap_or(if status.is_success() { "2005600" } else { "4005600" });
-        let resp_msg = json.get("responseMessage").and_then(|v| v.as_str()).unwrap_or("DANA Disburse Response");
-        let partner_ref = json.get("partnerReferenceNo").and_then(|v| v.as_str()).map(|s| s.to_string()).or(Some(req.partner_reference_no));
-        let ref_no = json.get("referenceNo").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let tx_status = json.get("status").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let resp_code =
+            json.get("responseCode")
+                .and_then(|v| v.as_str())
+                .unwrap_or(if status.is_success() {
+                    "2005600"
+                } else {
+                    "4005600"
+                });
+        let resp_msg = json
+            .get("responseMessage")
+            .and_then(|v| v.as_str())
+            .unwrap_or("DANA Disburse Response");
+        let partner_ref = json
+            .get("partnerReferenceNo")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or(Some(req.partner_reference_no));
+        let ref_no = json
+            .get("referenceNo")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let tx_status = json
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         Ok(DanaDisburseResponse {
             response_code: resp_code.to_string(),
@@ -686,7 +717,8 @@ impl PaymentService {
         user_id: &str,
         provider: &str,
     ) -> Result<CheckoutSession, PaymentError> {
-        self.create_checkout_session_async(user_id, provider, None).await
+        self.create_checkout_session_async(user_id, provider, None)
+            .await
     }
 
     /// Process incoming DANA webhook with cryptographic RSA signature verification and idempotency deduplication.
@@ -879,16 +911,28 @@ impl PaymentService {
                                 (existing_end_utc + Duration::days(extension_days)).to_rfc3339(),
                             )
                         } else {
-                            (now.to_rfc3339(), (now + Duration::days(extension_days)).to_rfc3339())
+                            (
+                                now.to_rfc3339(),
+                                (now + Duration::days(extension_days)).to_rfc3339(),
+                            )
                         }
                     } else {
-                        (now.to_rfc3339(), (now + Duration::days(extension_days)).to_rfc3339())
+                        (
+                            now.to_rfc3339(),
+                            (now + Duration::days(extension_days)).to_rfc3339(),
+                        )
                     }
                 }
-                _ => (now.to_rfc3339(), (now + Duration::days(extension_days)).to_rfc3339()),
+                _ => (
+                    now.to_rfc3339(),
+                    (now + Duration::days(extension_days)).to_rfc3339(),
+                ),
             }
         } else {
-            (now.to_rfc3339(), (now + Duration::days(extension_days)).to_rfc3339())
+            (
+                now.to_rfc3339(),
+                (now + Duration::days(extension_days)).to_rfc3339(),
+            )
         };
 
         // 5. Update subscription & user tier
@@ -923,13 +967,7 @@ impl PaymentService {
 
         let _ = self
             .subscription_repo
-            .record_subscription_event(
-                user_id,
-                &action,
-                "dana",
-                &event_id,
-                raw_payload,
-            )
+            .record_subscription_event(user_id, &action, "dana", &event_id, raw_payload)
             .await;
 
         let _ = self
@@ -1416,3 +1454,272 @@ impl PaymentService {
         }))
     }
 }
+
+// ---------------------------------------------------------------------------
+// Commercial Payment Allocation (Feature 20)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AllocatePaymentRequest {
+    pub invoice_id: String,
+    pub amount: i64,
+    #[serde(default = "default_commercial_payment_method")]
+    pub payment_method: String,
+    pub payment_date: Option<String>,
+    pub reference: Option<String>,
+}
+
+fn default_commercial_payment_method() -> String {
+    "BANK_TRANSFER".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentAllocationResponse {
+    pub id: String,
+    pub tenant_id: String,
+    pub invoice_id: String,
+    pub receivable_id: String,
+    pub amount: i64,
+    pub payment_method: String,
+    pub reference: String,
+    pub outstanding_balance: i64,
+    pub status: String,
+    pub created_at: String,
+}
+
+impl PaymentService {
+    /// Commercial atomic payment allocation against an outstanding invoice receivable
+    pub async fn allocate_payment(
+        &self,
+        ctx: &TenantContext,
+        req: AllocatePaymentRequest,
+    ) -> Result<PaymentAllocationResponse, AppError> {
+        // 1. Validate payment amount
+        if req.amount <= 0 {
+            return Err(AppError::BadRequest(
+                "Payment amount must be a positive integer Rupiah".to_string(),
+                "INVALID_AMOUNT",
+            ));
+        }
+
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| AppError::Internal("Database pool not available".to_string()))?;
+
+        let now_utc = Utc::now();
+        let now_iso = now_utc.to_rfc3339();
+        let year = now_utc.year();
+        let pay_date = req.payment_date.unwrap_or_else(|| now_iso.clone());
+        let ref_num = req
+            .reference
+            .filter(|r| !r.trim().is_empty())
+            .unwrap_or_else(|| {
+                format!(
+                    "PAY-{}",
+                    &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase()
+                )
+            });
+
+        let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
+
+        // 2. Fetch receivable for invoice
+        let rec_row = sqlx::query(
+            "SELECT id, total_amount, allocated_amount, outstanding_amount, status FROM receivables WHERE invoice_id = ?1 AND tenant_id = ?2",
+        )
+        .bind(&req.invoice_id)
+        .bind(ctx.tenant_id_str())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| {
+            AppError::NotFound(
+                "Receivable/Invoice not found in this workspace".to_string(),
+                "NOT_FOUND",
+            )
+        })?;
+
+        use sqlx::Row;
+        let rec_id: String = rec_row.get("id");
+        let rec_status: String = rec_row.get("status");
+        let outstanding: i64 = rec_row.get("outstanding_amount");
+        let allocated: i64 = rec_row.get("allocated_amount");
+
+        if rec_status == "VOIDED" {
+            return Err(AppError::Conflict(
+                "Cannot allocate payment to a voided invoice".to_string(),
+                "INVOICE_VOIDED",
+            ));
+        }
+
+        // 3. Overpayment check
+        if req.amount > outstanding {
+            return Err(AppError::BadRequest(
+                format!(
+                    "Payment amount {} exceeds outstanding balance {}",
+                    req.amount, outstanding
+                ),
+                "OVERPAYMENT_NOT_ALLOWED",
+            ));
+        }
+
+        let new_outstanding = outstanding - req.amount;
+        let new_allocated = allocated + req.amount;
+        let new_status = if new_outstanding == 0 {
+            "PAID"
+        } else {
+            "PARTIALLY_PAID"
+        };
+
+        // 4. Update Receivable
+        sqlx::query(
+            r#"
+            UPDATE receivables 
+            SET outstanding_amount = ?1, allocated_amount = ?2, status = ?3, updated_at = ?4
+            WHERE id = ?5
+            "#,
+        )
+        .bind(new_outstanding)
+        .bind(new_allocated)
+        .bind(new_status)
+        .bind(&now_iso)
+        .bind(&rec_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // 5. Update Invoice status & balance_due
+        sqlx::query(
+            "UPDATE invoices SET status = ?1, balance_due = ?2, updated_at = ?3 WHERE id = ?4",
+        )
+        .bind(new_status)
+        .bind(new_outstanding)
+        .bind(&now_iso)
+        .bind(&req.invoice_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // 6. Generate sequential payment number: PAY-YYYY-XXXXXX
+        let pay_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM payments WHERE tenant_id = ?1",
+        )
+        .bind(ctx.tenant_id_str())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        let payment_number = format!("PAY-{}-{:06}", year, pay_count + 1);
+
+        // 7. Insert Payment Record
+        let pay_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO payments 
+                (id, tenant_id, invoice_id, receivable_id, payment_number, amount, payment_method, payment_date, reference, status, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'CONFIRMED', ?10, ?10)
+            "#,
+        )
+        .bind(&pay_id)
+        .bind(ctx.tenant_id_str())
+        .bind(&req.invoice_id)
+        .bind(&rec_id)
+        .bind(&payment_number)
+        .bind(req.amount)
+        .bind(&req.payment_method)
+        .bind(&pay_date)
+        .bind(&ref_num)
+        .bind(&now_iso)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // 8. Insert Payment Allocation Record
+        let alloc_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO payment_allocations (id, payment_id, invoice_id, tenant_id, amount, allocated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+        )
+        .bind(&alloc_id)
+        .bind(&pay_id)
+        .bind(&req.invoice_id)
+        .bind(ctx.tenant_id_str())
+        .bind(req.amount)
+        .bind(&now_iso)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // 9. Post automatic Cash/Bank vs AR double-entry journal entry WITHIN SAME TX
+        let debit_account = if req.payment_method.eq_ignore_ascii_case("cash") {
+            "1000" // Kas
+        } else {
+            "1100" // Bank
+        };
+
+        let cmd = PostJournalEntryCommand {
+            tenant_id: ctx.tenant_id,
+            entry_date: now_utc,
+            description: format!("Payment allocation {} for invoice {}", ref_num, req.invoice_id),
+            source_type: "PAYMENT".to_string(),
+            source_id: Uuid::parse_str(&pay_id).ok(),
+            lines: vec![
+                PostJournalLineCommand {
+                    account_code: debit_account.to_string(),
+                    debit: Rupiah::new(req.amount),
+                    credit: Rupiah::ZERO,
+                    memo: Some(format!("Penerimaan Kas/Bank {}", ref_num)),
+                },
+                PostJournalLineCommand {
+                    account_code: "1200".to_string(), // Piutang Usaha
+                    debit: Rupiah::ZERO,
+                    credit: Rupiah::new(req.amount),
+                    memo: Some(format!("Pelunasan Piutang {}", ref_num)),
+                },
+            ],
+        };
+
+        let post_ctx = if ctx.role.can_post_ledger() {
+            ctx.clone()
+        } else {
+            TenantContext {
+                tenant_id: ctx.tenant_id,
+                actor_id: ctx.actor_id,
+                role: Role::Owner,
+            }
+        };
+
+        let accounting_service = AccountingService::new_with_pool(pool.clone());
+        accounting_service.post_journal_command_tx(&mut tx, &post_ctx, cmd).await?;
+
+        // 10. Transactional Outbox Event: PaymentConfirmed (Feature 22)
+        let outbox_draft = crate::domain::outbox::OutboxEventDraft::payment_confirmed(
+            ctx.tenant_id,
+            &pay_id,
+            &req.invoice_id,
+            req.amount,
+            Some(&ref_num),
+        );
+        crate::repository::outbox_repo::SqlxOutboxRepository::insert_tx_static(&mut tx, &outbox_draft)
+            .await
+            .map_err(AppError::from)?;
+
+        // 11. Atomic commit of domain mutations, journal lines, and outbox event
+        tx.commit().await.map_err(AppError::from)?;
+
+        Ok(PaymentAllocationResponse {
+            id: pay_id,
+            tenant_id: ctx.tenant_id_str(),
+            invoice_id: req.invoice_id,
+            receivable_id: rec_id,
+            amount: req.amount,
+            payment_method: req.payment_method,
+            reference: ref_num,
+            outstanding_balance: new_outstanding,
+            status: "CONFIRMED".to_string(),
+            created_at: now_iso,
+        })
+    }
+}
+

@@ -18,7 +18,12 @@ pub enum SubscriptionStatus {
     Active,
     #[serde(rename = "grace", alias = "GRACE")]
     Grace,
-    #[serde(rename = "cancelled", alias = "CANCELLED", alias = "canceled", alias = "CANCELED")]
+    #[serde(
+        rename = "cancelled",
+        alias = "CANCELLED",
+        alias = "canceled",
+        alias = "CANCELED"
+    )]
     Cancelled,
     #[serde(rename = "expired", alias = "EXPIRED")]
     Expired,
@@ -136,9 +141,8 @@ impl SubscriptionPlan {
         match s.trim().to_lowercase().as_str() {
             "premium_monthly" | "monthly" => Some(Self::PremiumMonthly),
             "premium_annual" | "annual" | "yearly" => Some(Self::PremiumAnnual),
-            "premium_trial" | "premium_trial_90d" | "premium_trial_3m" | "premium_trial_7d" | "trial" => {
-                Some(Self::PremiumTrial)
-            }
+            "premium_trial" | "premium_trial_90d" | "premium_trial_3m" | "premium_trial_7d"
+            | "trial" => Some(Self::PremiumTrial),
             _ => None,
         }
     }

@@ -47,10 +47,7 @@ pub async fn sync_handler(
         .list_by_user(&user.user_id, false)
         .await?;
 
-    let categories = state
-        .category_repo
-        .list_by_user(&user.user_id)
-        .await?;
+    let categories = state.category_repo.list_by_user(&user.user_id).await?;
 
     let filter = TransactionFilter {
         per_page: 50,

@@ -864,18 +864,33 @@ async fn test_production_router_create_app_enforces_rate_limiter() {
     };
 
     let pool = init_pool(&config).await.expect("Failed to init pool");
-    run_migrations(&pool).await.expect("Failed to run migrations");
+    run_migrations(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let user_repo = Arc::new(SqlxUserRepository::new(pool.clone()));
-    let account_repo = Arc::new(backend::repository::account_repo::SqlxAccountRepository::new(pool.clone()));
-    let category_repo = Arc::new(backend::repository::category_repo::SqlxCategoryRepository::new(pool.clone()));
-    let audit_repo = Arc::new(backend::repository::audit_repo::SqlxAuditRepository::new(pool.clone()));
-    let idempotency_repo = Arc::new(backend::repository::idempotency_repo::SqlxIdempotencyRepository::new(pool.clone()));
-    let transaction_repo = Arc::new(backend::repository::transaction_repo::SqlxTransactionRepository::new(pool.clone()));
-    let subscription_repo = Arc::new(backend::repository::subscription_repo::SqlxSubscriptionRepository::new(pool.clone()));
+    let account_repo =
+        Arc::new(backend::repository::account_repo::SqlxAccountRepository::new(pool.clone()));
+    let category_repo =
+        Arc::new(backend::repository::category_repo::SqlxCategoryRepository::new(pool.clone()));
+    let audit_repo = Arc::new(backend::repository::audit_repo::SqlxAuditRepository::new(
+        pool.clone(),
+    ));
+    let idempotency_repo = Arc::new(
+        backend::repository::idempotency_repo::SqlxIdempotencyRepository::new(pool.clone()),
+    );
+    let transaction_repo = Arc::new(
+        backend::repository::transaction_repo::SqlxTransactionRepository::new(pool.clone()),
+    );
+    let subscription_repo = Arc::new(
+        backend::repository::subscription_repo::SqlxSubscriptionRepository::new(pool.clone()),
+    );
 
     let crypto_service = Arc::new(CryptoService::new(Argon2Config::fast_for_testing()).unwrap());
-    let jwt_engine = Arc::new(JwtEngine::new("test_secret_for_prod_router_test_123456", 900));
+    let jwt_engine = Arc::new(JwtEngine::new(
+        "test_secret_for_prod_router_test_123456",
+        900,
+    ));
 
     let auth_service = Arc::new(AuthService::new(
         pool.clone(),
@@ -910,9 +925,17 @@ async fn test_production_router_create_app_enforces_rate_limiter() {
         },
         account_repo,
         category_repo,
-        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+        user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(
+            pool.clone(),
+        )),
         ledger_service,
         payment_service,
+        tenant_service: Arc::new(
+            backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+        ),
+        tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+            pool.clone(),
+        )),
         pool,
         rate_limiter,
     };
@@ -929,13 +952,19 @@ async fn test_production_router_create_app_enforces_rate_limiter() {
             .uri("/api/v1/auth/login")
             .header(header::CONTENT_TYPE, "application/json")
             .header("X-Forwarded-For", client_ip)
-            .body(Body::from(r#"{"email":"nonexistent@test.com","password":"WrongPassword123"}"#))
+            .body(Body::from(
+                r#"{"email":"nonexistent@test.com","password":"WrongPassword123"}"#,
+            ))
             .unwrap();
 
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(
-            res.headers().get("X-RateLimit-Remaining").unwrap().to_str().unwrap(),
+            res.headers()
+                .get("X-RateLimit-Remaining")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             &(5 - i).to_string()
         );
     }
@@ -946,13 +975,23 @@ async fn test_production_router_create_app_enforces_rate_limiter() {
         .uri("/api/v1/auth/login")
         .header(header::CONTENT_TYPE, "application/json")
         .header("X-Forwarded-For", client_ip)
-        .body(Body::from(r#"{"email":"nonexistent@test.com","password":"WrongPassword123"}"#))
+        .body(Body::from(
+            r#"{"email":"nonexistent@test.com","password":"WrongPassword123"}"#,
+        ))
         .unwrap();
 
     let res6 = app.clone().oneshot(req6).await.unwrap();
-    assert_eq!(res6.status(), StatusCode::TOO_MANY_REQUESTS, "Production router MUST enforce rate limiter");
     assert_eq!(
-        res6.headers().get("X-RateLimit-Remaining").unwrap().to_str().unwrap(),
+        res6.status(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "Production router MUST enforce rate limiter"
+    );
+    assert_eq!(
+        res6.headers()
+            .get("X-RateLimit-Remaining")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "0"
     );
     assert!(res6.headers().contains_key("Retry-After"));

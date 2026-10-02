@@ -116,9 +116,17 @@ mod m1_trial_lifecycle_tests {
             auth_state,
             account_repo,
             category_repo,
-            user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+            user_preferences_repo: Arc::new(
+                backend::repository::SqlxUserPreferencesRepository::new(pool.clone()),
+            ),
             ledger_service,
             payment_service,
+            tenant_service: Arc::new(
+                backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+            ),
+            tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+                pool.clone(),
+            )),
             pool: pool.clone(),
             rate_limiter: Arc::default(),
         };
@@ -201,7 +209,10 @@ mod m1_trial_lifecycle_tests {
         assert_eq!(json["is_premium"], true);
         assert_eq!(json["days_remaining"], 90);
         assert_eq!(json["remaining_days"], 90);
-        assert!(json["message"].as_str().unwrap().contains("3-month") || json["message"].as_str().unwrap().contains("90-day"));
+        assert!(
+            json["message"].as_str().unwrap().contains("3-month")
+                || json["message"].as_str().unwrap().contains("90-day")
+        );
         assert!(json["trial_started_at"].is_string());
         assert!(json["trial_ends_at"].is_string());
 

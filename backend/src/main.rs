@@ -83,7 +83,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dana_api_base_url = std::env::var("DANA_API_BASE_URL")
         .unwrap_or_else(|_| "https://api.sandbox.dana.id".to_string());
 
-
     let user_repo = Arc::new(SqlxUserRepository::new(pool.clone()));
     let account_repo = Arc::new(SqlxAccountRepository::new(pool.clone()));
     let category_repo = Arc::new(SqlxCategoryRepository::new(pool.clone()));
@@ -108,21 +107,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         idempotency_repo,
     ));
 
-    let payment_service = Arc::new(PaymentService::new(
-        PaymentConfig {
-            midtrans_server_key: midtrans_key,
-            xendit_webhook_token: xendit_token,
-            dana_merchant_id,
-            dana_client_id,
-            dana_client_secret,
-            dana_public_key_pem,
-            dana_private_key_pem,
-            dana_api_base_url,
-        },
-        subscription_repo,
-        user_repo,
-        audit_repo,
-    ).with_pool(pool.clone()));
+    let payment_service = Arc::new(
+        PaymentService::new(
+            PaymentConfig {
+                midtrans_server_key: midtrans_key,
+                xendit_webhook_token: xendit_token,
+                dana_merchant_id,
+                dana_client_id,
+                dana_client_secret,
+                dana_public_key_pem,
+                dana_private_key_pem,
+                dana_api_base_url,
+            },
+            subscription_repo,
+            user_repo,
+            audit_repo,
+        )
+        .with_pool(pool.clone()),
+    );
 
     let rate_limiter = Arc::new(
         backend::api::middleware::rate_limiter::SlidingWindowRateLimiter::new(
@@ -148,9 +150,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         secure_cookie,
     };
 
-    let user_preferences_repo = Arc::new(
-        backend::repository::SqlxUserPreferencesRepository::new(pool.clone()),
-    );
+    let user_preferences_repo = Arc::new(backend::repository::SqlxUserPreferencesRepository::new(
+        pool.clone(),
+    ));
+
+    let tenant_repo = Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+        pool.clone(),
+    ));
+    let tenant_service =
+        Arc::new(backend::service::tenant_service::TenantService::new_with_pool(pool.clone()));
 
     let app_state = AppState {
         auth_state,
@@ -159,6 +167,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         user_preferences_repo,
         ledger_service,
         payment_service,
+        tenant_service,
+        tenant_repo,
         pool,
         rate_limiter,
     };

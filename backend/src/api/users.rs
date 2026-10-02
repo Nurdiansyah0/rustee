@@ -176,7 +176,9 @@ pub async fn onboarding_handler(
     if let Some(cats) = payload.categories {
         for c in cats {
             let name_trim = c.name.trim();
-            if !name_trim.is_empty() && (c.category_type == "income" || c.category_type == "expense") {
+            if !name_trim.is_empty()
+                && (c.category_type == "income" || c.category_type == "expense")
+            {
                 let disp = c.display_name.unwrap_or_else(|| name_trim.to_string());
                 let new_cat = NewCategory {
                     id: uuid::Uuid::new_v4().to_string(),
@@ -200,10 +202,14 @@ pub async fn onboarding_handler(
 
     // 4. Activate trial if user opted in
     if payload.activate_trial.unwrap_or(false) {
-        let _ = state.payment_service.activate_trial_with_pool(&state.pool, &user.user_id).await;
-        if let Ok((refreshed_token, _)) = state
-            .jwt_engine()
-            .generate_token(&user.user_id, &user.email, &user.role, "premium")
+        let _ = state
+            .payment_service
+            .activate_trial_with_pool(&state.pool, &user.user_id)
+            .await;
+        if let Ok((refreshed_token, _)) =
+            state
+                .jwt_engine()
+                .generate_token(&user.user_id, &user.email, &user.role, "premium")
         {
             let cookie_val = crate::api::auth::make_auth_cookie(
                 &refreshed_token,

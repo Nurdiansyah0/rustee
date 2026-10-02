@@ -227,6 +227,186 @@ def init_db():
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            user_id TEXT PRIMARY KEY,
+            theme TEXT DEFAULT 'system',
+            locale TEXT DEFAULT 'id-ID',
+            notifications_enabled INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            ip_address TEXT,
+            user_agent TEXT,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS tenants (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'ACTIVE',
+            is_personal INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS business_profiles (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL UNIQUE,
+            business_name TEXT NOT NULL,
+            legal_name TEXT,
+            tax_id TEXT,
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            timezone TEXT NOT NULL DEFAULT 'Asia/Jakarta',
+            currency TEXT NOT NULL DEFAULT 'IDR',
+            locale TEXT NOT NULL DEFAULT 'id-ID',
+            invoice_prefix TEXT NOT NULL DEFAULT 'INV',
+            business_type TEXT NOT NULL DEFAULT 'general',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS memberships (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'owner',
+            status TEXT NOT NULL DEFAULT 'ACTIVE',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(tenant_id, user_id),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS chart_of_accounts (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            account_type TEXT NOT NULL,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            UNIQUE(tenant_id, code),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            entry_number TEXT NOT NULL,
+            entry_date TEXT NOT NULL,
+            description TEXT NOT NULL,
+            source_type TEXT NOT NULL DEFAULT 'MANUAL',
+            source_id TEXT,
+            status TEXT NOT NULL DEFAULT 'POSTED',
+            is_reversed INTEGER NOT NULL DEFAULT 0,
+            reversal_entry_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS journal_lines (
+            id TEXT PRIMARY KEY,
+            journal_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL,
+            account_code TEXT NOT NULL,
+            debit INTEGER NOT NULL DEFAULT 0,
+            credit INTEGER NOT NULL DEFAULT 0,
+            memo TEXT,
+            FOREIGN KEY (journal_id) REFERENCES journal_entries(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS invoices (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            invoice_number TEXT,
+            customer_name TEXT NOT NULL,
+            customer_address TEXT,
+            customer_email TEXT,
+            issue_date TEXT,
+            due_date TEXT NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'IDR',
+            tax_type TEXT NOT NULL DEFAULT 'NONE',
+            subtotal INTEGER NOT NULL DEFAULT 0,
+            discount INTEGER NOT NULL DEFAULT 0,
+            tax_amount INTEGER NOT NULL DEFAULT 0,
+            total_amount INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'DRAFT',
+            snapshot_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS invoice_items (
+            id TEXT PRIMARY KEY,
+            invoice_id TEXT NOT NULL,
+            description TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            unit_price INTEGER NOT NULL,
+            discount INTEGER NOT NULL DEFAULT 0,
+            tax_amount INTEGER NOT NULL DEFAULT 0,
+            line_total INTEGER NOT NULL,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS receivables (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            invoice_id TEXT NOT NULL UNIQUE,
+            total_amount INTEGER NOT NULL,
+            allocated_amount INTEGER NOT NULL DEFAULT 0,
+            outstanding_amount INTEGER NOT NULL,
+            due_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'OPEN',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS payments (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            invoice_id TEXT NOT NULL,
+            receivable_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            payment_method TEXT NOT NULL DEFAULT 'BANK_TRANSFER',
+            payment_date TEXT NOT NULL,
+            reference TEXT,
+            status TEXT NOT NULL DEFAULT 'CONFIRMED',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS outbox_events (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            aggregate_type TEXT NOT NULL,
+            aggregate_id TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            created_at TEXT NOT NULL,
+            published_at TEXT,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        );
+
         -- Mandatory Canonical Composite Indexes (§16)
         CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date);
         CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
@@ -235,7 +415,42 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_budg_user ON budgets(user_id);
         CREATE INDEX IF NOT EXISTS idx_sub_user ON subscriptions(user_id);
         CREATE INDEX IF NOT EXISTS idx_sync_user_id ON sync_cursors(user_id, id);
+        CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
+        CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
+        CREATE INDEX IF NOT EXISTS idx_memberships_tenant ON memberships(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_coa_tenant ON chart_of_accounts(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_journals_tenant ON journal_entries(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_journal_lines_journal ON journal_lines(journal_id);
+        CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_receivables_tenant ON receivables(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_outbox_tenant_status ON outbox_events(tenant_id, status);
         """)
+
+def seed_chart_of_accounts(conn, tenant_id: str, created_at: str):
+    system_accounts = [
+        ("1000", "Kas", "asset", 1),
+        ("1100", "Bank", "asset", 1),
+        ("1200", "Piutang Usaha", "asset", 1),
+        ("2000", "Utang Usaha", "liability", 1),
+        ("2100", "Utang Pajak (PPN/PPh)", "liability", 1),
+        ("4000", "Pendapatan Usaha", "income", 1),
+        ("5000", "Beban Pokok Penjualan", "expense", 1),
+        ("6000", "Beban Operasional", "expense", 1),
+    ]
+    for code, name, acc_type, is_sys in system_accounts:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO chart_of_accounts (id, tenant_id, code, name, account_type, is_system, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (str(uuid.uuid4()), tenant_id, code, name, acc_type, is_sys, created_at)
+        )
+
+RESERVED_SLUGS = {
+    "admin", "api", "system", "auth", "login", "billing", "root", "app",
+    "static", "support", "terms", "privacy", "dashboard", "settings",
+    "webhooks", "v1", "v2", "swagger", "openapi", "health", "ready"
+}
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -382,6 +597,93 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                 )
                 c.commit()
 
+    def resolve_tenant_context(self, user_id: str, path: str = "") -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        target_tenant_id = None
+        header_val = self.headers.get("X-Tenant-ID") or self.headers.get("x-tenant-id")
+        if header_val:
+            target_tenant_id = header_val.strip().lower()
+        elif path.startswith("/api/v1/tenants/"):
+            parts = path.split("/")
+            if len(parts) >= 5 and parts[4] not in ["", "switch"]:
+                target_tenant_id = parts[4].lower()
+
+        with get_db() as conn:
+            if not target_tenant_id:
+                cur = conn.execute(
+                    """
+                    SELECT m.tenant_id, m.role, m.status 
+                    FROM memberships m
+                    JOIN tenants t ON t.id = m.tenant_id
+                    WHERE m.user_id = ? AND m.status = 'ACTIVE' AND t.is_personal = 1
+                    ORDER BY t.created_at ASC LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    cur2 = conn.execute(
+                        """
+                        SELECT m.tenant_id, m.role, m.status 
+                        FROM memberships m
+                        JOIN tenants t ON t.id = m.tenant_id
+                        WHERE m.user_id = ? AND m.status = 'ACTIVE'
+                        ORDER BY t.created_at ASC LIMIT 1
+                        """,
+                        (user_id,)
+                    )
+                    row = cur2.fetchone()
+                if not row:
+                    return None, None, "NOT_FOUND"
+                return row["tenant_id"], row["role"], None
+
+            cur = conn.execute(
+                "SELECT role, status FROM memberships WHERE tenant_id = ? AND user_id = ?",
+                (target_tenant_id, user_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None, None, "NOT_FOUND"
+            if row["status"].upper() != "ACTIVE":
+                return None, None, "FORBIDDEN"
+            return target_tenant_id, row["role"], None
+
+    def generate_sequential_invoice_number(self, tenant_id: str, prefix: str = "INV", conn = None) -> str:
+        current_year = datetime.now(timezone.utc).year
+        query = "SELECT COUNT(*) FROM invoices WHERE tenant_id = ? AND status != 'DRAFT'"
+        if conn is not None:
+            cur = conn.execute(query, (tenant_id,))
+            count = cur.fetchone()[0]
+        else:
+            with get_db() as c:
+                cur = c.execute(query, (tenant_id,))
+                count = cur.fetchone()[0]
+        seq = count + 1
+        return f"{prefix}-{current_year}-{seq:06d}"
+
+    def post_outbox_event(self, tenant_id: str, event_type: str, aggregate_type: str, aggregate_id: str, payload: Dict[str, Any], conn = None) -> str:
+        evt_id = str(uuid.uuid4())
+        now_iso = utc_now_iso()
+        raw_payload = json.dumps(payload)
+        if conn is not None:
+            conn.execute(
+                """
+                INSERT INTO outbox_events (id, tenant_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempt_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)
+                """,
+                (evt_id, tenant_id, event_type, aggregate_type, aggregate_id, raw_payload, now_iso)
+            )
+        else:
+            with get_db() as c:
+                c.execute(
+                    """
+                    INSERT INTO outbox_events (id, tenant_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempt_count, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)
+                    """,
+                    (evt_id, tenant_id, event_type, aggregate_type, aggregate_id, raw_payload, now_iso)
+                )
+                c.commit()
+        return evt_id
+
     def read_json_body(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -468,6 +770,33 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             })
             return
 
+        if path == "/api/v1/system/schema":
+            with get_db() as conn:
+                cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%' ORDER BY name")
+                tables = [r[0] for r in cur.fetchall()]
+                cur2 = conn.execute("PRAGMA journal_mode;")
+                j_mode = cur2.fetchone()[0]
+                cur3 = conn.execute("PRAGMA foreign_keys;")
+                fk = cur3.fetchone()[0]
+                cur4 = conn.execute("PRAGMA quick_check;")
+                integrity = cur4.fetchone()[0]
+                cur5 = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
+                idx_count = cur5.fetchone()[0]
+                self.send_json(200, {
+                    "tables": tables,
+                    "table_count": len(tables),
+                    "journal_mode": j_mode.lower(),
+                    "foreign_keys": fk,
+                    "integrity_check": integrity.lower(),
+                    "index_count": idx_count,
+                    "status": "synchronized"
+                })
+                return
+
+        if path == "/api/v1/system/client-check":
+            self.send_rfc7807(404, "Not Found", "Resource not found", "NOT_FOUND")
+            return
+
         # Protected API endpoints
         user_id = self.get_auth_user_id()
         if not user_id:
@@ -480,6 +809,348 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             return
 
         is_premium = self.is_user_premium(user)
+
+        # =====================================================================
+        # v4.1 Multi-Tenant & Business Core Endpoints
+        # =====================================================================
+        if path == "/api/v1/tenants":
+            with get_db() as conn:
+                cur = conn.execute(
+                    """
+                    SELECT t.id, t.name, t.slug, t.status, t.is_personal, m.role,
+                           bp.business_type, bp.timezone, bp.currency, bp.locale, bp.invoice_prefix,
+                           t.created_at, t.updated_at,
+                           (SELECT COUNT(*) FROM memberships WHERE tenant_id = t.id) as member_count
+                    FROM memberships m
+                    JOIN tenants t ON t.id = m.tenant_id
+                    LEFT JOIN business_profiles bp ON bp.tenant_id = t.id
+                    WHERE m.user_id = ?
+                    ORDER BY t.created_at ASC
+                    """,
+                    (user_id,)
+                )
+                rows = [dict(r) for r in cur.fetchall()]
+                self.send_json(200, {"tenants": rows, "count": len(rows)})
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+$", path):
+            t_id = path.split("/")[-1]
+            with get_db() as conn:
+                cur = conn.execute(
+                    """
+                    SELECT t.id, t.name, t.slug, t.status, t.is_personal, m.role,
+                           bp.business_type, bp.timezone, bp.currency, bp.locale, bp.invoice_prefix,
+                           t.created_at, t.updated_at,
+                           (SELECT COUNT(*) FROM memberships WHERE tenant_id = t.id) as member_count
+                    FROM memberships m
+                    JOIN tenants t ON t.id = m.tenant_id
+                    LEFT JOIN business_profiles bp ON bp.tenant_id = t.id
+                    WHERE t.id = ? AND m.user_id = ?
+                    """,
+                    (t_id, user_id)
+                )
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                self.send_json(200, dict(row))
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/profile$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                cur = conn.execute(
+                    """
+                    SELECT bp.* 
+                    FROM business_profiles bp
+                    JOIN memberships m ON m.tenant_id = bp.tenant_id
+                    WHERE bp.tenant_id = ? AND m.user_id = ?
+                    """,
+                    (t_id, user_id)
+                )
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", "Workspace profile not found", "NOT_FOUND")
+                    return
+                self.send_json(200, dict(row))
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/members$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                # Check caller membership
+                cur = conn.execute("SELECT role FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, user_id))
+                if not cur.fetchone():
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                cur2 = conn.execute(
+                    """
+                    SELECT m.id as membership_id, m.user_id, u.email, u.name as display_name, m.role, m.status, m.created_at as joined_at
+                    FROM memberships m
+                    JOIN users u ON u.id = m.user_id
+                    WHERE m.tenant_id = ?
+                    ORDER BY m.created_at ASC
+                    """,
+                    (t_id,)
+                )
+                members = [dict(r) for r in cur2.fetchall()]
+                self.send_json(200, {"members": members, "count": len(members)})
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/capabilities$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                cur = conn.execute(
+                    """
+                    SELECT bp.business_type, m.role
+                    FROM business_profiles bp
+                    JOIN memberships m ON m.tenant_id = bp.tenant_id
+                    WHERE bp.tenant_id = ? AND m.user_id = ?
+                    """,
+                    (t_id, user_id)
+                )
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                b_type = row["business_type"] or "general"
+                cap_map = {
+                    "general": ["invoicing", "accounting", "receivables", "reports"],
+                    "retail": ["pos", "inventory", "invoicing", "accounting", "receivables", "reports"],
+                    "fnb": ["pos", "tables", "kitchen", "inventory", "accounting", "reports"],
+                    "rental": ["inventory", "bookings", "invoicing", "receivables", "accounting"],
+                    "contractor": ["projects", "milestones", "invoicing", "receivables", "accounting"],
+                    "personal": ["accounts", "transactions", "budgets", "analytics"]
+                }
+                caps = cap_map.get(b_type, ["invoicing", "accounting", "receivables", "reports"])
+                self.send_json(200, {
+                    "tenant_id": t_id,
+                    "business_type": b_type,
+                    "role": row["role"],
+                    "capabilities": caps,
+                    "navigation": [{"module": c, "enabled": True} for c in caps]
+                })
+            return
+
+        # =====================================================================
+        # v4.1 Double-Entry Accounting GET Endpoints
+        # =====================================================================
+        if path == "/api/v1/accounting/accounts":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM chart_of_accounts WHERE tenant_id = ? ORDER BY code ASC", (tenant_id,))
+                accounts = [dict(r) for r in cur.fetchall()]
+                self.send_json(200, {"accounts": accounts, "count": len(accounts)})
+            return
+
+        if path == "/api/v1/accounting/journals":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM journal_entries WHERE tenant_id = ? ORDER BY entry_date DESC, entry_number DESC", (tenant_id,))
+                journals = []
+                for j in cur.fetchall():
+                    jd = dict(j)
+                    cur_lines = conn.execute("SELECT * FROM journal_lines WHERE journal_id = ? ORDER BY id ASC", (jd["id"],))
+                    lines = [dict(l) for l in cur_lines.fetchall()]
+                    jd["lines"] = lines
+                    jd["total_debit"] = sum(l.get("debit", 0) for l in lines)
+                    jd["total_credit"] = sum(l.get("credit", 0) for l in lines)
+                    journals.append(jd)
+                self.send_json(200, {"journals": journals, "count": len(journals)})
+            return
+
+        if re.match(r"^/api/v1/accounting/journals/[^/]+$", path):
+            j_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM journal_entries WHERE id = ? AND tenant_id = ?", (j_id, tenant_id))
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", "Journal entry not found", "NOT_FOUND")
+                    return
+                jd = dict(row)
+                cur_lines = conn.execute("SELECT * FROM journal_lines WHERE journal_id = ? ORDER BY id ASC", (j_id,))
+                lines = [dict(l) for l in cur_lines.fetchall()]
+                jd["lines"] = lines
+                jd["total_debit"] = sum(l.get("debit", 0) for l in lines)
+                jd["total_credit"] = sum(l.get("credit", 0) for l in lines)
+                self.send_json(200, jd)
+            return
+
+        if path == "/api/v1/accounting/trial-balance":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM chart_of_accounts WHERE tenant_id = ? ORDER BY code ASC", (tenant_id,))
+                coa = [dict(r) for r in cur.fetchall()]
+                tb_lines = []
+                sum_debit = 0
+                sum_credit = 0
+                for acc in coa:
+                    cur_bal = conn.execute(
+                        """
+                        SELECT COALESCE(SUM(jl.debit), 0) as d, COALESCE(SUM(jl.credit), 0) as c
+                        FROM journal_lines jl
+                        WHERE jl.tenant_id = ? AND jl.account_code = ?
+                        """,
+                        (tenant_id, acc["code"])
+                    )
+                    d, c = cur_bal.fetchone()
+                    sum_debit += d
+                    sum_credit += c
+                    bal = d - c
+                    tb_lines.append({
+                        "code": acc["code"],
+                        "name": acc["name"],
+                        "account_type": acc["account_type"],
+                        "debit": d,
+                        "credit": c,
+                        "balance": bal
+                    })
+                net = sum_debit - sum_credit
+                self.send_json(200, {
+                    "accounts": tb_lines,
+                    "total_debit": sum_debit,
+                    "total_credit": sum_credit,
+                    "net_balance": net,
+                    "is_balanced": (net == 0)
+                })
+            return
+
+        # =====================================================================
+        # v4.1 Invoicing, Receivables & Outbox GET Endpoints
+        # =====================================================================
+        if path == "/api/v1/invoices":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM invoices WHERE tenant_id = ? ORDER BY created_at DESC", (tenant_id,))
+                invoices = [dict(r) for r in cur.fetchall()]
+                self.send_json(200, {"invoices": invoices, "count": len(invoices)})
+            return
+
+        if re.match(r"^/api/v1/invoices/[^/]+$", path):
+            inv_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM invoices WHERE id = ? AND tenant_id = ?", (inv_id, tenant_id))
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", "Invoice not found", "NOT_FOUND")
+                    return
+                inv = dict(row)
+                cur_items = conn.execute("SELECT * FROM invoice_items WHERE invoice_id = ?", (inv_id,))
+                inv["items"] = [dict(i) for i in cur_items.fetchall()]
+                if inv["snapshot_json"]:
+                    try:
+                        inv["snapshot"] = json.loads(inv["snapshot_json"])
+                    except Exception:
+                        inv["snapshot"] = None
+                self.send_json(200, inv)
+            return
+
+        if path == "/api/v1/receivables":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute(
+                    """
+                    SELECT r.*, i.invoice_number, i.customer_name 
+                    FROM receivables r
+                    JOIN invoices i ON i.id = r.invoice_id
+                    WHERE r.tenant_id = ?
+                    ORDER BY r.due_date ASC
+                    """,
+                    (tenant_id,)
+                )
+                recs = [dict(r) for r in cur.fetchall()]
+                self.send_json(200, {"receivables": recs, "count": len(recs)})
+            return
+
+        if path == "/api/v1/receivables/aging":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute(
+                    "SELECT due_date, outstanding_amount FROM receivables WHERE tenant_id = ? AND outstanding_amount > 0 AND status != 'VOIDED'",
+                    (tenant_id,)
+                )
+                now_dt = datetime.now(timezone.utc).date()
+                b_0_30 = 0
+                b_31_60 = 0
+                b_61_90 = 0
+                b_90_plus = 0
+                total_out = 0
+                for row in cur.fetchall():
+                    out = row["outstanding_amount"]
+                    total_out += out
+                    try:
+                        due = datetime.strptime(row["due_date"].split("T")[0], "%Y-%m-%d").date()
+                        days_overdue = (now_dt - due).days
+                    except Exception:
+                        days_overdue = 0
+
+                    if days_overdue <= 30:
+                        b_0_30 += out
+                    elif days_overdue <= 60:
+                        b_31_60 += out
+                    elif days_overdue <= 90:
+                        b_61_90 += out
+                    else:
+                        b_90_plus += out
+
+                self.send_json(200, {
+                    "current_0_30": b_0_30,
+                    "overdue_31_60": b_31_60,
+                    "overdue_61_90": b_61_90,
+                    "overdue_90_plus": b_90_plus,
+                    "total_outstanding": total_out
+                })
+            return
+
+        if path == "/api/v1/outbox/events":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM outbox_events WHERE tenant_id = ? ORDER BY created_at ASC", (tenant_id,))
+                evts = []
+                for r in cur.fetchall():
+                    ed = dict(r)
+                    try:
+                        ed["payload"] = json.loads(ed["payload_json"])
+                    except Exception:
+                        ed["payload"] = ed["payload_json"]
+                    evts.append(ed)
+                self.send_json(200, {"events": evts, "count": len(evts)})
+            return
 
         # 1. Auth Me
         if path == "/api/v1/auth/me":
@@ -769,13 +1440,41 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                             "INSERT INTO categories (id, user_id, name, display_name, normalized_name, category_type, icon, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (cid, uid, cname, dname, nname, ctype, cicon, ccol, ccreated, ccreated)
                         )
+                    # Auto-provision default personal workspace (Feature 7 & M1 Core Foundation)
+                    tenant_id = str(uuid.uuid4())
+                    slug = f"personal-{user_id[:8]}"
+                    profile_id = str(uuid.uuid4())
+                    membership_id = f"mem_{uuid.uuid4().hex[:12]}"
+                    conn.execute(
+                        "INSERT INTO tenants (id, name, slug, status, is_personal, created_at, updated_at) VALUES (?, ?, ?, 'ACTIVE', 1, ?, ?)",
+                        (tenant_id, f"{name}'s Workspace", slug, now_iso, now_iso)
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO business_profiles 
+                        (id, tenant_id, business_name, legal_name, timezone, currency, locale, invoice_prefix, business_type, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 'Asia/Jakarta', 'IDR', 'id-ID', 'INV', 'personal', ?, ?)
+                        """,
+                        (profile_id, tenant_id, name, name, now_iso, now_iso)
+                    )
+                    conn.execute(
+                        "INSERT INTO memberships (id, tenant_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, ?, 'owner', 'ACTIVE', ?, ?)",
+                        (membership_id, tenant_id, user_id, now_iso, now_iso)
+                    )
+                    seed_chart_of_accounts(conn, tenant_id, now_iso)
                     conn.commit()
 
                 token = make_session_token(user_id)
                 cookie_hdr = f"auth_token={token}; Path=/; HttpOnly; SameSite=Lax"
                 self.log_audit(user_id, "REGISTER", "user", user_id, f"Registered with email {email}")
                 self.send_json(201, {
-                    "user": {"id": user_id, "name": name, "email": email, "tier": "free"},
+                    "user": {
+                        "id": user_id,
+                        "name": name,
+                        "email": email,
+                        "tier": "free",
+                        "default_tenant_id": tenant_id
+                    },
                     "token": token
                 }, headers={"Set-Cookie": cookie_hdr})
             except sqlite3.IntegrityError:
@@ -882,9 +1581,857 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
 
         user = self.get_user(user_id)
         if not user:
-            self.send_rfc7807(401, "Unauthorized", "User not found", "UNAUTHORIZED")
+            self.send_rfc7807(401, "Unauthorized", "User account not found", "UNAUTHORIZED")
             return
+
         is_premium = self.is_user_premium(user)
+
+        # =====================================================================
+        # v4.1 Tenancy & Workspace POST Endpoints
+        # =====================================================================
+        if path == "/api/v1/tenants":
+            if not body or not body.get("name", "").strip():
+                self.send_rfc7807(400, "Bad Request", "Workspace name cannot be empty", "INVALID_NAME")
+                return
+            name = body["name"].strip()
+            slug_input = body.get("slug", "").strip().lower()
+            if slug_input:
+                if not re.match(r"^[a-z0-9-]+$", slug_input):
+                    self.send_rfc7807(400, "Bad Request", f"Slug '{slug_input}' contains invalid characters", "INVALID_SLUG")
+                    return
+                slug = slug_input
+            else:
+                slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+            if slug in RESERVED_SLUGS:
+                self.send_rfc7807(400, "Bad Request", f"Slug '{slug}' is reserved by system", "RESERVED_SLUG")
+                return
+
+            tz = body.get("timezone", "Asia/Jakarta")
+            valid_tzs = ["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura", "WIB", "WITA", "WIT"]
+            if tz not in valid_tzs:
+                self.send_rfc7807(400, "Bad Request", f"Invalid timezone '{tz}'. Supported: Asia/Jakarta, Asia/Makassar, Asia/Jayapura", "INVALID_TIMEZONE")
+                return
+
+            currency = body.get("currency", "IDR")
+            now_iso = utc_now_iso()
+            tenant_id = str(uuid.uuid4())
+            profile_id = str(uuid.uuid4())
+            membership_id = f"mem_{uuid.uuid4().hex[:12]}"
+
+            try:
+                with get_db() as conn:
+                    # Slug uniqueness check
+                    cur = conn.execute("SELECT id FROM tenants WHERE slug = ?", (slug,))
+                    if cur.fetchone():
+                        self.send_rfc7807(409, "Conflict", f"Slug '{slug}' is already in use", "SLUG_ALREADY_EXISTS")
+                        return
+
+                    conn.execute(
+                        "INSERT INTO tenants (id, name, slug, status, is_personal, created_at, updated_at) VALUES (?, ?, ?, 'ACTIVE', 0, ?, ?)",
+                        (tenant_id, name, slug, now_iso, now_iso)
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO business_profiles 
+                        (id, tenant_id, business_name, legal_name, timezone, currency, locale, invoice_prefix, business_type, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, 'id-ID', 'INV', 'general', ?, ?)
+                        """,
+                        (profile_id, tenant_id, name, name, tz, currency, now_iso, now_iso)
+                    )
+                    conn.execute(
+                        "INSERT INTO memberships (id, tenant_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, ?, 'owner', 'ACTIVE', ?, ?)",
+                        (membership_id, tenant_id, user_id, now_iso, now_iso)
+                    )
+                    seed_chart_of_accounts(conn, tenant_id, now_iso)
+                    conn.commit()
+
+                res_data = {
+                    "id": tenant_id,
+                    "name": name,
+                    "slug": slug,
+                    "status": "ACTIVE",
+                    "role": "owner",
+                    "is_default": False,
+                    "created_at": now_iso,
+                    "updated_at": now_iso
+                }
+                self.send_json(201, res_data, headers={"Cache-Control": "private, no-store, must-revalidate"})
+            except sqlite3.IntegrityError:
+                self.send_rfc7807(409, "Conflict", f"Slug '{slug}' is already in use", "SLUG_ALREADY_EXISTS")
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/members$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                cur = conn.execute("SELECT role, status FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, user_id))
+                caller_mem = cur.fetchone()
+                if not caller_mem:
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                if caller_mem["role"].lower() in ["staff", "member"]:
+                    self.send_rfc7807(403, "Forbidden", "Only owner or admin can invite members", "FORBIDDEN")
+                    return
+                target_email = (body.get("email") or "").strip().lower()
+                target_role = (body.get("role") or "member").lower()
+                if target_role not in ["owner", "admin", "staff", "member"]:
+                    self.send_rfc7807(400, "Bad Request", f"Invalid role '{target_role}'. Allowed: owner, admin, staff, member", "INVALID_ROLE")
+                    return
+                cur_user = conn.execute("SELECT id, email, name FROM users WHERE email = ?", (target_email,))
+                target_user = cur_user.fetchone()
+                if not target_user:
+                    self.send_rfc7807(404, "Not Found", "User with this email not found", "USER_NOT_FOUND")
+                    return
+                cur_exist = conn.execute("SELECT COUNT(*) FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, target_user["id"]))
+                if cur_exist.fetchone()[0] > 0:
+                    self.send_rfc7807(409, "Conflict", "User is already a member of this workspace", "MEMBER_ALREADY_EXISTS")
+                    return
+
+                mem_id = f"mem_{uuid.uuid4().hex[:12]}"
+                now_iso = utc_now_iso()
+                conn.execute(
+                    "INSERT INTO memberships (id, tenant_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?)",
+                    (mem_id, t_id, target_user["id"], target_role, now_iso, now_iso)
+                )
+                conn.commit()
+
+            self.send_json(201, {
+                "membership_id": mem_id,
+                "user_id": target_user["id"],
+                "email": target_user["email"],
+                "display_name": target_user["name"],
+                "role": target_role,
+                "status": "ACTIVE",
+                "joined_at": now_iso
+            }, headers={"Cache-Control": "private, no-store, must-revalidate"})
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/switch$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                cur = conn.execute("SELECT role, status FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, user_id))
+                mem = cur.fetchone()
+                if not mem or mem["status"].upper() != "ACTIVE":
+                    self.send_rfc7807(404, "Not Found", "Workspace not found or access denied", "NOT_FOUND")
+                    return
+                cur_tenant = conn.execute("SELECT * FROM tenants WHERE id = ?", (t_id,))
+                t_row = cur_tenant.fetchone()
+            self.send_json(200, {
+                "active_tenant_id": t_id,
+                "name": t_row["name"],
+                "slug": t_row["slug"],
+                "role": mem["role"],
+                "status": "switched"
+            })
+            return
+
+        # =====================================================================
+        # v4.1 Accounting POST Endpoints
+        # =====================================================================
+        if path == "/api/v1/accounting/accounts":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+            code = (body.get("code") or "").strip()
+            name = (body.get("name") or "").strip()
+            acc_type = (body.get("account_type") or "asset").strip().lower()
+            if not code or not name:
+                self.send_rfc7807(400, "Bad Request", "Account code and name are required", "INVALID_ACCOUNT")
+                return
+            now_iso = utc_now_iso()
+            acc_id = str(uuid.uuid4())
+            try:
+                with get_db() as conn:
+                    cur = conn.execute("SELECT id FROM chart_of_accounts WHERE tenant_id = ? AND code = ?", (tenant_id, code))
+                    if cur.fetchone():
+                        self.send_rfc7807(409, "Conflict", f"Account code '{code}' already exists", "ACCOUNT_ALREADY_EXISTS")
+                        return
+                    conn.execute(
+                        "INSERT INTO chart_of_accounts (id, tenant_id, code, name, account_type, is_system, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+                        (acc_id, tenant_id, code, name, acc_type, now_iso)
+                    )
+                    conn.commit()
+                self.send_json(201, {
+                    "id": acc_id,
+                    "tenant_id": tenant_id,
+                    "code": code,
+                    "name": name,
+                    "account_type": acc_type,
+                    "is_system": False,
+                    "created_at": now_iso
+                })
+            except sqlite3.IntegrityError:
+                self.send_rfc7807(409, "Conflict", f"Account code '{code}' already exists", "ACCOUNT_EXISTS")
+            return
+
+        if path == "/api/v1/accounting/journals":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+            if not body or "lines" not in body or not isinstance(body["lines"], list) or len(body["lines"]) == 0:
+                self.send_rfc7807(400, "Bad Request", "Journal lines cannot be empty", "INVALID_JOURNAL_LINES")
+                return
+            if len(body["lines"]) < 2:
+                self.send_rfc7807(422, "Unprocessable Entity", "Single line journal is unbalanced", "UNBALANCED_JOURNAL_ENTRY")
+                return
+            lines = body["lines"]
+            for l in lines:
+                d = l.get("debit", 0)
+                c = l.get("credit", 0)
+                if not (isinstance(d, int) and isinstance(c, int) and d >= 0 and c >= 0 and not isinstance(d, bool) and not isinstance(c, bool)):
+                    self.send_rfc7807(400, "Bad Request", "Journal amounts must be non-negative integers", "INVALID_AMOUNT")
+                    return
+            total_debit = sum(l.get("debit", 0) for l in lines)
+            total_credit = sum(l.get("credit", 0) for l in lines)
+            if total_debit != total_credit:
+                self.send_rfc7807(422, "Unprocessable Entity", f"SUM(debit)={total_debit} must equal SUM(credit)={total_credit}", "UNBALANCED_JOURNAL_ENTRY")
+                return
+            if total_debit <= 0:
+                self.send_rfc7807(422, "Unprocessable Entity", "Journal total amount must be strictly positive", "UNBALANCED_JOURNAL_ENTRY")
+                return
+
+            entry_date = body.get("entry_date", utc_now_iso())
+            description = body.get("description", "Manual Journal Entry")
+            source_type = body.get("source_type", "MANUAL")
+            source_id = body.get("source_id")
+            now_iso = utc_now_iso()
+            j_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur_c = conn.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+                seq = cur_c.fetchone()[0] + 1
+                entry_number = f"JRN-{datetime.now(timezone.utc).year}-{seq:06d}"
+                conn.execute(
+                    """
+                    INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'POSTED', 0, ?)
+                    """,
+                    (j_id, tenant_id, entry_number, entry_date, description, source_type, source_id, now_iso)
+                )
+                saved_lines = []
+                for l in lines:
+                    line_id = str(uuid.uuid4())
+                    code = l.get("account_code", "")
+                    deb = l.get("debit", 0)
+                    cred = l.get("credit", 0)
+                    memo = l.get("memo")
+                    conn.execute(
+                        "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (line_id, j_id, tenant_id, code, deb, cred, memo)
+                    )
+                    saved_lines.append({
+                        "id": line_id,
+                        "account_code": code,
+                        "debit": deb,
+                        "credit": cred,
+                        "memo": memo
+                    })
+                self.post_outbox_event(
+                    tenant_id, "JournalPosted", "Journal", j_id,
+                    {"journal_id": j_id, "entry_number": entry_number, "total_amount": total_debit},
+                    conn=conn
+                )
+                conn.commit()
+
+            self.send_json(201, {
+                "id": j_id,
+                "tenant_id": tenant_id,
+                "entry_number": entry_number,
+                "entry_date": entry_date,
+                "description": description,
+                "source_type": source_type,
+                "source_id": source_id,
+                "status": "POSTED",
+                "total_debit": total_debit,
+                "total_credit": total_credit,
+                "lines": saved_lines,
+                "created_at": now_iso
+            })
+            return
+
+        if re.match(r"^/api/v1/accounting/journals/[^/]+/reverse$", path):
+            j_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if role == "staff":
+                self.send_rfc7807(403, "Forbidden", "Staff role is not permitted to reverse journals", "FORBIDDEN")
+                return
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM journal_entries WHERE id = ? AND tenant_id = ?", (j_id, tenant_id))
+                orig = cur.fetchone()
+                if not orig:
+                    self.send_rfc7807(404, "Not Found", "Journal entry not found", "NOT_FOUND")
+                    return
+                if orig["is_reversed"] == 1:
+                    self.send_rfc7807(409, "Conflict", "Journal has already been reversed", "ALREADY_REVERSED")
+                    return
+
+                cur_lines = conn.execute("SELECT * FROM journal_lines WHERE journal_id = ?", (j_id,))
+                orig_lines = [dict(l) for l in cur_lines.fetchall()]
+
+                now_iso = utc_now_iso()
+                rev_id = str(uuid.uuid4())
+                cur_c = conn.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+                rev_num = f"REV-{datetime.now(timezone.utc).year}-{cur_c.fetchone()[0] + 1:06d}"
+                reason = body.get("reason", "Correction") if body else "Correction"
+                rev_desc = f"Reversal of {orig['entry_number']}: {reason}"
+
+                conn.execute(
+                    """
+                    INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'REVERSAL', ?, 'POSTED', 0, ?)
+                    """,
+                    (rev_id, tenant_id, rev_num, now_iso, rev_desc, j_id, now_iso)
+                )
+
+                rev_saved_lines = []
+                for ol in orig_lines:
+                    line_id = str(uuid.uuid4())
+                    swapped_debit = ol["credit"]
+                    swapped_credit = ol["debit"]
+                    memo = f"Reversal: {ol.get('memo') or ''}".strip()
+                    conn.execute(
+                        "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (line_id, rev_id, tenant_id, ol["account_code"], swapped_debit, swapped_credit, memo)
+                    )
+                    rev_saved_lines.append({
+                        "id": line_id,
+                        "account_code": ol["account_code"],
+                        "debit": swapped_debit,
+                        "credit": swapped_credit,
+                        "memo": memo
+                    })
+
+                conn.execute("UPDATE journal_entries SET is_reversed = 1, reversal_entry_id = ? WHERE id = ?", (rev_id, j_id))
+                self.post_outbox_event(
+                    tenant_id, "JournalReversed", "Journal", rev_id,
+                    {"original_journal_id": j_id, "reversal_journal_id": rev_id},
+                    conn=conn
+                )
+                conn.commit()
+
+            self.send_json(201, {
+                "id": rev_id,
+                "tenant_id": tenant_id,
+                "entry_number": rev_num,
+                "description": rev_desc,
+                "source_type": "REVERSAL",
+                "source_id": j_id,
+                "status": "POSTED",
+                "lines": rev_saved_lines,
+                "created_at": now_iso
+            })
+            return
+
+        if path == "/api/v1/accounting/tax/calculate":
+            if not body or "amount" not in body or not isinstance(body["amount"], int):
+                self.send_rfc7807(400, "Bad Request", "Amount must be an integer Rupiah", "INVALID_AMOUNT")
+                return
+            amt = body["amount"]
+            if amt < 0:
+                self.send_rfc7807(400, "Bad Request", "Amount cannot be negative", "INVALID_AMOUNT")
+                return
+            tax_type = body.get("tax_type", "PPN_11_EXCL")
+            is_incl = bool(body.get("is_inclusive", False))
+            valid_types = ["PPN_11_EXCL", "PPN_11_INCL", "PPN_11", "PPN_12_EXCL", "PPN_12_INCL", "PPN_12", "UMKM_05", "UMKM_FINAL", "EXEMPT"]
+            if tax_type not in valid_types:
+                self.send_rfc7807(400, "Bad Request", f"Unsupported tax type '{tax_type}'", "INVALID_TAX_TYPE")
+                return
+
+            if tax_type == "PPN_11_EXCL":
+                tax = int(round(amt * 0.11 + 1e-9))
+                net = amt
+                gross = amt + tax
+            elif tax_type == "PPN_11_INCL" or (tax_type == "PPN_11" and is_incl):
+                tax = int(round(amt - (amt * 100 / 111) + 1e-9))
+                net = amt - tax
+                gross = amt
+            elif tax_type == "PPN_12_EXCL":
+                tax = int(round(amt * 0.12 + 1e-9))
+                net = amt
+                gross = amt + tax
+            elif tax_type == "PPN_12_INCL" or (tax_type == "PPN_12" and is_incl):
+                tax = int(round(amt - (amt * 100 / 112) + 1e-9))
+                net = amt - tax
+                gross = amt
+            elif tax_type in ["UMKM_05", "UMKM_FINAL"]:
+                tax = int(round(amt * 50 / 10000 + 1e-9))
+                net = amt
+                gross = amt
+            else:
+                tax = 0
+                net = amt
+                gross = amt
+
+            self.send_json(200, {
+                "base_amount": amt,
+                "tax_type": tax_type,
+                "is_inclusive": is_incl,
+                "tax_amount": tax,
+                "net_amount": net,
+                "gross_amount": gross
+            })
+            return
+
+        # =====================================================================
+        # v4.1 Invoicing, Receivables & Payment Allocation POST Endpoints
+        # =====================================================================
+        if path == "/api/v1/invoices":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+            if not body or "items" not in body or not isinstance(body["items"], list) or len(body["items"]) == 0:
+                self.send_rfc7807(400, "Bad Request", "Invoice must contain at least one item", "INVALID_ITEMS")
+                return
+
+            cust_name = (body.get("customer_name") or "Pelanggan Umum").strip()
+            cust_addr = (body.get("customer_address") or "").strip()
+            cust_email = (body.get("customer_email") or "").strip()
+            due_date = body.get("due_date", utc_now_iso())
+            currency = body.get("currency", "IDR")
+            tax_type = body.get("tax_type", "PPN_11_EXCL")
+            inv_id = str(uuid.uuid4())
+            now_iso = utc_now_iso()
+
+            subtotal = 0
+            computed_items = []
+            for item in body["items"]:
+                desc = item.get("description", "Item")
+                qty = item.get("quantity", 1)
+                price = item.get("unit_price", 0)
+                disc = item.get("discount", 0)
+                if not isinstance(qty, int) or qty <= 0:
+                    self.send_rfc7807(400, "Bad Request", "Item quantity must be a positive integer", "INVALID_QUANTITY")
+                    return
+                if not isinstance(price, int) or price < 0:
+                    self.send_rfc7807(400, "Bad Request", "Item unit price must be a non-negative integer", "INVALID_PRICE")
+                    return
+                lt = (qty * price) - disc
+                subtotal += lt
+                computed_items.append({
+                    "id": str(uuid.uuid4()),
+                    "description": desc,
+                    "quantity": qty,
+                    "unit_price": price,
+                    "discount": disc,
+                    "tax_amount": 0,
+                    "line_total": lt
+                })
+
+            if tax_type == "PPN_11_EXCL":
+                tax_amt = int(round(subtotal * 0.11 + 1e-9))
+                total_amt = subtotal + tax_amt
+            elif tax_type == "PPN_11_INCL":
+                tax_amt = int(round(subtotal - (subtotal * 100 / 111) + 1e-9))
+                total_amt = subtotal
+            elif tax_type == "PPN_12_EXCL":
+                tax_amt = int(round(subtotal * 0.12 + 1e-9))
+                total_amt = subtotal + tax_amt
+            elif tax_type == "PPN_12_INCL":
+                tax_amt = int(round(subtotal - (subtotal * 100 / 112) + 1e-9))
+                total_amt = subtotal
+            elif tax_type in ["UMKM_05", "UMKM_FINAL"]:
+                tax_amt = int(round(subtotal * 50 / 10000 + 1e-9))
+                total_amt = subtotal
+            else:
+                tax_amt = 0
+                total_amt = subtotal
+
+            with get_db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO invoices 
+                    (id, tenant_id, customer_name, customer_address, customer_email, due_date, currency, tax_type, subtotal, discount, tax_amount, total_amount, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'DRAFT', ?, ?)
+                    """,
+                    (inv_id, tenant_id, cust_name, cust_addr, cust_email, due_date, currency, tax_type, subtotal, tax_amt, total_amt, now_iso, now_iso)
+                )
+                for ci in computed_items:
+                    conn.execute(
+                        """
+                        INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price, discount, tax_amount, line_total)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (ci["id"], inv_id, ci["description"], ci["quantity"], ci["unit_price"], ci["discount"], ci["tax_amount"], ci["line_total"])
+                    )
+                conn.commit()
+
+            self.send_json(201, {
+                "id": inv_id,
+                "tenant_id": tenant_id,
+                "customer_name": cust_name,
+                "customer_address": cust_addr,
+                "customer_email": cust_email,
+                "due_date": due_date,
+                "currency": currency,
+                "tax_type": tax_type,
+                "subtotal": subtotal,
+                "tax_amount": tax_amt,
+                "total_amount": total_amt,
+                "status": "DRAFT",
+                "items": computed_items,
+                "created_at": now_iso
+            })
+            return
+
+        if re.match(r"^/api/v1/invoices/[^/]+/issue$", path):
+            inv_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+
+            idempotency_key = self.headers.get("Idempotency-Key")
+            if idempotency_key:
+                payload_hash = hashlib.sha256(raw_str.encode("utf-8") if raw_str else b"").hexdigest()
+                with get_db() as conn:
+                    cur = conn.execute("SELECT * FROM idempotency_keys WHERE user_id = ? AND key = ?", (user_id, idempotency_key))
+                    cached = cur.fetchone()
+                    if cached:
+                        if cached["payload_hash"] != payload_hash:
+                            self.send_rfc7807(409, "Conflict", "Idempotency key reused with different request payload", "IDEMPOTENCY_KEY_MISMATCH")
+                            return
+                        self.send_json(cached["response_status"], json.loads(cached["response_body"]), headers={"X-Cache-Replay": "true"})
+                        return
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM invoices WHERE id = ? AND tenant_id = ?", (inv_id, tenant_id))
+                inv = cur.fetchone()
+                if not inv:
+                    self.send_rfc7807(404, "Not Found", "Invoice not found", "NOT_FOUND")
+                    return
+                if inv["status"] != "DRAFT":
+                    self.send_rfc7807(409, "Conflict", "Invoice is already issued or finalized", "ALREADY_ISSUED")
+                    return
+
+                cur_bp = conn.execute("SELECT invoice_prefix FROM business_profiles WHERE tenant_id = ?", (tenant_id,))
+                bp_row = cur_bp.fetchone()
+                prefix = bp_row["invoice_prefix"] if bp_row and bp_row["invoice_prefix"] else "INV"
+                inv_num = self.generate_sequential_invoice_number(tenant_id, prefix=prefix, conn=conn)
+
+                cur_items = conn.execute("SELECT * FROM invoice_items WHERE invoice_id = ?", (inv_id,))
+                items_list = [dict(i) for i in cur_items.fetchall()]
+
+                now_iso = utc_now_iso()
+                snapshot = {
+                    "customer_name": inv["customer_name"],
+                    "customer_address": inv["customer_address"],
+                    "customer_email": inv["customer_email"],
+                    "items": items_list,
+                    "tax_type": inv["tax_type"],
+                    "subtotal": inv["subtotal"],
+                    "tax_amount": inv["tax_amount"],
+                    "total_amount": inv["total_amount"],
+                    "issued_at": now_iso
+                }
+                snap_json = json.dumps(snapshot)
+
+                conn.execute(
+                    """
+                    UPDATE invoices 
+                    SET invoice_number = ?, status = 'ISSUED', issue_date = ?, snapshot_json = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (inv_num, now_iso, snap_json, now_iso, inv_id)
+                )
+
+                # Automatic balanced journal entry: Debit AR (1200) = total, Credit Revenue (4000) = subtotal, Credit Tax (2100) = tax
+                j_id = str(uuid.uuid4())
+                cur_c = conn.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+                j_num = f"JRN-{datetime.now(timezone.utc).year}-{cur_c.fetchone()[0] + 1:06d}"
+                conn.execute(
+                    """
+                    INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'INVOICE', ?, 'POSTED', 0, ?)
+                    """,
+                    (j_id, tenant_id, j_num, now_iso, f"Invoice {inv_num} issued to {inv['customer_name']}", inv_id, now_iso)
+                )
+                conn.execute(
+                    "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, '1200', ?, 0, ?)",
+                    (str(uuid.uuid4()), j_id, tenant_id, inv["total_amount"], f"Piutang Invoice {inv_num}")
+                )
+                conn.execute(
+                    "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, '4000', 0, ?, ?)",
+                    (str(uuid.uuid4()), j_id, tenant_id, inv["subtotal"], f"Pendapatan Invoice {inv_num}")
+                )
+                if inv["tax_amount"] > 0:
+                    conn.execute(
+                        "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, '2100', 0, ?, ?)",
+                        (str(uuid.uuid4()), j_id, tenant_id, inv["tax_amount"], f"Utang Pajak Invoice {inv_num}")
+                    )
+
+                # Automatic Receivable creation
+                rec_id = str(uuid.uuid4())
+                conn.execute(
+                    """
+                    INSERT INTO receivables (id, tenant_id, invoice_id, total_amount, allocated_amount, outstanding_amount, due_date, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 0, ?, ?, 'OPEN', ?, ?)
+                    """,
+                    (rec_id, tenant_id, inv_id, inv["total_amount"], inv["total_amount"], inv["due_date"], now_iso, now_iso)
+                )
+
+                # Transactional Outbox Event
+                self.post_outbox_event(
+                    tenant_id, "InvoiceIssued", "Invoice", inv_id,
+                    {"invoice_id": inv_id, "invoice_number": inv_num, "total_amount": inv["total_amount"], "customer_name": inv["customer_name"]},
+                    conn=conn
+                )
+
+                res_data = {
+                    "id": inv_id,
+                    "tenant_id": tenant_id,
+                    "invoice_number": inv_num,
+                    "status": "ISSUED",
+                    "issue_date": now_iso,
+                    "due_date": inv["due_date"],
+                    "total_amount": inv["total_amount"],
+                    "snapshot": snapshot
+                }
+
+                if idempotency_key:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO idempotency_keys (user_id, key, payload_hash, response_status, response_body, created_at) VALUES (?, ?, ?, 200, ?, ?)",
+                        (user_id, idempotency_key, payload_hash, json.dumps(res_data), now_iso)
+                    )
+                conn.commit()
+
+            self.send_json(200, res_data)
+            return
+
+        if re.match(r"^/api/v1/invoices/[^/]+/void$", path):
+            inv_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM invoices WHERE id = ? AND tenant_id = ?", (inv_id, tenant_id))
+                inv = cur.fetchone()
+                if not inv:
+                    self.send_rfc7807(404, "Not Found", "Invoice not found", "NOT_FOUND")
+                    return
+                if inv["status"] in ["PAID", "PARTIALLY_PAID"]:
+                    self.send_rfc7807(409, "Conflict", "Cannot void invoice with allocated payments", "CANNOT_VOID_PAID_INVOICE")
+                    return
+
+                now_iso = utc_now_iso()
+                conn.execute("UPDATE invoices SET status = 'VOIDED', updated_at = ? WHERE id = ?", (now_iso, inv_id))
+                conn.execute("UPDATE receivables SET status = 'VOIDED', outstanding_amount = 0, updated_at = ? WHERE invoice_id = ?", (now_iso, inv_id))
+
+                # Reverse invoice journal if posted
+                cur_j = conn.execute("SELECT id FROM journal_entries WHERE source_type = 'INVOICE' AND source_id = ? AND is_reversed = 0", (inv_id,))
+                j_row = cur_j.fetchone()
+                if j_row:
+                    orig_jid = j_row["id"]
+                    rev_jid = str(uuid.uuid4())
+                    cur_c = conn.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+                    rev_num = f"REV-{datetime.now(timezone.utc).year}-{cur_c.fetchone()[0] + 1:06d}"
+                    conn.execute(
+                        """
+                        INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                        VALUES (?, ?, ?, ?, ?, 'REVERSAL', ?, 'POSTED', 0, ?)
+                        """,
+                        (rev_jid, tenant_id, rev_num, now_iso, f"Reversal for voided invoice {inv['invoice_number']}", orig_jid, now_iso)
+                    )
+                    cur_orig_lines = conn.execute("SELECT * FROM journal_lines WHERE journal_id = ?", (orig_jid,))
+                    for ol in cur_orig_lines.fetchall():
+                        conn.execute(
+                            "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (str(uuid.uuid4()), rev_jid, tenant_id, ol["account_code"], ol["credit"], ol["debit"], f"Void reversal {inv['invoice_number']}")
+                        )
+                    conn.execute("UPDATE journal_entries SET is_reversed = 1, reversal_entry_id = ? WHERE id = ?", (rev_jid, orig_jid))
+
+                self.post_outbox_event(
+                    tenant_id, "InvoiceVoided", "Invoice", inv_id,
+                    {"invoice_id": inv_id, "invoice_number": inv["invoice_number"], "reason": body.get("reason", "Voided") if body else "Voided"},
+                    conn=conn
+                )
+                conn.commit()
+
+            self.send_json(200, {"id": inv_id, "status": "VOIDED", "updated_at": now_iso})
+            return
+
+        if path == "/api/v1/payments":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if err == "FORBIDDEN":
+                self.send_rfc7807(403, "Forbidden", "Membership inactive", "FORBIDDEN")
+                return
+
+            idempotency_key = self.headers.get("Idempotency-Key")
+            if idempotency_key:
+                payload_hash = hashlib.sha256(raw_str.encode("utf-8") if raw_str else b"").hexdigest()
+                with get_db() as conn:
+                    cur = conn.execute("SELECT * FROM idempotency_keys WHERE user_id = ? AND key = ?", (user_id, idempotency_key))
+                    cached = cur.fetchone()
+                    if cached:
+                        if cached["payload_hash"] != payload_hash:
+                            self.send_rfc7807(409, "Conflict", "Idempotency key reused with different request payload", "IDEMPOTENCY_KEY_MISMATCH")
+                            return
+                        self.send_json(cached["response_status"], json.loads(cached["response_body"]), headers={"X-Cache-Replay": "true"})
+                        return
+
+            if not body or "invoice_id" not in body or "amount" not in body:
+                self.send_rfc7807(400, "Bad Request", "Invoice ID and payment amount are required", "BAD_REQUEST")
+                return
+
+            inv_id = body["invoice_id"]
+            amount = body["amount"]
+            if not isinstance(amount, int) or amount <= 0:
+                self.send_rfc7807(400, "Bad Request", "Payment amount must be a positive integer Rupiah", "INVALID_AMOUNT")
+                return
+
+            pay_method = body.get("payment_method", "BANK_TRANSFER")
+            pay_date = body.get("payment_date", utc_now_iso())
+            ref = body.get("reference") or f"PAY-{uuid.uuid4().hex[:8].upper()}"
+            pay_id = str(uuid.uuid4())
+            now_iso = utc_now_iso()
+
+            with get_db() as conn:
+                cur_rec = conn.execute("SELECT * FROM receivables WHERE invoice_id = ? AND tenant_id = ?", (inv_id, tenant_id))
+                rec = cur_rec.fetchone()
+                if not rec:
+                    self.send_rfc7807(404, "Not Found", "Receivable/Invoice not found in this workspace", "NOT_FOUND")
+                    return
+
+                if rec["status"] == "VOIDED":
+                    self.send_rfc7807(409, "Conflict", "Cannot allocate payment to a voided invoice", "INVOICE_VOIDED")
+                    return
+
+                outstanding = rec["outstanding_amount"]
+                if amount > outstanding:
+                    self.send_rfc7807(400, "Bad Request", f"Payment amount {amount} exceeds outstanding balance {outstanding}", "OVERPAYMENT_NOT_ALLOWED")
+                    return
+
+                new_out = outstanding - amount
+                new_alloc = rec["allocated_amount"] + amount
+                new_status = "PAID" if new_out == 0 else "PARTIALLY_PAID"
+
+                conn.execute(
+                    "UPDATE receivables SET outstanding_amount = ?, allocated_amount = ?, status = ?, updated_at = ? WHERE id = ?",
+                    (new_out, new_alloc, new_status, now_iso, rec["id"])
+                )
+                conn.execute(
+                    "UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?",
+                    (new_status, now_iso, inv_id)
+                )
+                conn.execute(
+                    """
+                    INSERT INTO payments (id, tenant_id, invoice_id, receivable_id, amount, payment_method, payment_date, reference, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CONFIRMED', ?)
+                    """,
+                    (pay_id, tenant_id, inv_id, rec["id"], amount, pay_method, pay_date, ref, now_iso)
+                )
+
+                # Automatic double-entry posting: Debit 1100 Bank / Credit 1200 AR
+                j_id = str(uuid.uuid4())
+                cur_c = conn.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+                j_num = f"JRN-{datetime.now(timezone.utc).year}-{cur_c.fetchone()[0] + 1:06d}"
+                conn.execute(
+                    """
+                    INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'PAYMENT', ?, 'POSTED', 0, ?)
+                    """,
+                    (j_id, tenant_id, j_num, now_iso, f"Payment allocation {ref} for invoice {inv_id}", pay_id, now_iso)
+                )
+                conn.execute(
+                    "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, '1100', ?, 0, ?)",
+                    (str(uuid.uuid4()), j_id, tenant_id, amount, f"Penerimaan Kas/Bank {ref}")
+                )
+                conn.execute(
+                    "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, '1200', 0, ?, ?)",
+                    (str(uuid.uuid4()), j_id, tenant_id, amount, f"Pelunasan Piutang {ref}")
+                )
+
+                # Transactional Outbox Event
+                self.post_outbox_event(
+                    tenant_id, "PaymentConfirmed", "Payment", pay_id,
+                    {"payment_id": pay_id, "invoice_id": inv_id, "amount": amount, "reference": ref},
+                    conn=conn
+                )
+
+                res_data = {
+                    "id": pay_id,
+                    "tenant_id": tenant_id,
+                    "invoice_id": inv_id,
+                    "receivable_id": rec["id"],
+                    "amount": amount,
+                    "payment_method": pay_method,
+                    "reference": ref,
+                    "outstanding_balance": new_out,
+                    "status": "CONFIRMED",
+                    "created_at": now_iso
+                }
+
+                if idempotency_key:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO idempotency_keys (user_id, key, payload_hash, response_status, response_body, created_at) VALUES (?, ?, ?, 201, ?, ?)",
+                        (user_id, idempotency_key, payload_hash, json.dumps(res_data), now_iso)
+                    )
+                conn.commit()
+
+            self.send_json(201, res_data)
+            return
+
+        if path == "/api/v1/outbox/process":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+
+            sim_failure = bool(body.get("simulate_sidecar_failure", False)) if body else False
+            with get_db() as conn:
+                cur = conn.execute("SELECT id, attempt_count FROM outbox_events WHERE tenant_id = ? AND status = 'PENDING'", (tenant_id,))
+                pending = cur.fetchall()
+                now_iso = utc_now_iso()
+                if sim_failure:
+                    for ev in pending:
+                        conn.execute(
+                            "UPDATE outbox_events SET attempt_count = attempt_count + 1, last_error = 'SIMULATED_SIDECAR_ERROR: Sidecar provider temporary failure (HTTP 503)' WHERE id = ?",
+                            (ev["id"],)
+                        )
+                    conn.commit()
+                    self.send_json(200, {
+                        "processed": 0,
+                        "failed": len(pending),
+                        "status": "retry_scheduled",
+                        "message": "Sidecar failure isolated; core transaction unaffected"
+                    })
+                    return
+                else:
+                    for ev in pending:
+                        conn.execute(
+                            "UPDATE outbox_events SET status = 'PUBLISHED', published_at = ?, attempt_count = attempt_count + 1 WHERE id = ?",
+                            (now_iso, ev["id"])
+                        )
+                    conn.commit()
+                    self.send_json(200, {
+                        "processed": len(pending),
+                        "failed": 0,
+                        "status": "completed"
+                    })
+                    return
 
         # 5. Progressive Onboarding & Vocabulary Configuration (§3, §4, §6, REQ-FE-04)
         if path == "/api/v1/users/onboarding":
@@ -1443,10 +2990,14 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        body = self.read_json_body()
+        body, raw_str = self.read_json_body()
 
         if path.startswith("/api/v1/audit"):
             self.send_rfc7807(405, "Method Not Allowed", "Audit logs are append-only and immutable", "IMMUTABLE_LOG")
+            return
+
+        if path.startswith("/api/v1/accounting/journals"):
+            self.send_rfc7807(405, "Method Not Allowed", "Posted journals are immutable and cannot be updated directly; use reversal instead", "JOURNAL_IMMUTABLE")
             return
 
         user_id = self.get_auth_user_id()
@@ -1463,6 +3014,101 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"status": "updated", "display_name": display_name})
             return
 
+        if re.match(r"^/api/v1/tenants/[^/]+/profile$", path):
+            t_id = path.split("/")[-2]
+            with get_db() as conn:
+                cur = conn.execute("SELECT role FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, user_id))
+                mem = cur.fetchone()
+                if not mem:
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                if mem["role"].lower() in ["staff", "member"]:
+                    self.send_rfc7807(403, "Forbidden", "Insufficient role permissions to update profile", "FORBIDDEN")
+                    return
+
+                if not body:
+                    self.send_rfc7807(400, "Bad Request", "Profile body required", "BAD_REQUEST")
+                    return
+
+                now_iso = utc_now_iso()
+                b_name = body.get("business_name")
+                legal = body.get("legal_name")
+                tax_id = body.get("tax_id")
+                addr = body.get("address")
+                phone = body.get("phone")
+                email = body.get("email")
+                tz = body.get("timezone")
+                if tz is not None and tz not in ["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura", "WIB", "WITA", "WIT"]:
+                    self.send_rfc7807(400, "Bad Request", f"Invalid timezone '{tz}'. Supported: Asia/Jakarta, Asia/Makassar, Asia/Jayapura", "INVALID_TIMEZONE")
+                    return
+                curr = body.get("currency")
+                loc = body.get("locale")
+                prefix = body.get("invoice_prefix")
+                if prefix is not None:
+                    if len(prefix) == 0 or len(prefix) > 10:
+                        self.send_rfc7807(400, "Bad Request", "Invoice prefix must be 1-10 characters", "INVALID_PREFIX")
+                        return
+                b_type = body.get("business_type")
+
+                conn.execute(
+                    """
+                    UPDATE business_profiles SET
+                        business_name = COALESCE(?, business_name),
+                        legal_name = COALESCE(?, legal_name),
+                        tax_id = COALESCE(?, tax_id),
+                        address = COALESCE(?, address),
+                        phone = COALESCE(?, phone),
+                        email = COALESCE(?, email),
+                        timezone = COALESCE(?, timezone),
+                        currency = COALESCE(?, currency),
+                        locale = COALESCE(?, locale),
+                        invoice_prefix = COALESCE(?, invoice_prefix),
+                        business_type = COALESCE(?, business_type),
+                        updated_at = ?
+                    WHERE tenant_id = ?
+                    """,
+                    (b_name, legal, tax_id, addr, phone, email, tz, curr, loc, prefix, b_type, now_iso, t_id)
+                )
+                conn.commit()
+
+                cur_p = conn.execute("SELECT * FROM business_profiles WHERE tenant_id = ?", (t_id,))
+                updated_prof = dict(cur_p.fetchone())
+
+            self.send_json(200, updated_prof)
+            return
+
+        if re.match(r"^/api/v1/invoices/[^/]+$", path):
+            inv_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM invoices WHERE id = ? AND tenant_id = ?", (inv_id, tenant_id))
+                inv = cur.fetchone()
+                if not inv:
+                    self.send_rfc7807(404, "Not Found", "Invoice not found", "NOT_FOUND")
+                    return
+                if inv["status"] != "DRAFT":
+                    self.send_rfc7807(409, "Conflict", "Issued or paid invoices cannot be modified", "INVOICE_LOCKED")
+                    return
+
+                now_iso = utc_now_iso()
+                cust_name = body.get("customer_name", inv["customer_name"]) if body else inv["customer_name"]
+                cust_addr = body.get("customer_address", inv["customer_address"]) if body else inv["customer_address"]
+                cust_email = body.get("customer_email", inv["customer_email"]) if body else inv["customer_email"]
+                due_date = body.get("due_date", inv["due_date"]) if body else inv["due_date"]
+
+                conn.execute(
+                    "UPDATE invoices SET customer_name = ?, customer_address = ?, customer_email = ?, due_date = ?, updated_at = ? WHERE id = ?",
+                    (cust_name, cust_addr, cust_email, due_date, now_iso, inv_id)
+                )
+                conn.commit()
+
+            self.send_json(200, {"id": inv_id, "status": "DRAFT", "updated_at": now_iso})
+            return
+
         self.send_rfc7807(404, "Not Found", f"PUT endpoint '{path}' not found", "NOT_FOUND")
 
     def do_DELETE(self):
@@ -1473,9 +3119,46 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             self.send_rfc7807(405, "Method Not Allowed", "Audit logs cannot be deleted; logs are append-only", "IMMUTABLE_LOG")
             return
 
+        if path.startswith("/api/v1/accounting/journals"):
+            self.send_rfc7807(405, "Method Not Allowed", "Posted journals cannot be deleted; journals are immutable", "JOURNAL_IMMUTABLE")
+            return
+
         user_id = self.get_auth_user_id()
         if not user_id:
             self.send_rfc7807(401, "Unauthorized", "Authentication required", "UNAUTHORIZED")
+            return
+
+        if re.match(r"^/api/v1/tenants/[^/]+/members/[^/]+$", path):
+            parts = path.split("/")
+            t_id = parts[4]
+            target_uid = parts[6]
+            with get_db() as conn:
+                cur = conn.execute("SELECT role FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, user_id))
+                mem = cur.fetchone()
+                if not mem:
+                    self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                    return
+                if mem["role"].lower() in ["staff", "member"]:
+                    self.send_rfc7807(403, "Forbidden", "Only owner or admin can remove members", "FORBIDDEN")
+                    return
+                conn.execute("DELETE FROM memberships WHERE tenant_id = ? AND user_id = ?", (t_id, target_uid))
+                conn.commit()
+            self.send_json(200, {"status": "removed", "user_id": target_uid})
+            return
+
+        if re.match(r"^/api/v1/accounting/accounts/[^/]+$", path):
+            code = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if code in ["1000", "1100", "1200", "2000", "2100", "4000", "5000", "6000"]:
+                self.send_rfc7807(403, "Forbidden", f"System account '{code}' is protected from deletion", "SYSTEM_ACCOUNT_PROTECTED")
+                return
+            with get_db() as conn:
+                conn.execute("DELETE FROM chart_of_accounts WHERE tenant_id = ? AND code = ? AND is_system = 0", (tenant_id, code))
+                conn.commit()
+            self.send_json(200, {"status": "deleted", "code": code})
             return
 
         # 1. Category Soft-Deletion (§14, REQ-ARCH-06)
@@ -1526,6 +3209,16 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             return
 
         self.send_rfc7807(404, "Not Found", f"DELETE endpoint '{path}' not found", "NOT_FOUND")
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/v1/accounting/journals"):
+            self.send_rfc7807(405, "Method Not Allowed", "Posted journals cannot be modified; journals are immutable", "JOURNAL_IMMUTABLE")
+            return
+
+        self.send_rfc7807(405, "Method Not Allowed", f"PATCH endpoint '{path}' not allowed", "METHOD_NOT_ALLOWED")
 
 def run_server(port: int = PORT):
     init_db()

@@ -118,9 +118,17 @@ mod m5_api_tests {
             auth_state,
             account_repo,
             category_repo,
-            user_preferences_repo: Arc::new(backend::repository::SqlxUserPreferencesRepository::new(pool.clone())),
+            user_preferences_repo: Arc::new(
+                backend::repository::SqlxUserPreferencesRepository::new(pool.clone()),
+            ),
             ledger_service,
             payment_service,
+            tenant_service: Arc::new(
+                backend::service::tenant_service::TenantService::new_with_pool(pool.clone()),
+            ),
+            tenant_repo: Arc::new(backend::repository::tenant_repo::SqlxTenantRepository::new(
+                pool.clone(),
+            )),
             pool: pool.clone(),
             rate_limiter: Arc::default(),
         };
@@ -243,8 +251,14 @@ mod m5_api_tests {
         let body = res.into_body().collect().await.unwrap().to_bytes();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["code"], "FEATURE_LOCKED");
-        assert_eq!(json["type"], "https://api.nurdiansyahlabs.com/errors/feature-locked");
-        assert_eq!(json["detail"], "Subscription feature 'analytics.advanced' required.");
+        assert_eq!(
+            json["type"],
+            "https://api.nurdiansyahlabs.com/errors/feature-locked"
+        );
+        assert_eq!(
+            json["detail"],
+            "Subscription feature 'analytics.advanced' required."
+        );
     }
 
     // -----------------------------------------------------------------------
