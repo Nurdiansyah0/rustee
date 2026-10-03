@@ -42,7 +42,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     assert!(pragmas.foreign_keys);
     assert_eq!(pragmas.synchronous, 1); // 1 = NORMAL
 
-    // 2. Verify all 29 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table)
+    // 2. Verify all 30 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table + 1 password_reset_tokens table)
     let table_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%';"
     )
@@ -51,8 +51,8 @@ async fn test_pool_pragmas_and_migration_execution() {
     .expect("Failed to query tables");
 
     assert_eq!(
-        table_count, 29,
-        "Expected 29 domain tables after v4.1 core foundation, accounting, invoicing, and outbox migrations"
+        table_count, 30,
+        "Expected 30 domain tables after v4.1 core foundation, accounting, invoicing, outbox, and password reset token migrations"
     );
 
     // 3. Verify mandatory composite and acceleration indexes

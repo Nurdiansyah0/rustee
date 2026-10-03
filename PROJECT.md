@@ -62,7 +62,7 @@ Invinite Business OS v4.1 evolves the Invinite v3.1 personal finance platform (R
 | M3 | Commercial Invoicing, Receivables, & Payment Allocation | R3: Invoicing state machine, sequential numbering, snapshots, receivable aging, atomic payment allocation, Idempotency-Key | M1, M2 | DONE |
 | M4 | Transactional Outbox Pattern & Sidecar Boundary | R4: `outbox_events` table, atomic commit with domain mutations, asynchronous delivery, retry backoff, sidecar failure isolation | M1, M2, M3 | DONE |
 | M5 | Universal PWA Alignment & Test Suite Synchronization | R5: Frontend `useWorkspaceStore`, header/sidebar switcher, fix 404 mock fallback in `api.js`, capability navigation, backend `m1_persistence_tests.rs` table count sync | M1, M2, M3, M4 | DONE |
-| Final | Final Milestone & Adversarial Hardening | Phase 1: 100% E2E test suite pass (Tiers 1-4). Phase 2: Adversarial coverage hardening (Tier 5) with Challengers and Forensic Auditor | Test, M1, M2, M3, M4, M5 | IN_PROGRESS |
+| Final | Final Milestone & Adversarial Hardening | Phase 1: 100% E2E test suite pass (Tiers 1-4). Phase 2: Adversarial coverage hardening (Tier 5) with Challengers and Forensic Auditor | Test, M1, M2, M3, M4, M5 | DONE |
 
 ---
 
