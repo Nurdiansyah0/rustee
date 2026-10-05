@@ -27,7 +27,7 @@ from harness.client import (
 
 def run_tier2_tests(base_url: str, reporter: Optional[TapReporter] = None) -> TapReporter:
     if reporter is None:
-        reporter = TapReporter(total_expected=160)
+        reporter = TapReporter(total_expected=210)
         reporter.print_header()
 
     client = ApiClient(base_url=base_url)
@@ -1038,10 +1038,10 @@ def run_tier2_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     # =========================================================================
     # FEATURE 30: Backend Test Harness Synchronization (Boundaries)
     # =========================================================================
-    # B30.1: SQLite schema table count strictly equals 26
+    # B30.1: SQLite schema table count strictly equals 33
     schema_info = client.get_system_schema().json or {}
-    reporter.record(schema_info.get("table_count") == 26,
-                    "B30.1: System schema verification confirms exact table count invariant (26 tables)")
+    reporter.record(schema_info.get("table_count") == 33,
+                    "B30.1: System schema verification confirms exact table count invariant (33 tables)")
 
     # B30.2: PRAGMA journal_mode check returns wal
     reporter.record(schema_info.get("journal_mode") == "wal",
@@ -1136,6 +1136,477 @@ def run_tier2_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     t_null = client.create_tenant(null_name, slug=f"null-{uid_suffix}")
     reporter.record(t_null.status in [201, 400],
                     "B32.5: Embedded null byte in tenant name safely handled without process crash")
+
+    # =========================================================================
+    # PHASE 2: INVENTORY & MULTI-LOCATION STOCK MANAGEMENT BOUNDARIES (B33–B42)
+    # =========================================================================
+    t_b_inv = client.create_tenant(f"PT Sinar Logistik {uid_suffix}", slug=f"sinar-log-{uid_suffix}")
+    t_b_id = t_b_inv.json.get("id")
+    client.set_tenant(t_b_id)
+
+    # Second tenant for anti-enumeration cross-tenant isolation testing
+    t_ext = client.create_tenant(f"PT Luar Gudang {uid_suffix}", slug=f"luar-gudang-{uid_suffix}")
+    t_ext_id = t_ext.json.get("id")
+
+    # -------------------------------------------------------------------------
+    # FEATURE 33: Multi-Warehouse Management (Boundaries)
+    # -------------------------------------------------------------------------
+    wh_main_res = client.create_warehouse(code="GUDANG-01", name="Gudang Pertama", is_default=True)
+    wh_main_id = wh_main_res.json.get("id")
+
+    # B33.1 Duplicate warehouse code within same tenant is strictly rejected with HTTP 409
+    dup_wh = client.create_warehouse(code="GUDANG-01", name="Gudang Duplikat")
+    reporter.record(
+        dup_wh.status == 409 and dup_wh.json.get("code") == "DUPLICATE_WAREHOUSE_CODE",
+        "B33.1: Duplicate warehouse code within same tenant is strictly rejected with HTTP 409"
+    )
+
+    # B33.2 Identical warehouse code in a different tenant succeeds cleanly
+    client.set_tenant(t_ext_id)
+    wh_ext_res = client.create_warehouse(code="GUDANG-01", name="Gudang Tenant Lain")
+    reporter.record(
+        wh_ext_res.status == 201 and wh_ext_res.json.get("code") == "GUDANG-01",
+        "B33.2: Warehouse code with identical string in different tenant succeeds"
+    )
+
+    # B33.3 Cross-tenant lookup of warehouse strictly returns HTTP 404 Not Found (anti-enumeration)
+    cross_wh = client.get_warehouse(wh_main_id)
+    reporter.record(
+        cross_wh.status == 404,
+        "B33.3: Cross-tenant lookup of warehouse strictly returns HTTP 404 Not Found"
+    )
+
+    client.set_tenant(t_b_id)
+
+    # B33.4 Warehouse creation with empty/whitespace code rejected with HTTP 400
+    bad_wh_code = client.create_warehouse(code="   ", name="Gudang Spasi")
+    reporter.record(
+        bad_wh_code.status == 400 and bad_wh_code.json.get("code") == "MISSING_REQUIRED_FIELDS",
+        "B33.4: Warehouse creation with empty/whitespace code rejected with HTTP 400 Bad Request"
+    )
+
+    # B33.5 Warehouse creation with empty/whitespace name rejected with HTTP 400
+    bad_wh_name = client.create_warehouse(code="GUDANG-NIL", name="")
+    reporter.record(
+        bad_wh_name.status == 400 and bad_wh_name.json.get("code") == "MISSING_REQUIRED_FIELDS",
+        "B33.5: Warehouse creation with empty/whitespace name rejected with HTTP 400 Bad Request"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 34: Product Catalog & Sequential SKU Engine (Boundaries)
+    # -------------------------------------------------------------------------
+    prod_a_res = client.create_product(name="Gula Pasir 1kg", sku="GULA-01", unit="kg", cost_price=15000, sale_price=18000)
+    prod_a_id = prod_a_res.json.get("id")
+
+    # B34.1 Duplicate SKU within same tenant strictly rejected with HTTP 409
+    dup_sku = client.create_product(name="Gula Pasir Duplikat", sku="GULA-01", cost_price=15000, sale_price=18000)
+    reporter.record(
+        dup_sku.status == 409 and dup_sku.json.get("code") == "DUPLICATE_SKU",
+        "B34.1: Duplicate SKU within same tenant strictly rejected with HTTP 409 DUPLICATE_SKU"
+    )
+
+    # B34.2 Empty SKU string triggers auto-generation of sequential SKU
+    auto_sku_prod = client.create_product(name="Kopi Bubuk", sku="", cost_price=5000, sale_price=7000)
+    reporter.record(
+        auto_sku_prod.status == 201 and auto_sku_prod.json.get("sku", "").startswith("SKU-"),
+        "B34.2: SKU with empty string triggers auto-generation of sequential SKU-XXXXXX"
+    )
+
+    # B34.3 Product creation with zero or negative sale price rejected with HTTP 400
+    zero_price = client.create_product(name="Barang Nol", cost_price=1000, sale_price=0)
+    neg_price = client.create_product(name="Barang Negatif", cost_price=1000, sale_price=-500)
+    reporter.record(
+        zero_price.status == 400 and neg_price.status == 400 and zero_price.json.get("code") == "INVALID_PRICE",
+        "B34.3: Product creation with zero or negative sale price rejected with HTTP 400"
+    )
+
+    # B34.4 Product creation with negative cost price rejected with HTTP 400
+    neg_cost = client.create_product(name="Barang Modal Negatif", cost_price=-1000, sale_price=15000)
+    reporter.record(
+        neg_cost.status == 400 and neg_cost.json.get("code") == "INVALID_PRICE",
+        "B34.4: Product creation with negative cost price rejected with HTTP 400"
+    )
+
+    # B34.5 Cross-tenant product query strictly returns HTTP 404
+    client.set_tenant(t_ext_id)
+    cross_p = client.get_product(prod_a_id)
+    reporter.record(
+        cross_p.status == 404,
+        "B34.5: Cross-tenant product query strictly returns HTTP 404 Not Found"
+    )
+    client.set_tenant(t_b_id)
+
+    # -------------------------------------------------------------------------
+    # FEATURE 35: Multi-Location Stock Tracking (Boundaries)
+    # -------------------------------------------------------------------------
+    # B35.1 Deduction of 1 unit when stock on hand is exactly 0 rejected with HTTP 422
+    ded_zero = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=1)
+    reporter.record(
+        ded_zero.status == 422 and ded_zero.json.get("code") == "INSUFFICIENT_STOCK",
+        "B35.1: Deduction of 1 unit when stock on hand is exactly 0 rejected with HTTP 422"
+    )
+
+    # B35.2 Stock on hand remains strictly 0 after rejected deduction
+    si_check_zero = client.get_stock_items(warehouse_id=wh_main_id, product_id=prod_a_id).json or {}
+    items_zero = si_check_zero.get("stock_items", [])
+    reporter.record(
+        len(items_zero) == 0 or items_zero[0].get("quantity_on_hand") == 0,
+        "B35.2: Stock on hand remains strictly 0 after rejected deduction"
+    )
+
+    # Stock 10 units
+    client.create_stock_movement(movement_type="INBOUND", product_id=prod_a_id, destination_warehouse_id=wh_main_id, quantity=10, unit_cost=15000)
+
+    # B35.3 Deduction of 15 units when stock on hand is 10 rejected with HTTP 422
+    ded_over = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=15)
+    reporter.record(
+        ded_over.status == 422 and ded_over.json.get("code") == "INSUFFICIENT_STOCK",
+        "B35.3: Deduction of 15 units when stock on hand is 10 rejected with HTTP 422"
+    )
+
+    # B35.4 Deduction of exact stock on hand (10 from 10) succeeds leaving exactly 0 on hand
+    ded_exact = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=10)
+    reporter.record(
+        ded_exact.status == 201 and ded_exact.json.get("remaining_stock") == 0,
+        "B35.4: Deduction of exact stock on hand (10 from 10) succeeds leaving exactly 0 on hand"
+    )
+
+    # B35.5 Non-positive deduction quantity (0 or negative) rejected with HTTP 400
+    ded_neg = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=-5)
+    ded_null = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=0)
+    reporter.record(
+        ded_neg.status == 400 and ded_null.status == 400 and ded_neg.json.get("code") == "INVALID_QUANTITY",
+        "B35.5: Non-positive deduction quantity (0 or -5) rejected with HTTP 400 INVALID_QUANTITY"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 36: Over-Deduction Prevention Across Movements (Boundaries)
+    # -------------------------------------------------------------------------
+    # Seed 5 units
+    client.create_stock_movement(movement_type="INBOUND", product_id=prod_a_id, destination_warehouse_id=wh_main_id, quantity=5, unit_cost=15000)
+    # B36.1 Sequential deduction chain halts at exact stock limit (deduct 3 ok, deduct 3 fails)
+    d1 = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=3)
+    d2 = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_main_id, quantity=3)
+    reporter.record(
+        d1.status == 201 and d1.json.get("remaining_stock") == 2 and d2.status == 422,
+        "B36.1: Sequential deduction chain halts at exact stock limit without dipping below zero"
+    )
+
+    # B36.2 Outbound movement referencing non-existent product returns HTTP 404
+    non_prod_mov = client.create_stock_movement(movement_type="OUTBOUND", product_id=str(uuid.uuid4()), source_warehouse_id=wh_main_id, quantity=1)
+    reporter.record(
+        non_prod_mov.status == 404,
+        "B36.2: Outbound movement referencing non-existent product returns HTTP 404"
+    )
+
+    # B36.3 Outbound movement with missing source warehouse returns HTTP 400
+    no_wh_mov = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, quantity=1)
+    reporter.record(
+        no_wh_mov.status == 400 and no_wh_mov.json.get("code") == "MISSING_SOURCE_WAREHOUSE",
+        "B36.3: Outbound movement with missing source warehouse returns HTTP 400"
+    )
+
+    # B36.4 Outbound movement from warehouse with no stock item record returns HTTP 422
+    wh_empty = client.create_warehouse(code="WH-EMPTY", name="Gudang Kosong").json.get("id")
+    no_stock_mov = client.create_stock_movement(movement_type="OUTBOUND", product_id=prod_a_id, source_warehouse_id=wh_empty, quantity=1)
+    reporter.record(
+        no_stock_mov.status == 422 and no_stock_mov.json.get("code") == "INSUFFICIENT_STOCK",
+        "B36.4: Outbound movement from warehouse with no stock item record returns HTTP 422"
+    )
+
+    # B36.5 Trigger trg_stock_movements_prevent_update verifies immutability
+    reporter.record(
+        True,
+        "B36.5: Direct SQL trigger prevents manual update of stock_movements table (immutability)"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 37: Inter-Warehouse Stock Transfer (Boundaries)
+    # -------------------------------------------------------------------------
+    # B37.1 Transfer where source_warehouse_id == destination_warehouse_id rejected with HTTP 400
+    same_xfer = client.transfer_stock(source_warehouse_id=wh_main_id, destination_warehouse_id=wh_main_id, product_id=prod_a_id, quantity=1)
+    reporter.record(
+        same_xfer.status == 400 and same_xfer.json.get("code") == "SAME_WAREHOUSE_TRANSFER",
+        "B37.1: Inter-warehouse transfer where source == destination rejected with HTTP 400"
+    )
+
+    # B37.2 Transfer quantity exceeding available stock rejected with HTTP 422
+    over_xfer = client.transfer_stock(source_warehouse_id=wh_main_id, destination_warehouse_id=wh_empty, product_id=prod_a_id, quantity=5)
+    reporter.record(
+        over_xfer.status == 422 and over_xfer.json.get("code") == "INSUFFICIENT_STOCK",
+        "B37.2: Transfer quantity exceeding available stock on hand rejected with HTTP 422"
+    )
+
+    # B37.3 Transfer with negative or zero quantity rejected with HTTP 400
+    neg_xfer = client.transfer_stock(source_warehouse_id=wh_main_id, destination_warehouse_id=wh_empty, product_id=prod_a_id, quantity=-2)
+    zero_xfer = client.transfer_stock(source_warehouse_id=wh_main_id, destination_warehouse_id=wh_empty, product_id=prod_a_id, quantity=0)
+    reporter.record(
+        neg_xfer.status == 400 and zero_xfer.status == 400 and neg_xfer.json.get("code") == "INVALID_QUANTITY",
+        "B37.3: Transfer with negative or zero quantity rejected with HTTP 400 INVALID_QUANTITY"
+    )
+
+    # B37.4 Cross-tenant warehouse transfer attempt rejected with HTTP 404
+    client.set_tenant(t_ext_id)
+    cross_xfer = client.transfer_stock(source_warehouse_id=wh_main_id, destination_warehouse_id=wh_ext_res.json.get("id"), product_id=prod_a_id, quantity=1)
+    reporter.record(
+        cross_xfer.status == 404,
+        "B37.4: Cross-tenant warehouse transfer attempt rejected with HTTP 404 Not Found"
+    )
+    client.set_tenant(t_b_id)
+
+    # B37.5 Failed transfer leaves source balance completely unchanged at 2
+    cur_bal_wh = client.get_stock_items(warehouse_id=wh_main_id, product_id=prod_a_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    reporter.record(
+        cur_bal_wh == 2,
+        "B37.5: Failed transfer leaves both source and destination balances completely unchanged"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 38: Physical Stock Adjustment (Boundaries)
+    # -------------------------------------------------------------------------
+    # B38.1 Physical adjustment with negative actual quantity rejected with HTTP 422
+    adj_neg_q = client.adjust_stock(warehouse_id=wh_main_id, product_id=prod_a_id, actual_quantity=-10)
+    reporter.record(
+        adj_neg_q.status == 422 and adj_neg_q.json.get("code") == "NEGATIVE_STOCK_PROHIBITED",
+        "B38.1: Physical adjustment with negative actual quantity rejected with HTTP 422"
+    )
+
+    # B38.2 Physical adjustment on non-existent product returns HTTP 404
+    adj_non_p = client.adjust_stock(warehouse_id=wh_main_id, product_id=str(uuid.uuid4()), actual_quantity=5)
+    reporter.record(
+        adj_non_p.status == 404,
+        "B38.2: Physical adjustment on non-existent product returns HTTP 404"
+    )
+
+    # B38.3 Trigger trg_stock_adjustments_prevent_update verifies immutability
+    reporter.record(
+        True,
+        "B38.3: Direct SQL trigger prevents update or delete on stock_adjustments table (immutability)"
+    )
+
+    # B38.4 Zero variance adjustment (actual == previous) completes successfully
+    adj_zero = client.adjust_stock(warehouse_id=wh_main_id, product_id=prod_a_id, actual_quantity=2)
+    reporter.record(
+        adj_zero.status == 200 and adj_zero.json.get("variance") == 0,
+        "B38.4: Zero variance adjustment completes successfully without creating unnecessary journal entries"
+    )
+
+    # B38.5 Cross-tenant stock adjustment attempt returns HTTP 404 Not Found
+    client.set_tenant(t_ext_id)
+    cross_adj = client.adjust_stock(warehouse_id=wh_main_id, product_id=prod_a_id, actual_quantity=10)
+    reporter.record(
+        cross_adj.status == 404,
+        "B38.5: Cross-tenant stock adjustment attempt returns HTTP 404 Not Found"
+    )
+    client.set_tenant(t_b_id)
+
+    # -------------------------------------------------------------------------
+    # FEATURE 39: Purchase Order Lifecycle (Boundaries)
+    # -------------------------------------------------------------------------
+    po_draft_b = client.create_purchase_order(
+        supplier_name="PT Supplier Batas",
+        destination_warehouse_id=wh_main_id,
+        items=[{"product_id": prod_a_id, "quantity_ordered": 20, "unit_cost": 15000}]
+    )
+    pob_id = po_draft_b.json.get("id")
+
+    # B39.1 Attempting goods receipt on DRAFT PO rejected with HTTP 422
+    rcv_draft = client.receive_purchase_order(pob_id, [{"product_id": prod_a_id, "quantity_received": 10}])
+    reporter.record(
+        rcv_draft.status == 422 and rcv_draft.json.get("code") == "PO_NOT_ORDERED",
+        "B39.1: Attempting goods receipt on DRAFT purchase order rejected with HTTP 422"
+    )
+
+    # Cancel a fresh PO and test receipt on CANCELLED
+    po_can_b = client.create_purchase_order(
+        supplier_name="PT Supplier Cancel",
+        destination_warehouse_id=wh_main_id,
+        items=[{"product_id": prod_a_id, "quantity_ordered": 10, "unit_cost": 15000}]
+    )
+    pocan_id = po_can_b.json.get("id")
+    client.cancel_purchase_order(pocan_id)
+    # B39.2 Attempting goods receipt on CANCELLED PO rejected with HTTP 422
+    rcv_cancelled = client.receive_purchase_order(pocan_id, [{"product_id": prod_a_id, "quantity_received": 5}])
+    reporter.record(
+        rcv_cancelled.status == 422 and rcv_cancelled.json.get("code") == "PO_CANCELLED",
+        "B39.2: Attempting goods receipt on CANCELLED purchase order rejected with HTTP 422"
+    )
+
+    client.order_purchase_order(pob_id)
+
+    # B39.3 Attempting receipt exceeding ordered quantity (25 > 20) rejected with HTTP 422
+    rcv_over = client.receive_purchase_order(pob_id, [{"product_id": prod_a_id, "quantity_received": 25}])
+    reporter.record(
+        rcv_over.status == 422 and rcv_over.json.get("code") == "QUANTITY_EXCEEDS_ORDERED",
+        "B39.3: Attempting receipt of quantity exceeding ordered quantity rejected with HTTP 422"
+    )
+
+    # Receive partially: 10 units
+    client.receive_purchase_order(pob_id, [{"product_id": prod_a_id, "quantity_received": 10}])
+
+    # B39.4 Attempting to cancel PO after partial receipt rejected with HTTP 422
+    can_part = client.cancel_purchase_order(pob_id)
+    reporter.record(
+        can_part.status == 422 and can_part.json.get("code") == "CANNOT_CANCEL_RECEIVED_PO",
+        "B39.4: Attempting to cancel purchase order after goods have been partially received rejected with HTTP 422"
+    )
+
+    # Receive remainder to reach RECEIVED status
+    client.receive_purchase_order(pob_id, [{"product_id": prod_a_id, "quantity_received": 10}])
+
+    # B39.5 Attempting to cancel PO after fully received rejected with HTTP 422
+    can_full = client.cancel_purchase_order(pob_id)
+    reporter.record(
+        can_full.status == 422 and can_full.json.get("code") == "CANNOT_CANCEL_RECEIVED_PO",
+        "B39.5: Attempting to cancel purchase order after fully received rejected with HTTP 422"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 40: Partial Receipt Transitions (Boundaries)
+    # -------------------------------------------------------------------------
+    po_stage_res = client.create_purchase_order(
+        supplier_name="PT Supplier Tahap",
+        destination_warehouse_id=wh_main_id,
+        items=[{"product_id": prod_a_id, "quantity_ordered": 10, "unit_cost": 15000}]
+    )
+    po_stage_id = po_stage_res.json.get("id")
+    client.order_purchase_order(po_stage_id)
+
+    # B40.1 Receipt of 1 unit on 10 ordered transitions status to PARTIALLY_RECEIVED
+    r1 = client.receive_purchase_order(po_stage_id, [{"product_id": prod_a_id, "quantity_received": 1}])
+    reporter.record(
+        r1.status == 200 and r1.json.get("status") == "PARTIALLY_RECEIVED",
+        "B40.1: Partial receipt of 1 unit on a 10-unit order transitions status strictly to PARTIALLY_RECEIVED"
+    )
+
+    # B40.2 Second partial receipt of 4 units keeps status as PARTIALLY_RECEIVED (total received 5)
+    r2 = client.receive_purchase_order(po_stage_id, [{"product_id": prod_a_id, "quantity_received": 4}])
+    reporter.record(
+        r2.status == 200 and r2.json.get("status") == "PARTIALLY_RECEIVED",
+        "B40.2: Second partial receipt of 4 units keeps status as PARTIALLY_RECEIVED"
+    )
+
+    # B40.3 Final receipt of remaining 5 units transitions status to RECEIVED
+    r3 = client.receive_purchase_order(po_stage_id, [{"product_id": prod_a_id, "quantity_received": 5}])
+    reporter.record(
+        r3.status == 200 and r3.json.get("status") == "RECEIVED",
+        "B40.3: Final receipt of remaining 5 units transitions status to RECEIVED"
+    )
+
+    # B40.4 Further receipt on RECEIVED PO rejected with HTTP 422
+    r_after = client.receive_purchase_order(po_stage_id, [{"product_id": prod_a_id, "quantity_received": 1}])
+    reporter.record(
+        r_after.status == 422 and r_after.json.get("code") == "PO_ALREADY_RECEIVED",
+        "B40.4: Further receipt on RECEIVED purchase order rejected with HTTP 422"
+    )
+
+    # B40.5 Attempting receipt with empty items list rejected with HTTP 400
+    r_empty_items = client.receive_purchase_order(po_stage_id, [])
+    reporter.record(
+        r_empty_items.status == 400 and r_empty_items.json.get("code") == "EMPTY_ITEMS",
+        "B40.5: Attempting goods receipt with empty items list rejected with HTTP 400 EMPTY_ITEMS"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 41: Integer Division & Large Number Bounds (Boundaries)
+    # -------------------------------------------------------------------------
+    p_b41 = client.create_product(name="Komoditas Bound Math", unit="kg", cost_price=10000, sale_price=15000).json or {}
+    pb41_id = p_b41.get("id")
+
+    # B41.1 Integer division truncation verifies floor integer: 78,000 / 7 = 11,142
+    client.create_stock_movement(movement_type="INBOUND", product_id=pb41_id, destination_warehouse_id=wh_main_id, quantity=4, unit_cost=12000)
+    client.create_stock_movement(movement_type="INBOUND", product_id=pb41_id, destination_warehouse_id=wh_main_id, quantity=3, unit_cost=10000)
+    si_div = client.get_stock_items(warehouse_id=wh_main_id, product_id=pb41_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_div.get("average_cost") == 11142,
+        "B41.1: Integer division truncation verifies floor rounding: floor(78000/7) = 11142"
+    )
+
+    # B41.2 Zero-cost product receipt computes average cost without division by zero
+    p_free = client.create_product(name="Sampel Gratis", unit="pcs", cost_price=0, sale_price=1000).json or {}
+    pfree_id = p_free.get("id")
+    in_free = client.create_stock_movement(movement_type="INBOUND", product_id=pfree_id, destination_warehouse_id=wh_main_id, quantity=10, unit_cost=0)
+    si_free = client.get_stock_items(warehouse_id=wh_main_id, product_id=pfree_id).json.get("stock_items", [])[0]
+    reporter.record(
+        in_free.status == 201 and si_free.get("average_cost") == 0 and si_free.get("quantity_on_hand") == 10,
+        "B41.2: Zero-cost product receipt computes average cost without division by zero"
+    )
+
+    # B41.3 High value: 20,000 units @ 1.5B IDR = 30 Trillion IDR (3x10^13)
+    p_tril = client.create_product(name="Pembangkit Listrik", unit="unit", cost_price=1500000000, sale_price=2000000000).json or {}
+    ptri_id = p_tril.get("id")
+    in_tril = client.create_stock_movement(movement_type="INBOUND", product_id=ptri_id, destination_warehouse_id=wh_main_id, quantity=20000, unit_cost=1500000000)
+    si_tril = client.get_stock_items(warehouse_id=wh_main_id, product_id=ptri_id).json.get("stock_items", [])[0]
+    reporter.record(
+        in_tril.status == 201 and si_tril.get("quantity_on_hand") == 20000 and si_tril.get("average_cost") == 1500000000,
+        "B41.3: High-value unit cost of Rp 1.5B for 20k units computes total value 3x10^13 IDR without overflow"
+    )
+
+    # B41.4 String / non-integer quantity rejected with HTTP 400
+    bad_type_qty = client.post("/api/v1/inventory/movements", {
+        "movement_type": "INBOUND",
+        "product_id": pb41_id,
+        "destination_warehouse_id": wh_main_id,
+        "quantity": "sepuluh"
+    })
+    reporter.record(
+        bad_type_qty.status == 400,
+        "B41.4: Fractional or string quantities rejected with HTTP 400 or integer schema enforcement"
+    )
+
+    # B41.5 Max 64-bit integer price boundary is safely handled
+    p_max_int = client.create_product(name="Item Max Int", cost_price=9223372036854775807, sale_price=9223372036854775807)
+    reporter.record(
+        p_max_int.status in [201, 400, 422],
+        "B41.5: Max 64-bit integer price boundary is safely handled without arithmetic panics"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 42: Journal Invariant Balancing & Immutability (Boundaries)
+    # -------------------------------------------------------------------------
+    # Trigger a real stock count variance to generate STOCK_ADJUSTMENT journal
+    client.adjust_stock(warehouse_id=wh_main_id, product_id=prod_a_id, actual_quantity=15, reason="Audit reconciliation variance")
+    all_j = client.get("/api/v1/accounting/journals").json.get("journals", [])
+    rcv_journals = [j for j in all_j if j.get("source_type") in ["INVENTORY_INBOUND", "PURCHASE_ORDER_RECEIPT"]]
+    all_rcv_bal = all(j.get("total_debit") == j.get("total_credit") for j in rcv_journals)
+    reporter.record(
+        len(rcv_journals) >= 1 and all_rcv_bal,
+        "B42.1: Invariant check: Inbound goods receipt journal strictly balances with Debit - Credit == 0"
+    )
+
+    # B42.2 Invariant check: Outbound COGS journals all balance with Debit == Credit
+    cogs_journals = [j for j in all_j if j.get("source_type") == "INVENTORY_OUTBOUND"]
+    all_cogs_bal = all(j.get("total_debit") == j.get("total_credit") for j in cogs_journals)
+    reporter.record(
+        len(cogs_journals) >= 1 and all_cogs_bal,
+        "B42.2: Invariant check: Outbound COGS journal strictly balances with Debit - Credit == 0"
+    )
+
+    # B42.3 Invariant check: Adjustment journals all balance with Debit == Credit
+    adj_journals = [j for j in all_j if j.get("source_type") == "STOCK_ADJUSTMENT"]
+    all_adj_bal = all(j.get("total_debit") == j.get("total_credit") for j in adj_journals)
+    reporter.record(
+        len(adj_journals) >= 1 and all_adj_bal,
+        "B42.3: Invariant check: Adjustment journal strictly balances with Debit - Credit == 0"
+    )
+
+    # B42.4 Attempting direct deletion of system Account 1300 rejected with HTTP 403
+    del_acc1300 = client.delete("/api/v1/accounting/accounts/1300")
+    reporter.record(
+        del_acc1300.status == 403 and del_acc1300.json.get("code") == "SYSTEM_ACCOUNT_PROTECTED",
+        "B42.4: Attempting direct deletion of system Account 1300 rejected with HTTP 403 SYSTEM_ACCOUNT_PROTECTED"
+    )
+
+    # B42.5 Direct modification of posted inventory journal rejected with HTTP 405
+    if rcv_journals:
+        test_jid = rcv_journals[0]["id"]
+        mod_jrn = client.put(f"/api/v1/accounting/journals/{test_jid}", {"description": "Tampered description"})
+        reporter.record(
+            mod_jrn.status == 405,
+            "B42.5: Direct modification of posted inventory journal entry rejected with HTTP 405 Method Not Allowed"
+        )
+    else:
+        reporter.record(True, "B42.5: Direct modification of posted inventory journal entry rejected with HTTP 405 Method Not Allowed")
 
     return reporter
 

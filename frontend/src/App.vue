@@ -52,6 +52,20 @@
                 @refresh="handleTransactionCreated"
               />
 
+              <InventoryView
+                v-else-if="currentTab === 'inventory'"
+                key="inventory"
+                @open-add="showAddModal = true"
+                @nav="handleSelectTab"
+              />
+
+              <PurchasingView
+                v-else-if="currentTab === 'purchasing'"
+                key="purchasing"
+                @open-add="showAddModal = true"
+                @nav="handleSelectTab"
+              />
+
               <!-- Invoices & Billing Capability View -->
               <div
                 v-else-if="currentTab === 'invoices'"
@@ -214,6 +228,8 @@ import SplitScreenAuth from '@/components/auth/SplitScreenAuth.vue'
 
 import HomeView from '@/views/HomeView.vue'
 import TransactionsView from '@/views/TransactionsView.vue'
+import InventoryView from '@/views/InventoryView.vue'
+import PurchasingView from '@/views/PurchasingView.vue'
 import AnalyticsView from '@/views/AnalyticsView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import AddTransactionModal from '@/components/AddTransactionModal.vue'
@@ -244,13 +260,15 @@ function handleWorkspaceCreated() {
 }
 
 // Dynamic Navigation Transition (Compose Navigation Feel)
-const tabOrder = ['home', 'transactions', 'invoices', 'accounting', 'analytics', 'profile']
+const tabOrder = ['home', 'transactions', 'inventory', 'purchasing', 'invoices', 'accounting', 'analytics', 'profile']
 const transitionName = ref('slide-left')
 
 const currentTabTitle = computed(() => {
   const titles = {
     home: 'Dashboard Utama',
     transactions: 'Riwayat Transaksi',
+    inventory: 'Inventaris & Stok Multi-Gudang',
+    purchasing: 'Pesanan Pembelian & Penerimaan Barang',
     invoices: 'Faktur & Tagihan Komersial',
     accounting: 'Buku Kas & Jurnal Akuntansi',
     analytics: 'Analisis & Proyeksi',
@@ -258,6 +276,16 @@ const currentTabTitle = computed(() => {
   }
   return titles[currentTab.value] || 'FinRep'
 })
+
+// Strict personal workspace isolation (PRD §8, PROJECT.md §16, Features 22/23)
+watch(
+  () => workspaceStore.isPersonalWorkspace,
+  (isPersonal) => {
+    if (isPersonal && ['inventory', 'purchasing', 'invoices', 'accounting'].includes(currentTab.value)) {
+      handleSelectTab('home')
+    }
+  }
+)
 
 function handleSelectTab(tab) {
   if (tab === currentTab.value) {

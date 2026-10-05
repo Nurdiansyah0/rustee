@@ -13,10 +13,10 @@ const CACHED_TENANT_ID_KEY = 'invinite_active_tenant_id'
 
 // Fallback capability matrix based on PRD §8, §35 & test_tier1.py F29
 const CAPABILITY_MATRIX = {
-  general: ['invoicing', 'accounting', 'receivables', 'reports'],
-  retail: ['pos', 'inventory', 'invoicing', 'accounting', 'receivables', 'reports'],
-  fnb: ['pos', 'tables', 'kitchen', 'inventory', 'accounting', 'reports'],
-  rental: ['inventory', 'bookings', 'invoicing', 'receivables', 'accounting'],
+  general: ['inventory', 'purchasing', 'invoicing', 'accounting', 'receivables', 'reports'],
+  retail: ['pos', 'inventory', 'purchasing', 'invoicing', 'accounting', 'receivables', 'reports'],
+  fnb: ['pos', 'tables', 'kitchen', 'inventory', 'purchasing', 'accounting', 'reports'],
+  rental: ['inventory', 'purchasing', 'bookings', 'invoicing', 'receivables', 'accounting'],
   contractor: ['projects', 'milestones', 'invoicing', 'receivables', 'accounting'],
   personal: ['accounts', 'transactions', 'budgets', 'analytics']
 }
@@ -142,6 +142,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const hasCapability = (cap) => {
     if (!cap) return false
+    // Strict personal workspace isolation (PRD §8, PROJECT.md §16, Features 22/23)
+    if (isPersonalWorkspace.value) {
+      if (['inventory', 'purchasing', 'invoicing', 'accounting'].includes(cap)) {
+        return false
+      }
+    }
+    // Purchasing capability is enabled whenever inventory is active
+    if (cap === 'purchasing' && capabilities.value.includes('inventory')) {
+      return true
+    }
     return capabilities.value.includes(cap)
   }
 

@@ -6,6 +6,7 @@ pub mod db;
 pub mod error;
 pub mod idempotency_repo;
 pub mod ingestion_repo;
+pub mod inventory_repo;
 pub mod invoice_repo;
 pub mod outbox_repo;
 pub mod receivable_repo;
@@ -16,6 +17,7 @@ pub mod user_preferences_repo;
 pub mod user_repo;
 
 pub use account_repo::{Account, AccountRepository, NewAccount, SqlxAccountRepository};
+pub use inventory_repo::{InventoryRepository, SqlxInventoryRepository};
 pub use invoice_repo::{InvoiceRepository, SqlxInvoiceRepository};
 pub use outbox_repo::{OutboxRepository, SqlxOutboxRepository};
 pub use receivable_repo::{ReceivableRepository, SqlxReceivableRepository};

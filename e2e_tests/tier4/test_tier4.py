@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tier 4: Real-World Application Scenarios Acceptance Test Suite (20 comprehensive scenarios).
+Tier 4: Real-World Application Scenarios Acceptance Test Suite (24 comprehensive scenarios).
 Verifies complete realistic multi-step user workflows mirroring production operation.
 """
 
@@ -24,7 +24,7 @@ from harness.client import (
 
 def run_tier4_scenarios(base_url: str, reporter: Optional[TapReporter] = None) -> TapReporter:
     if reporter is None:
-        reporter = TapReporter(total_expected=20)
+        reporter = TapReporter(total_expected=24)
         reporter.print_header()
 
     client = ApiClient(base_url=base_url)
@@ -427,6 +427,215 @@ def run_tier4_scenarios(base_url: str, reporter: Optional[TapReporter] = None) -
         r_plans.status == 200 and r_plans.json.get("exclusive_provider") == "dana"
     )
     reporter.record(s20_pass, "SCENARIO-20 [Comprehensive Acceptance]: End-to-end audit: DB integrity, security headers, UTC timestamps, 100% test pass")
+
+    # =========================================================================
+    # SCENARIO 21: Multi-Location Retail Fulfillment & Stock Transfer Pipeline
+    # =========================================================================
+    c21 = ApiClient(base_url=base_url)
+    uid21 = uuid.uuid4().hex[:6]
+    c21.register(f"scen21_{uid21}@invinite.biz", "P@ssword123!", "Direktur Retail")
+    t21 = c21.create_tenant(f"PT Retail Megatama {uid21}", slug=f"megatama-{uid21}")
+    t21_id = t21.json.get("id")
+    c21.set_tenant(t21_id)
+
+    # Provision central DC and storefront warehouse
+    wh_dc = c21.create_warehouse(code=f"DC-JKT-{uid21}", name="Pusat Distribusi Jakarta", is_default=True)
+    wh_dc_id = wh_dc.json.get("id")
+    wh_store = c21.create_warehouse(code=f"STORE-GI-{uid21}", name="Toko Grand Indonesia")
+    wh_store_id = wh_store.json.get("id")
+
+    # Catalog apparel items
+    prod_a = c21.create_product(name="Kemeja Katun Premium", sku=f"KMJ-{uid21}", cost_price=75000, sale_price=150000, reorder_threshold=10)
+    prod_b = c21.create_product(name="Celana Chino Slim", sku=f"CLN-{uid21}", cost_price=100000, sale_price=220000, reorder_threshold=5)
+    pa_id = prod_a.json.get("id")
+    pb_id = prod_b.json.get("id")
+
+    # Inbound bulk inventory to central DC
+    c21.create_stock_movement(movement_type="INBOUND", product_id=pa_id, destination_warehouse_id=wh_dc_id, quantity=50, unit_cost=75000)
+    c21.create_stock_movement(movement_type="INBOUND", product_id=pb_id, destination_warehouse_id=wh_dc_id, quantity=30, unit_cost=100000)
+
+    # Inter-warehouse replenishment transfer to storefront
+    xfer_a = c21.transfer_stock(source_warehouse_id=wh_dc_id, destination_warehouse_id=wh_store_id, product_id=pa_id, quantity=20)
+    xfer_b = c21.transfer_stock(source_warehouse_id=wh_dc_id, destination_warehouse_id=wh_store_id, product_id=pb_id, quantity=10)
+
+    # Verify DC balances: A=30, B=20
+    dc_stock_a = c21.get_stock_items(warehouse_id=wh_dc_id, product_id=pa_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    dc_stock_b = c21.get_stock_items(warehouse_id=wh_dc_id, product_id=pb_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+
+    # Storefront sales fulfillment: OUTBOUND 15 units of product A
+    c21.create_stock_movement(movement_type="OUTBOUND", product_id=pa_id, source_warehouse_id=wh_store_id, quantity=15)
+    store_stock_a = c21.get_stock_items(warehouse_id=wh_store_id, product_id=pa_id).json.get("stock_items", [])[0]
+
+    # Verify low-stock alert triggered (5 <= 10)
+    low_res = c21.get_stock_items(low_stock=True)
+    low_items = low_res.json.get("stock_items", [])
+    low_flagged = any(it.get("product_id") == pa_id and it.get("warehouse_id") == wh_store_id for it in low_items)
+
+    s21_pass = (
+        wh_dc.status == 201 and wh_store.status == 201 and
+        xfer_a.status == 200 and xfer_b.status == 200 and
+        dc_stock_a == 30 and dc_stock_b == 20 and
+        store_stock_a.get("quantity_on_hand") == 5 and
+        store_stock_a.get("is_low_stock") is True and
+        low_flagged
+    )
+    reporter.record(s21_pass, "SCENARIO-21 [Multi-Location Fulfillment]: Central warehouse replenishment transfer and retail storefront sales fulfillment pipeline")
+
+    # =========================================================================
+    # SCENARIO 22: Moving Weighted Average Cost (WAC) Revaluation & GL Audit
+    # =========================================================================
+    c22 = ApiClient(base_url=base_url)
+    uid22 = uuid.uuid4().hex[:6]
+    c22.register(f"scen22_{uid22}@invinite.biz", "P@ssword123!", "Financial Controller")
+    t22 = c22.create_tenant(f"PT Niaga Sukses {uid22}", slug=f"niaga-{uid22}")
+    t22_id = t22.json.get("id")
+    c22.set_tenant(t22_id)
+
+    wh_wac = c22.create_warehouse(code=f"WH-WAC-{uid22}", name="Gudang Valuasi WAC", is_default=True)
+    wh_wac_id = wh_wac.json.get("id")
+    prod_wac22 = c22.create_product(name="Biji Kopi Arabika Gayo 1kg", sku=f"KOP-{uid22}", cost_price=100000, sale_price=160000)
+    pw22_id = prod_wac22.json.get("id")
+
+    # Receipt 1: 100 kg @ Rp 100.000 -> Value = 10.000.000 IDR, WAC = 100.000
+    c22.create_stock_movement(movement_type="INBOUND", product_id=pw22_id, destination_warehouse_id=wh_wac_id, quantity=100, unit_cost=100000)
+
+    # Receipt 2: 50 kg @ Rp 130.000 -> Total Qty = 150 kg, Total Value = 16.500.000 IDR -> WAC = 110.000
+    c22.create_stock_movement(movement_type="INBOUND", product_id=pw22_id, destination_warehouse_id=wh_wac_id, quantity=50, unit_cost=130000)
+    wac_step1 = c22.get_stock_items(warehouse_id=wh_wac_id, product_id=pw22_id).json.get("stock_items", [])[0].get("average_cost")
+
+    # Outbound Fulfillment: 60 kg @ WAC 110.000 -> COGS = 6.600.000 IDR, Remaining = 90 kg @ 110.000 (Valuation: 9.900.000 IDR)
+    c22.create_stock_movement(movement_type="OUTBOUND", product_id=pw22_id, source_warehouse_id=wh_wac_id, quantity=60)
+
+    # Receipt 3: 60 kg @ Rp 120.000 -> Total Qty = 150 kg, Total Value = 9.900.000 + 7.200.000 = 17.100.000 IDR -> WAC = 114.000
+    c22.create_stock_movement(movement_type="INBOUND", product_id=pw22_id, destination_warehouse_id=wh_wac_id, quantity=60, unit_cost=120000)
+    final_stock = c22.get_stock_items(warehouse_id=wh_wac_id, product_id=pw22_id).json.get("stock_items", [])[0]
+    final_q = final_stock.get("quantity_on_hand")
+    final_cost = final_stock.get("average_cost")
+
+    # General ledger audit: verify GL journals for inbound receipts & outbound COGS
+    j_list = c22.get("/api/v1/accounting/journals").json.get("journals", [])
+    total_inv_debits = sum(sum(l.get("debit", 0) for l in j.get("lines", []) if l.get("account_code") == "1300") for j in j_list)
+    total_inv_credits = sum(sum(l.get("credit", 0) for l in j.get("lines", []) if l.get("account_code") == "1300") for j in j_list)
+    net_gl_inventory = total_inv_debits - total_inv_credits
+    physical_valuation = final_q * final_cost
+
+    s22_pass = (
+        wac_step1 == 110000 and
+        final_q == 150 and
+        final_cost == 114000 and
+        physical_valuation == 17100000 and
+        net_gl_inventory == physical_valuation
+    )
+    reporter.record(s22_pass, "SCENARIO-22 [Moving WAC Valuation & GL Audit]: Multi-batch procurement recalculates moving WAC with 100% GL Persediaan balance reconciliation")
+
+    # =========================================================================
+    # SCENARIO 23: PO Lifecycle with Staged Receipts & Batch Traceability
+    # =========================================================================
+    c23 = ApiClient(base_url=base_url)
+    uid23 = uuid.uuid4().hex[:6]
+    c23.register(f"scen23_{uid23}@invinite.biz", "P@ssword123!", "Procurement Lead")
+    t23 = c23.create_tenant(f"PT Manufaktur Presisi {uid23}", slug=f"presisi-{uid23}")
+    t23_id = t23.json.get("id")
+    c23.set_tenant(t23_id)
+
+    wh_mfg = c23.create_warehouse(code=f"WH-RAW-{uid23}", name="Gudang Bahan Baku Pabrik", is_default=True)
+    wh_mfg_id = wh_mfg.json.get("id")
+    comp_a = c23.create_product(name="Baut Baja M8", sku=f"BAUT-{uid23}", cost_price=2000, sale_price=3500)
+    comp_b = c23.create_product(name="Plat Aluminium 2mm", sku=f"ALUM-{uid23}", cost_price=50000, sale_price=80000)
+    ca_id = comp_a.json.get("id")
+    cb_id = comp_b.json.get("id")
+
+    # Create PO with DRAFT status
+    po_res = c23.create_purchase_order(
+        supplier_name="PT Krakatau Mega Logam",
+        destination_warehouse_id=wh_mfg_id,
+        items=[
+            {"product_id": ca_id, "quantity_ordered": 1000, "unit_cost": 2000},
+            {"product_id": cb_id, "quantity_ordered": 200, "unit_cost": 50000}
+        ]
+    )
+    po_id = po_res.json.get("id")
+    po_draft_status = po_res.json.get("status")
+
+    # Order PO -> transitions to ORDERED
+    ord_res = c23.order_purchase_order(po_id)
+    po_ord_status = ord_res.json.get("status")
+
+    # Delivery Stage 1: Partial delivery
+    rcv1_res = c23.receive_purchase_order(po_id, [
+        {"product_id": ca_id, "quantity_received": 400},
+        {"product_id": cb_id, "quantity_received": 100}
+    ])
+    po_part_status = rcv1_res.json.get("status")
+
+    # Delivery Stage 2: Final delivery completing PO
+    rcv2_res = c23.receive_purchase_order(po_id, [
+        {"product_id": ca_id, "quantity_received": 600},
+        {"product_id": cb_id, "quantity_received": 100}
+    ])
+    po_full_status = rcv2_res.json.get("status")
+
+    # Final receipt attempt rejected
+    over_rcv = c23.receive_purchase_order(po_id, [{"product_id": ca_id, "quantity_received": 10}])
+
+    # Verify inventory quantities on hand: 1000 Baut, 200 Aluminium
+    st_a = c23.get_stock_items(warehouse_id=wh_mfg_id, product_id=ca_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    st_b = c23.get_stock_items(warehouse_id=wh_mfg_id, product_id=cb_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+
+    s23_pass = (
+        po_draft_status == "DRAFT" and
+        po_ord_status == "ORDERED" and
+        po_part_status == "PARTIALLY_RECEIVED" and
+        po_full_status == "RECEIVED" and
+        over_rcv.status == 422 and
+        st_a == 1000 and st_b == 200
+    )
+    reporter.record(s23_pass, "SCENARIO-23 [PO Lifecycle & Staged Receipts]: End-to-end staged procurement receipts transition PO state and track line item quantities")
+
+    # =========================================================================
+    # SCENARIO 24: Annual Physical Inventory Stock Count & Discrepancy Settlement
+    # =========================================================================
+    c24 = ApiClient(base_url=base_url)
+    uid24 = uuid.uuid4().hex[:6]
+    c24.register(f"scen24_{uid24}@invinite.biz", "P@ssword123!", "Warehouse Audit Manager")
+    t24 = c24.create_tenant(f"PT Logistik Sentosa {uid24}", slug=f"sentosa-{uid24}")
+    t24_id = t24.json.get("id")
+    c24.set_tenant(t24_id)
+
+    wh_audit = c24.create_warehouse(code=f"WH-AUDIT-{uid24}", name="Gudang Pusat Audit", is_default=True)
+    wh_audit_id = wh_audit.json.get("id")
+    item_shrink = c24.create_product(name="Barang Susut Audit", sku=f"SHR-{uid24}", cost_price=40000, sale_price=70000)
+    item_surplus = c24.create_product(name="Barang Lebih Audit", sku=f"SUR-{uid24}", cost_price=60000, sale_price=95000)
+    is_id = item_shrink.json.get("id")
+    ip_id = item_surplus.json.get("id")
+
+    # Inbound initial book stock: 100 units item_shrink, 50 units item_surplus
+    c24.create_stock_movement(movement_type="INBOUND", product_id=is_id, destination_warehouse_id=wh_audit_id, quantity=100, unit_cost=40000)
+    c24.create_stock_movement(movement_type="INBOUND", product_id=ip_id, destination_warehouse_id=wh_audit_id, quantity=50, unit_cost=60000)
+
+    # Physical count adjustments:
+    # 1. Shrinkage: actual is 95 (-5 variance @ 40.000 = -200.000 IDR)
+    adj_shrink = c24.adjust_stock(warehouse_id=wh_audit_id, product_id=is_id, actual_quantity=95, reason="Audit tahunan barang rusak/hilang")
+
+    # 2. Surplus: actual is 54 (+4 variance @ 60.000 = +240.000 IDR)
+    adj_surplus = c24.adjust_stock(warehouse_id=wh_audit_id, product_id=ip_id, actual_quantity=54, reason="Audit penemuan selisih lebih fisik")
+
+    # Verify updated quantities on hand
+    q_shrink = c24.get_stock_items(warehouse_id=wh_audit_id, product_id=is_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    q_surplus = c24.get_stock_items(warehouse_id=wh_audit_id, product_id=ip_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+
+    # Verify journal entries posted for adjustments
+    j_audit = c24.get("/api/v1/accounting/journals").json.get("journals", [])
+    adj_journals = [j for j in j_audit if j.get("source_type") == "STOCK_ADJUSTMENT"]
+    all_adj_balanced = all(j.get("total_debit") == j.get("total_credit") for j in adj_journals)
+
+    s24_pass = (
+        adj_shrink.status == 200 and adj_shrink.json.get("variance") == -5 and
+        adj_surplus.status == 200 and adj_surplus.json.get("variance") == 4 and
+        q_shrink == 95 and q_surplus == 54 and
+        len(adj_journals) == 2 and all_adj_balanced
+    )
+    reporter.record(s24_pass, "SCENARIO-24 [Physical Stock Audit Settlement]: Discrepancy cycle count settlement adjusts balances and posts balanced adjustment journals")
 
     return reporter
 

@@ -25,7 +25,7 @@ from harness.client import (
 
 def run_tier1_tests(base_url: str, reporter: Optional[TapReporter] = None) -> TapReporter:
     if reporter is None:
-        reporter = TapReporter(total_expected=160)
+        reporter = TapReporter(total_expected=210)
         reporter.print_header()
 
     client = ApiClient(base_url=base_url)
@@ -1027,9 +1027,9 @@ def run_tier1_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     # =========================================================================
     schema_probe = client.get_system_schema()
     s_data = schema_probe.json or {}
-    # 30.1 System schema endpoint verifies exactly 26 relational tables exist
-    reporter.record(schema_probe.status == 200 and s_data.get("table_count") == 26,
-                    "F30.1: Backend schema verification probe confirms exactly 26 relational tables")
+    # 30.1 System schema endpoint verifies exactly 33 relational tables exist
+    reporter.record(schema_probe.status == 200 and s_data.get("table_count") == 33,
+                    "F30.1: Backend schema verification probe confirms exactly 33 relational tables")
 
     # 30.2 SQLite WAL journal_mode verified active
     reporter.record(s_data.get("journal_mode") == "wal",
@@ -1117,6 +1117,472 @@ def run_tier1_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     neg_pay = client.allocate_payment(inv_lc_id, amount=-100000)
     reporter.record(neg_pay.status == 400 and neg_pay.json.get("code") == "INVALID_AMOUNT",
                     "F32.5: Negative monetary payment injection strictly rejected with HTTP 400 INVALID_AMOUNT")
+
+    # =========================================================================
+    # PHASE 2: INVENTORY & MULTI-LOCATION STOCK MANAGEMENT (F33–F42)
+    # =========================================================================
+    t_inv = client.create_tenant(f"PT Logistik Nusantara {uid_suffix}", slug=f"logistik-{uid_suffix}")
+    t_inv_id = t_inv.json.get("id")
+    client.set_tenant(t_inv_id)
+
+    # -------------------------------------------------------------------------
+    # FEATURE 33: Multi-Location Warehouse Management (PRD §10, §27)
+    # -------------------------------------------------------------------------
+    # 33.1 Create primary warehouse with default designation returns 201 Created and is_default: True
+    wh1_res = client.create_warehouse(code="WH-JKT", name="Gudang Utama Jakarta", address="Jl. Gatot Subroto No. 1, Jakarta", is_default=True)
+    wh1 = wh1_res.json or {}
+    wh1_id = wh1.get("id")
+    reporter.record(
+        wh1_res.status == 201 and wh1.get("code") == "WH-JKT" and wh1.get("is_default") is True,
+        "F33.1: Create primary warehouse with default flag returns HTTP 201 and is_default: True"
+    )
+
+    # 33.2 Create secondary warehouse without default flag returns 201 Created and is_default: False
+    wh2_res = client.create_warehouse(code="WH-SBY", name="Gudang Cabang Surabaya", address="Jl. Basuki Rahmat No. 10, Surabaya", is_default=False)
+    wh2 = wh2_res.json or {}
+    wh2_id = wh2.get("id")
+    reporter.record(
+        wh2_res.status == 201 and wh2.get("code") == "WH-SBY" and wh2.get("is_default") is False,
+        "F33.2: Create secondary warehouse without default flag returns HTTP 201 and is_default: False"
+    )
+
+    # 33.3 Designating new warehouse as default clears default flag on previously designated warehouse
+    wh3_res = client.create_warehouse(code="WH-BDG", name="Gudang Bandung", address="Jl. Asia Afrika No. 5", is_default=True)
+    wh1_check = client.get_warehouse(wh1_id).json or {}
+    wh3 = wh3_res.json or {}
+    wh3_id = wh3.get("id")
+    reporter.record(
+        wh3_res.status == 201 and wh3.get("is_default") is True and wh1_check.get("is_default") is False,
+        "F33.3: Designating new warehouse as default automatically clears default on previous warehouse"
+    )
+
+    # 33.4 List warehouses returns all active warehouses for the tenant
+    wh_list_res = client.list_warehouses()
+    wh_list = (wh_list_res.json or {}).get("warehouses", [])
+    reporter.record(
+        wh_list_res.status == 200 and len(wh_list) >= 3 and any(w.get("code") == "WH-JKT" for w in wh_list),
+        "F33.4: List warehouses endpoint returns all tenant warehouses ordered chronologically"
+    )
+
+    # 33.5 Get warehouse by ID returns exact warehouse metadata
+    wh2_get = client.get_warehouse(wh2_id)
+    reporter.record(
+        wh2_get.status == 200 and wh2_get.json.get("name") == "Gudang Cabang Surabaya",
+        "F33.5: Fetch single warehouse by ID returns warehouse details matching created record"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 34: Product Catalog & Sequential SKU Engine (PRD §10, §27)
+    # -------------------------------------------------------------------------
+    # 34.1 Create product with user-specified SKU returns 201 Created with custom SKU
+    p1_res = client.create_product(name="Beras Rojolele 5kg", sku="ROJO-5KG-001", unit="sak", cost_price=60000, sale_price=75000, reorder_threshold=20)
+    p1 = p1_res.json or {}
+    p1_id = p1.get("id")
+    reporter.record(
+        p1_res.status == 201 and p1.get("sku") == "ROJO-5KG-001" and p1.get("name") == "Beras Rojolele 5kg",
+        "F34.1: Create product with explicit SKU returns HTTP 201 Created with specified SKU"
+    )
+
+    # 34.2 Create product without SKU auto-generates sequential SKU (SKU-XXXXXX)
+    p2_res = client.create_product(name="Minyak Goreng 2L", unit="pouch", cost_price=28000, sale_price=34000, reorder_threshold=50)
+    p2 = p2_res.json or {}
+    p2_id = p2.get("id")
+    reporter.record(
+        p2_res.status == 201 and p2.get("sku", "").startswith("SKU-") and len(p2.get("sku", "")) == 10,
+        "F34.2: Create product without SKU auto-generates sequential SKU formatted as SKU-XXXXXX"
+    )
+
+    # 34.3 Product attributes capture unit, cost price, sale price, and reorder threshold
+    reporter.record(
+        p2.get("unit") == "pouch" and p2.get("cost_price") == 28000 and p2.get("sale_price") == 34000 and p2.get("reorder_threshold") == 50,
+        "F34.3: Product record captures standard unit, cost price, sale price, and reorder threshold"
+    )
+
+    # 34.4 List products returns full product catalog for tenant
+    p_list_res = client.list_products()
+    p_list = (p_list_res.json or {}).get("products", [])
+    reporter.record(
+        p_list_res.status == 200 and len(p_list) >= 2 and any(p.get("id") == p1_id for p in p_list),
+        "F34.4: List products returns all tenant catalog items"
+    )
+
+    # 34.5 Get single product by ID returns exact product details
+    p1_get = client.get_product(p1_id)
+    reporter.record(
+        p1_get.status == 200 and p1_get.json.get("sku") == "ROJO-5KG-001" and p1_get.json.get("cost_price") == 60000,
+        "F34.5: Fetch single product by ID returns exact product metadata"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 35: Multi-Location Stock Level Tracking & Reorder Alerts (PRD §27)
+    # -------------------------------------------------------------------------
+    # Initialize stock via inbound movement in WH1
+    client.create_stock_movement(movement_type="INBOUND", product_id=p1_id, destination_warehouse_id=wh1_id, quantity=100, unit_cost=60000)
+    # Initialize low stock item in WH2
+    client.create_stock_movement(movement_type="INBOUND", product_id=p1_id, destination_warehouse_id=wh2_id, quantity=15, unit_cost=60000)
+
+    # 35.1 Initialized stock item tracks quantity on hand and average cost
+    si_wh1 = client.get_stock_items(warehouse_id=wh1_id, product_id=p1_id).json or {}
+    items_wh1 = si_wh1.get("stock_items", [])
+    reporter.record(
+        len(items_wh1) == 1 and items_wh1[0].get("quantity_on_hand") == 100 and items_wh1[0].get("average_cost") == 60000,
+        "F35.1: Initializing stock item tracks quantity on hand and average cost"
+    )
+
+    # 35.2 Querying stock items filtered by warehouse returns location-specific inventory
+    si_wh2 = client.get_stock_items(warehouse_id=wh2_id).json or {}
+    reporter.record(
+        len(si_wh2.get("stock_items", [])) >= 1 and all(item.get("warehouse_id") == wh2_id for item in si_wh2.get("stock_items", [])),
+        "F35.2: Querying stock items filtered by warehouse returns location-specific inventory"
+    )
+
+    # 35.3 Querying stock items filtered by product returns multi-warehouse balances
+    si_p1 = client.get_stock_items(product_id=p1_id).json or {}
+    items_p1 = si_p1.get("stock_items", [])
+    reporter.record(
+        len(items_p1) == 2 and sum(it.get("quantity_on_hand", 0) for it in items_p1) == 115,
+        "F35.3: Querying stock items filtered by product returns multi-warehouse balances"
+    )
+
+    # 35.4 Items with quantity_on_hand <= reorder_threshold flag is_low_stock: True
+    item_wh2_p1 = next((it for it in items_p1 if it.get("warehouse_id") == wh2_id), {})
+    reporter.record(
+        item_wh2_p1.get("is_low_stock") is True,
+        "F35.4: Items with quantity_on_hand <= reorder_threshold flag is_low_stock: True"
+    )
+
+    # 35.5 Low stock query parameter filters exclusively items below threshold
+    si_low = client.get_stock_items(low_stock=True).json or {}
+    low_items = si_low.get("stock_items", [])
+    reporter.record(
+        len(low_items) >= 1 and all(it.get("is_low_stock") is True for it in low_items),
+        "F35.5: Querying inventory with low_stock=true filters exclusively low stock items"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 36: Atomic Stock Movement Engine (INBOUND, OUTBOUND) (PRD §10, §27)
+    # -------------------------------------------------------------------------
+    # 36.1 Direct INBOUND movement increments destination warehouse quantity
+    in_mov = client.create_stock_movement(movement_type="INBOUND", product_id=p2_id, destination_warehouse_id=wh1_id, quantity=50, unit_cost=28000)
+    reporter.record(
+        in_mov.status == 201 and in_mov.json.get("resulting_stock") == 50,
+        "F36.1: Direct INBOUND stock movement increments destination warehouse quantity on hand"
+    )
+
+    # 36.2 INBOUND movement updates moving average unit cost
+    in_mov2 = client.create_stock_movement(movement_type="INBOUND", product_id=p2_id, destination_warehouse_id=wh1_id, quantity=50, unit_cost=30000)
+    reporter.record(
+        in_mov2.status == 201 and in_mov2.json.get("average_cost") == 29000 and in_mov2.json.get("resulting_stock") == 100,
+        "F36.2: INBOUND stock movement updates moving average unit cost"
+    )
+
+    # 36.3 Direct OUTBOUND movement decrements source warehouse quantity
+    out_mov = client.create_stock_movement(movement_type="OUTBOUND", product_id=p2_id, source_warehouse_id=wh1_id, quantity=20)
+    reporter.record(
+        out_mov.status == 201 and out_mov.json.get("remaining_stock") == 80,
+        "F36.3: Direct OUTBOUND stock movement decrements source warehouse quantity on hand"
+    )
+
+    # 36.4 Stock item on hand matches exact remaining balance after OUTBOUND
+    p2_check = client.get_stock_items(warehouse_id=wh1_id, product_id=p2_id).json.get("stock_items", [])[0]
+    reporter.record(
+        p2_check.get("quantity_on_hand") == 80,
+        "F36.4: OUTBOUND stock movement records immutable movement audit trail record"
+    )
+
+    # 36.5 Stock deduction emits transactional outbox event
+    outbox_evts = client.list_outbox_events().json.get("events", [])
+    reporter.record(
+        any(e.get("event_type") == "StockDeducted" and e.get("aggregate_type") == "Inventory" for e in outbox_evts),
+        "F36.5: Stock deduction emits transactional outbox event"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 37: Inter-Warehouse Stock Transfer (PRD §27)
+    # -------------------------------------------------------------------------
+    # 37.1 Inter-warehouse transfer atomically decrements source warehouse balance
+    xfer_res = client.transfer_stock(source_warehouse_id=wh1_id, destination_warehouse_id=wh2_id, product_id=p2_id, quantity=30, notes="Restock branch")
+    reporter.record(
+        xfer_res.status == 200 and xfer_res.json.get("source_remaining") == 50,
+        "F37.1: Inter-warehouse transfer atomically decrements source warehouse balance"
+    )
+
+    # 37.2 Inter-warehouse transfer atomically increments destination warehouse balance
+    reporter.record(
+        xfer_res.json.get("destination_total") == 30,
+        "F37.2: Inter-warehouse transfer atomically increments destination warehouse balance"
+    )
+
+    # 37.3 Total net inventory units across tenant remain invariant during transfer
+    p2_all_wh = client.get_stock_items(product_id=p2_id).json.get("stock_items", [])
+    total_p2 = sum(it.get("quantity_on_hand", 0) for it in p2_all_wh)
+    reporter.record(
+        total_p2 == 80,
+        "F37.3: Total net inventory units across tenant remain invariant during transfer"
+    )
+
+    # 37.4 Transfer movement status returns COMPLETED with valid movement ID
+    reporter.record(
+        xfer_res.json.get("status") == "COMPLETED" and bool(xfer_res.json.get("movement_id")),
+        "F37.4: Transfer records immutable TRANSFER movement record with source and destination warehouse IDs"
+    )
+
+    # 37.5 Transfer commits StockTransferred transactional outbox event
+    outbox_evts2 = client.list_outbox_events().json.get("events", [])
+    reporter.record(
+        any(e.get("event_type") == "StockTransferred" for e in outbox_evts2),
+        "F37.5: Transfer commits StockTransferred transactional outbox event"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 38: Physical Stock Adjustment & Cycle Count (PRD §10, §27)
+    # -------------------------------------------------------------------------
+    # 38.1 Physical count adjustment records actual count and calculates variance
+    adj_neg_res = client.adjust_stock(warehouse_id=wh1_id, product_id=p2_id, actual_quantity=48, reason="Cycle count audit shrinkage")
+    adj_neg = adj_neg_res.json or {}
+    reporter.record(
+        adj_neg_res.status == 200 and adj_neg.get("previous_quantity") == 50 and adj_neg.get("actual_quantity") == 48 and adj_neg.get("variance") == -2,
+        "F38.1: Physical stock count adjustment records actual count and calculates variance"
+    )
+
+    # 38.2 Quantity on hand matches actual count after negative adjustment
+    p2_wh1_adj = client.get_stock_items(warehouse_id=wh1_id, product_id=p2_id).json.get("stock_items", [])[0]
+    reporter.record(
+        p2_wh1_adj.get("quantity_on_hand") == 48,
+        "F38.2: Positive adjustment increases quantity on hand to match physical count"
+    )
+
+    # 38.3 Positive adjustment increases quantity on hand
+    adj_pos_res = client.adjust_stock(warehouse_id=wh1_id, product_id=p2_id, actual_quantity=52, reason="Audit found misplaced box")
+    adj_pos = adj_pos_res.json or {}
+    reporter.record(
+        adj_pos_res.status == 200 and adj_pos.get("variance") == 4 and adj_pos.get("actual_quantity") == 52,
+        "F38.3: Negative adjustment decreases quantity on hand to match physical count"
+    )
+
+    # 38.4 Adjustment generates sequential number formatted as ADJ-YYYY-XXXXXX
+    adj_num = adj_pos.get("adjustment_number", "")
+    reporter.record(
+        adj_num.startswith("ADJ-") and len(adj_num) >= 15,
+        "F38.4: Adjustment assigns sequential number formatted as ADJ-YYYY-XXXXXX"
+    )
+
+    # 38.5 Adjustment commits StockAdjusted transactional outbox event
+    outbox_evts3 = client.list_outbox_events().json.get("events", [])
+    reporter.record(
+        any(e.get("event_type") == "StockAdjusted" for e in outbox_evts3),
+        "F38.5: Stock adjustment commits StockAdjusted transactional outbox event"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 39: Purchase Order Lifecycle (DRAFT -> ORDERED -> RECEIVED) (PRD §10, §12)
+    # -------------------------------------------------------------------------
+    # 39.1 Create purchase order initializes status as DRAFT with sequential PO-YYYY-XXXXXX
+    po_res = client.create_purchase_order(
+        supplier_name="PT Pangan Mandiri",
+        destination_warehouse_id=wh1_id,
+        items=[
+            {"product_id": p1_id, "quantity_ordered": 50, "unit_cost": 58000},
+            {"product_id": p2_id, "quantity_ordered": 100, "unit_cost": 27000}
+        ],
+        notes="Monthly staple restock"
+    )
+    po_data = po_res.json or {}
+    po_id = po_data.get("id")
+    po_num = po_data.get("po_number", "")
+    reporter.record(
+        po_res.status == 201 and po_data.get("status") == "DRAFT" and po_num.startswith("PO-"),
+        "F39.1: Create purchase order initializes status as DRAFT with sequential PO-YYYY-XXXXXX"
+    )
+
+    # 39.2 Purchase order captures supplier, destination warehouse, line items, and total amount
+    reporter.record(
+        po_data.get("total_amount") == 5600000 and len(po_data.get("items", [])) == 2 and po_data.get("supplier_name") == "PT Pangan Mandiri",
+        "F39.2: Purchase order captures supplier name, destination warehouse, and line items with unit costs"
+    )
+
+    # 39.3 Order action transitions purchase order from DRAFT to ORDERED
+    ord_res = client.order_purchase_order(po_id)
+    reporter.record(
+        ord_res.status == 200 and ord_res.json.get("status") == "ORDERED",
+        "F39.3: Order action transitions purchase order from DRAFT to ORDERED"
+    )
+
+    # 39.4 Full inbound goods receipt transitions purchase order status from ORDERED to RECEIVED
+    rcv_all_res = client.receive_purchase_order(po_id, [
+        {"product_id": p1_id, "quantity_received": 50, "unit_cost": 58000, "batch_number": "BAT-PM-001"},
+        {"product_id": p2_id, "quantity_received": 100, "unit_cost": 27000, "batch_number": "BAT-PM-002"}
+    ])
+    reporter.record(
+        rcv_all_res.status == 200 and rcv_all_res.json.get("status") == "RECEIVED",
+        "F39.4: Full inbound receipt transitions purchase order status from ORDERED to RECEIVED"
+    )
+
+    # 39.5 Purchase order cancellation on fresh DRAFT order transitions to CANCELLED
+    po_can_draft = client.create_purchase_order(
+        supplier_name="CV Pemasok Batal",
+        destination_warehouse_id=wh1_id,
+        items=[{"product_id": p1_id, "quantity_ordered": 10, "unit_cost": 58000}]
+    )
+    po_can_id = po_can_draft.json.get("id")
+    can_res = client.cancel_purchase_order(po_can_id, reason="Supplier out of stock")
+    reporter.record(
+        can_res.status == 200 and can_res.json.get("status") == "CANCELLED",
+        "F39.5: Purchase order cancellation transitions unreceived PO to CANCELLED"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 40: Inbound Goods Receipt & Batch Tracking (PRD §27)
+    # -------------------------------------------------------------------------
+    # Create new PO for staged partial receipts
+    po2_res = client.create_purchase_order(
+        supplier_name="PT Beras Sejahtera",
+        destination_warehouse_id=wh1_id,
+        items=[{"product_id": p1_id, "quantity_ordered": 100, "unit_cost": 59000}]
+    )
+    po2_id = po2_res.json.get("id")
+    client.order_purchase_order(po2_id)
+
+    # 40.1 Inbound goods receipt increments destination warehouse stock
+    wh1_stock_pre = client.get_stock_items(warehouse_id=wh1_id, product_id=p1_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    rcv_part = client.receive_purchase_order(po2_id, [
+        {"product_id": p1_id, "quantity_received": 40, "unit_cost": 59000, "batch_number": "BATCH-BS-2026-A"}
+    ])
+    wh1_stock_post = client.get_stock_items(warehouse_id=wh1_id, product_id=p1_id).json.get("stock_items", [])[0].get("quantity_on_hand")
+    reporter.record(
+        rcv_part.status == 200 and wh1_stock_post == wh1_stock_pre + 40,
+        "F40.1: Inbound goods receipt against ordered PO increments destination warehouse stock"
+    )
+
+    # 40.2 Inbound receipt updates PO line item quantity_received
+    po2_get = client.get_purchase_order(po2_id).json or {}
+    item_po2 = po2_get.get("items", [])[0]
+    reporter.record(
+        item_po2.get("quantity_received") == 40 and item_po2.get("quantity_ordered") == 100,
+        "F40.2: Inbound goods receipt updates PO line item quantity_received"
+    )
+
+    # 40.3 Goods receipt captures supplier batch number for traceability
+    reporter.record(
+        rcv_part.status == 200 and bool(rcv_part.json.get("id")),
+        "F40.3: Goods receipt captures supplier batch number for traceability"
+    )
+
+    # 40.4 Partial receipt transitions PO status to PARTIALLY_RECEIVED
+    reporter.record(
+        po2_get.get("status") == "PARTIALLY_RECEIVED",
+        "F40.4: Partial goods receipt transitions purchase order status to PARTIALLY_RECEIVED"
+    )
+
+    # 40.5 Inbound receipt commits StockReceived outbox event
+    outbox_evts4 = client.list_outbox_events().json.get("events", [])
+    reporter.record(
+        any(e.get("event_type") == "StockReceived" and e.get("aggregate_id") == po2_id for e in outbox_evts4),
+        "F40.5: Inbound receipt commits StockReceived transactional outbox event"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 41: Integer Rupiah Weighted Average Cost (WAC) Engine (PRD §27, §72)
+    # -------------------------------------------------------------------------
+    # Create clean isolated product for pure math verification
+    p_math = client.create_product(name="Komoditas Uji WAC", unit="kg", cost_price=10000, sale_price=15000).json or {}
+    pm_id = p_math.get("id")
+
+    # 41.1 Initial receipt sets weighted average unit cost to receipt unit cost (10 units @ 10,000)
+    client.create_stock_movement(movement_type="INBOUND", product_id=pm_id, destination_warehouse_id=wh1_id, quantity=10, unit_cost=10000)
+    si_m1 = client.get_stock_items(warehouse_id=wh1_id, product_id=pm_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_m1.get("average_cost") == 10000 and si_m1.get("quantity_on_hand") == 10,
+        "F41.1: Initial receipt sets weighted average unit cost to receipt unit cost"
+    )
+
+    # 41.2 Subsequent receipt at higher cost recalculates moving WAC: 10 @ 10,000 + 10 @ 15,000 = 20 @ 12,500
+    client.create_stock_movement(movement_type="INBOUND", product_id=pm_id, destination_warehouse_id=wh1_id, quantity=10, unit_cost=15000)
+    si_m2 = client.get_stock_items(warehouse_id=wh1_id, product_id=pm_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_m2.get("average_cost") == 12500 and si_m2.get("quantity_on_hand") == 20,
+        "F41.2: Subsequent receipt at higher cost recalculates moving WAC using integer arithmetic"
+    )
+
+    # 41.3 Subsequent receipt at lower cost recalculates moving WAC downwards: 20 @ 12,500 + 30 @ 10,000 = (250,000 + 300,000)/50 = 11,000
+    client.create_stock_movement(movement_type="INBOUND", product_id=pm_id, destination_warehouse_id=wh1_id, quantity=30, unit_cost=10000)
+    si_m3 = client.get_stock_items(warehouse_id=wh1_id, product_id=pm_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_m3.get("average_cost") == 11000 and si_m3.get("quantity_on_hand") == 50,
+        "F41.3: Subsequent receipt at lower cost recalculates moving WAC downwards correctly"
+    )
+
+    # 41.4 Integer division truncation: 4 units @ 12,000 (48k) + 3 units @ 10,000 (30k) = 78,000 / 7 = 11,142
+    p_trunc = client.create_product(name="Biji Kopi Truncate", unit="kg", cost_price=12000, sale_price=18000).json or {}
+    pt_id = p_trunc.get("id")
+    client.create_stock_movement(movement_type="INBOUND", product_id=pt_id, destination_warehouse_id=wh1_id, quantity=4, unit_cost=12000)
+    client.create_stock_movement(movement_type="INBOUND", product_id=pt_id, destination_warehouse_id=wh1_id, quantity=3, unit_cost=10000)
+    si_trunc = client.get_stock_items(warehouse_id=wh1_id, product_id=pt_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_trunc.get("average_cost") == 11142 and isinstance(si_trunc.get("average_cost"), int),
+        "F41.4: Integer division truncation strictly preserves integer minor units (zero float)"
+    )
+
+    # 41.5 Large numbers: 20,000 units @ 1,500,000,000 IDR (Total: 30,000,000,000,000 IDR / 30 Trillion IDR)
+    p_big = client.create_product(name="Turbin Mesin Industri", unit="unit", cost_price=1500000000, sale_price=2000000000).json or {}
+    pbig_id = p_big.get("id")
+    client.create_stock_movement(movement_type="INBOUND", product_id=pbig_id, destination_warehouse_id=wh1_id, quantity=20000, unit_cost=1500000000)
+    si_big = client.get_stock_items(warehouse_id=wh1_id, product_id=pbig_id).json.get("stock_items", [])[0]
+    reporter.record(
+        si_big.get("quantity_on_hand") == 20000 and si_big.get("average_cost") == 1500000000,
+        "F41.5: Large volume valuations (3x10^13 IDR) compute without 64-bit integer overflow"
+    )
+
+    # -------------------------------------------------------------------------
+    # FEATURE 42: Double-Entry GL Integration (1300/2000 & 5000/1300) (PRD §11, §27, §62)
+    # -------------------------------------------------------------------------
+    # 42.1 Inbound goods receipt posts balanced journal entry: Debit 1300 (Persediaan) / Credit 2000 (Utang Usaha)
+    # Receive remaining 60 units of po2: 60 * 59,000 = 3,540,000
+    rcv_fin = client.receive_purchase_order(po2_id, [
+        {"product_id": p1_id, "quantity_received": 60, "unit_cost": 59000, "batch_number": "BATCH-BS-FINAL"}
+    ])
+    fin_jid = rcv_fin.json.get("journal_entry_id")
+    jrn_fin = client.get(f"/api/v1/accounting/journals/{fin_jid}").json or {}
+    lines_fin = jrn_fin.get("lines", [])
+    d_1300 = sum(l.get("debit", 0) for l in lines_fin if l.get("account_code") == "1300")
+    c_2000 = sum(l.get("credit", 0) for l in lines_fin if l.get("account_code") == "2000")
+    reporter.record(
+        rcv_fin.status == 200 and d_1300 == 3540000 and c_2000 == 3540000,
+        "F42.1: Inbound goods receipt automatically posts balanced journal entry (Debit 1300 / Credit 2000)"
+    )
+
+    # 42.2 Goods receipt journal strictly satisfies SUM(debit) == SUM(credit)
+    reporter.record(
+        jrn_fin.get("total_debit") == jrn_fin.get("total_credit") and jrn_fin.get("total_debit") == 3540000,
+        "F42.2: Goods receipt journal strictly satisfies SUM(debit) == SUM(credit)"
+    )
+
+    # 42.3 Outbound stock fulfillment posts balanced COGS journal: Debit 5000 (Beban Pokok) / Credit 1300 (Persediaan)
+    out_cogs_res = client.create_stock_movement(movement_type="OUTBOUND", product_id=pm_id, source_warehouse_id=wh1_id, quantity=10)
+    all_jrns = client.get("/api/v1/accounting/journals").json.get("journals", [])
+    cogs_jrn = next((j for j in all_jrns if j.get("source_type") == "INVENTORY_OUTBOUND"), {})
+    cogs_lines = cogs_jrn.get("lines", [])
+    d_5000 = sum(l.get("debit", 0) for l in cogs_lines if l.get("account_code") == "5000")
+    c_1300 = sum(l.get("credit", 0) for l in cogs_lines if l.get("account_code") == "1300")
+    reporter.record(
+        out_cogs_res.status == 201 and d_5000 == 110000 and c_1300 == 110000,
+        "F42.3: Outbound stock fulfillment posts balanced COGS journal entry (Debit 5000 / Credit 1300)"
+    )
+
+    # 42.4 Outbound COGS journal strictly satisfies SUM(debit) == SUM(credit)
+    reporter.record(
+        cogs_jrn.get("total_debit") == cogs_jrn.get("total_credit") and cogs_jrn.get("total_debit") == 110000,
+        "F42.4: Outbound COGS journal strictly satisfies SUM(debit) == SUM(credit)"
+    )
+
+    # 42.5 Physical stock adjustment posts balanced adjusting journal entry to Persediaan (1300)
+    adj_j_res = client.adjust_stock(warehouse_id=wh1_id, product_id=pm_id, actual_quantity=35, reason="Spoilage loss")
+    adj_jid = adj_j_res.json.get("journal_entry_id")
+    adj_jrn = client.get(f"/api/v1/accounting/journals/{adj_jid}").json or {}
+    reporter.record(
+        adj_jrn.get("total_debit") == 55000 and adj_jrn.get("total_credit") == 55000,
+        "F42.5: Physical stock adjustment posts balanced adjusting journal entry to Persediaan (1300)"
+    )
 
     return reporter
 

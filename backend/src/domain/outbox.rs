@@ -268,7 +268,41 @@ impl OutboxEventDraft {
             }),
         )
     }
+
+    pub fn stock_received(
+        tenant_id: Uuid,
+        aggregate_type: impl Into<String>,
+        aggregate_id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self::new(tenant_id, "StockReceived", aggregate_type, aggregate_id, payload)
+    }
+
+    pub fn stock_deducted(
+        tenant_id: Uuid,
+        aggregate_id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self::new(tenant_id, "StockDeducted", "Inventory", aggregate_id, payload)
+    }
+
+    pub fn stock_adjusted(
+        tenant_id: Uuid,
+        aggregate_id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self::new(tenant_id, "StockAdjusted", "Inventory", aggregate_id, payload)
+    }
+
+    pub fn stock_transferred(
+        tenant_id: Uuid,
+        aggregate_id: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self::new(tenant_id, "StockTransferred", "Inventory", aggregate_id, payload)
+    }
 }
+
 
 /// Helper function to format DateTime<Utc> into RFC3339 with 'Z' suffix
 pub fn format_utc_iso_z(dt: DateTime<Utc>) -> String {

@@ -239,7 +239,9 @@ import {
   ChevronsUpDown,
   Check,
   FileText,
-  BookOpen
+  BookOpen,
+  Package,
+  ShoppingCart
 } from 'lucide-vue-next'
 
 defineProps({
@@ -295,6 +297,12 @@ const navItems = computed(() => {
   ]
 
   // Capability modules for business workspaces
+  if (workspaceStore.hasCapability('inventory')) {
+    items.push({ id: 'inventory', label: 'Inventaris & Stok', icon: markRaw(Package) })
+  }
+  if (workspaceStore.hasCapability('purchasing')) {
+    items.push({ id: 'purchasing', label: 'Pesanan Pembelian', icon: markRaw(ShoppingCart) })
+  }
   if (workspaceStore.hasCapability('invoicing')) {
     items.push({ id: 'invoices', label: 'Faktur & Tagihan', icon: markRaw(FileText) })
   }

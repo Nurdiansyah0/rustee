@@ -3,6 +3,7 @@ pub mod auth_service;
 pub mod crypto;
 pub mod email_service;
 pub mod ingestion_service;
+pub mod inventory_service;
 pub mod invoice_service;
 pub mod jwt;
 pub mod ledger_service;
@@ -12,6 +13,7 @@ pub mod tenant_service;
 
 pub use accounting_service::*;
 pub use email_service::*;
+pub use inventory_service::*;
 pub use invoice_service::*;
 pub use outbox_processor::*;
 

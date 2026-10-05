@@ -25,11 +25,11 @@ Usage:
   bash e2e_tests/runner.sh [TIER] [BASE_URL]
 
 Tiers:
-  all     Run all 4 test tiers (625 assertions total) [Default]
-  tier1   Tier 1: Feature Coverage (275 tests across 55 features)
-  tier2   Tier 2: Boundary & Corner Cases (275 tests across 55 features)
-  tier3   Tier 3: Cross-Feature Integration (55 pairwise tests)
-  tier4   Tier 4: Real-World End-to-End Scenarios (20 comprehensive workflows)
+  all     Run all 4 test tiers (489 assertions total across 42 features) [Default]
+  tier1   Tier 1: Feature Coverage (210 tests across 42 features)
+  tier2   Tier 2: Boundary & Corner Cases (210 tests across 42 features)
+  tier3   Tier 3: Cross-Feature Integration (45 pairwise tests)
+  tier4   Tier 4: Real-World End-to-End Scenarios (24 comprehensive workflows)
 
 Options:
   BASE_URL   Base URL of running service (e.g. http://127.0.0.1:8080).
@@ -108,22 +108,22 @@ run_tier() {
 
 case "${TARGET}" in
     all)
-        run_tier "Tier 1: Feature Coverage (275 tests)" "tier1_feature_coverage.sh"
-        run_tier "Tier 2: Boundary & Corner Cases (275 tests)" "tier2_boundary_corner.sh"
-        run_tier "Tier 3: Cross-Feature Integration (55 tests)" "tier3_cross_feature.sh"
-        run_tier "Tier 4: Real-World Scenarios (20 scenarios)" "tier4_real_world.sh"
+        run_tier "Tier 1: Feature Coverage (210 tests)" "tier1_feature_coverage.sh"
+        run_tier "Tier 2: Boundary & Corner Cases (210 tests)" "tier2_boundary_corner.sh"
+        run_tier "Tier 3: Cross-Feature Integration (45 tests)" "tier3_cross_feature.sh"
+        run_tier "Tier 4: Real-World Scenarios (24 scenarios)" "tier4_real_world.sh"
         ;;
     tier1)
-        run_tier "Tier 1: Feature Coverage (275 tests)" "tier1_feature_coverage.sh"
+        run_tier "Tier 1: Feature Coverage (210 tests)" "tier1_feature_coverage.sh"
         ;;
     tier2)
-        run_tier "Tier 2: Boundary & Corner Cases (275 tests)" "tier2_boundary_corner.sh"
+        run_tier "Tier 2: Boundary & Corner Cases (210 tests)" "tier2_boundary_corner.sh"
         ;;
     tier3)
-        run_tier "Tier 3: Cross-Feature Integration (55 tests)" "tier3_cross_feature.sh"
+        run_tier "Tier 3: Cross-Feature Integration (45 tests)" "tier3_cross_feature.sh"
         ;;
     tier4)
-        run_tier "Tier 4: Real-World Scenarios (20 scenarios)" "tier4_real_world.sh"
+        run_tier "Tier 4: Real-World Scenarios (24 scenarios)" "tier4_real_world.sh"
         ;;
     *)
         echo "Unknown target: ${TARGET}. Valid targets: all, tier1, tier2, tier3, tier4" >&2

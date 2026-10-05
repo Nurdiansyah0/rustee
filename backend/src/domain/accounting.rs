@@ -54,19 +54,20 @@ pub struct Account {
 }
 
 impl Account {
-    pub const SYSTEM_CODES: [&'static str; 8] = [
-        "1000", "1100", "1200", "2000", "2100", "4000", "5000", "6000",
+    pub const SYSTEM_CODES: [&'static str; 9] = [
+        "1000", "1100", "1200", "1300", "2000", "2100", "4000", "5000", "6000",
     ];
 
     pub fn is_system_code(code: &str) -> bool {
         Self::SYSTEM_CODES.contains(&code.trim())
     }
 
-    pub fn canonical_system_accounts() -> [(&'static str, &'static str, AccountType); 8] {
+    pub fn canonical_system_accounts() -> [(&'static str, &'static str, AccountType); 9] {
         [
             ("1000", "Kas", AccountType::Asset),
             ("1100", "Bank", AccountType::Asset),
             ("1200", "Piutang Usaha", AccountType::Asset),
+            ("1300", "Persediaan Barang Dagang", AccountType::Asset),
             ("2000", "Utang Usaha", AccountType::Liability),
             ("2100", "Utang Pajak (PPN/PPh)", AccountType::Liability),
             ("4000", "Pendapatan Usaha", AccountType::Income),
@@ -97,13 +98,21 @@ impl JournalStatus {
 
 /// Journal entry source type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum JournalSourceType {
     Manual,
     Invoice,
     Payment,
     Reversal,
     System,
+    #[serde(rename = "PURCHASE_ORDER_RECEIPT")]
+    PurchaseOrderReceipt,
+    #[serde(rename = "INVENTORY_INBOUND")]
+    InventoryInbound,
+    #[serde(rename = "INVENTORY_OUTBOUND")]
+    InventoryOutbound,
+    #[serde(rename = "STOCK_ADJUSTMENT")]
+    StockAdjustment,
 }
 
 impl JournalSourceType {
@@ -114,9 +123,14 @@ impl JournalSourceType {
             JournalSourceType::Payment => "PAYMENT",
             JournalSourceType::Reversal => "REVERSAL",
             JournalSourceType::System => "SYSTEM",
+            JournalSourceType::PurchaseOrderReceipt => "PURCHASE_ORDER_RECEIPT",
+            JournalSourceType::InventoryInbound => "INVENTORY_INBOUND",
+            JournalSourceType::InventoryOutbound => "INVENTORY_OUTBOUND",
+            JournalSourceType::StockAdjustment => "STOCK_ADJUSTMENT",
         }
     }
 }
+
 
 /// Single journal line item
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

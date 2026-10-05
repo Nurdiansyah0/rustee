@@ -2,14 +2,40 @@ use crate::api::handlers::ingestion::ingestion_router;
 use crate::api::AppState;
 use axum::Router;
 
-/// Registers ingestion pipeline routes under `/ingestion`.
-/// Baseline endpoints per Master Specification v3.1.0:
-/// - POST /ingestion/notification: Ingest notification payload with Idempotency-Key
-/// - POST /ingestion/sms: Ingest SMS payload with Idempotency-Key
-/// - POST /ingestion/gmail: Ingest Gmail payload with Idempotency-Key
-/// - GET /ingestion/candidates: Returns pending candidates requiring confirmation
-/// - POST /ingestion/candidates/:id/confirm: User confirms candidate, atomically committing to ledger
-/// - POST /ingestion/candidates/:id/reject: Rejects candidate
+#[path = "warehouses.rs"]
+pub mod warehouses;
+
+#[path = "products.rs"]
+pub mod products;
+
+#[path = "inventory.rs"]
+pub mod inventory;
+
+#[path = "purchase_orders.rs"]
+pub mod purchase_orders;
+
+pub use inventory::inventory_router;
+pub use products::products_router;
+pub use purchase_orders::purchase_orders_router;
+pub use warehouses::warehouses_router;
+
+/// Registers ingestion pipeline routes under `/ingestion` and inventory routes under
+/// `/warehouses`, `/products`, `/inventory`, and `/purchase-orders`.
 pub fn register_ingestion_routes(router: Router<AppState>) -> Router<AppState> {
-    router.nest("/ingestion", ingestion_router())
+    router
+        .nest("/ingestion", ingestion_router())
+        .nest("/warehouses", warehouses_router())
+        .nest("/products", products_router())
+        .nest("/inventory", inventory_router())
+        .nest("/purchase-orders", purchase_orders_router())
 }
+
+/// Registers inventory routes under `/warehouses`, `/products`, `/inventory`, and `/purchase-orders`.
+pub fn register_inventory_routes(router: Router<AppState>) -> Router<AppState> {
+    router
+        .nest("/warehouses", warehouses_router())
+        .nest("/products", products_router())
+        .nest("/inventory", inventory_router())
+        .nest("/purchase-orders", purchase_orders_router())
+}
+

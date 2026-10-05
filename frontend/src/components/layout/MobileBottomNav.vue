@@ -78,7 +78,9 @@ import {
   PieChart,
   User,
   FileText,
-  BookOpen
+  BookOpen,
+  Package,
+  ShoppingCart
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -92,10 +94,22 @@ defineEmits(['select-tab', 'open-add'])
 
 const workspaceStore = useWorkspaceStore()
 
-// Slot 4 dynamically adapts: Invoicing/Faktur for business, Analitik for personal
+// Slot 4 dynamically adapts: Stok/Beli for inventory/purchasing, Invoicing/Faktur for business, Analitik for personal
 const slot4Tab = computed(() => {
   if (props.activeTab === 'analytics') {
     return { id: 'analytics', label: 'Analitik', icon: PieChart }
+  }
+  if (props.activeTab === 'purchasing') {
+    return { id: 'purchasing', label: 'Beli', icon: ShoppingCart }
+  }
+  if (props.activeTab === 'inventory') {
+    return { id: 'inventory', label: 'Stok', icon: Package }
+  }
+  if (workspaceStore.hasCapability('inventory')) {
+    return { id: 'inventory', label: 'Stok', icon: Package }
+  }
+  if (workspaceStore.hasCapability('purchasing')) {
+    return { id: 'purchasing', label: 'Beli', icon: ShoppingCart }
   }
   if (workspaceStore.hasCapability('invoicing')) {
     return { id: 'invoices', label: 'Faktur', icon: FileText }

@@ -25,7 +25,7 @@ CREATE TABLE journal_entries (
     entry_number TEXT NOT NULL,
     entry_date TEXT NOT NULL,
     description TEXT NOT NULL,
-    source_type TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source_type IN ('MANUAL', 'INVOICE', 'PAYMENT', 'REVERSAL', 'SYSTEM')),
+    source_type TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source_type IN ('MANUAL', 'INVOICE', 'PAYMENT', 'REVERSAL', 'SYSTEM', 'PURCHASE_ORDER_RECEIPT', 'INVENTORY_INBOUND', 'INVENTORY_OUTBOUND', 'STOCK_ADJUSTMENT')),
     source_id TEXT,
     status TEXT NOT NULL DEFAULT 'POSTED' CHECK (status IN ('DRAFT', 'POSTED', 'ARCHIVED')),
     is_reversed INTEGER NOT NULL DEFAULT 0 CHECK (is_reversed IN (0, 1)),

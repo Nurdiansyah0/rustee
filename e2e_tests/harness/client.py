@@ -511,6 +511,149 @@ class ApiClient:
         return self.post("/api/v1/outbox/process", {"simulate_sidecar_failure": simulate_sidecar_failure})
 
     # =========================================================================
+    # v4.1 Phase 2: Inventory & Multi-Location Stock Management Helpers
+    # =========================================================================
+    def create_warehouse(self, code: str, name: str, address: Optional[str] = None, is_default: bool = False) -> ApiResponse:
+        payload = {
+            "code": code,
+            "name": name,
+            "is_default": is_default
+        }
+        if address is not None:
+            payload["address"] = address
+        return self.post("/api/v1/warehouses", payload)
+
+    def list_warehouses(self) -> ApiResponse:
+        return self.get("/api/v1/warehouses")
+
+    def get_warehouse(self, warehouse_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/warehouses/{warehouse_id}")
+
+    def create_product(self, name: str, sku: Optional[str] = None, unit: str = "pcs",
+                       cost_price: int = 0, sale_price: int = 0, reorder_threshold: int = 0) -> ApiResponse:
+        payload: Dict[str, Any] = {
+            "name": name,
+            "unit": unit,
+            "cost_price": cost_price,
+            "sale_price": sale_price,
+            "reorder_threshold": reorder_threshold
+        }
+        if sku is not None:
+            payload["sku"] = sku
+        return self.post("/api/v1/products", payload)
+
+    def list_products(self) -> ApiResponse:
+        return self.get("/api/v1/products")
+
+    def get_product(self, product_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/products/{product_id}")
+
+    def get_stock_items(self, warehouse_id: Optional[str] = None, product_id: Optional[str] = None,
+                        low_stock: Optional[bool] = None) -> ApiResponse:
+        params = []
+        if warehouse_id:
+            params.append(f"warehouse_id={urllib.parse.quote(warehouse_id)}")
+        if product_id:
+            params.append(f"product_id={urllib.parse.quote(product_id)}")
+        if low_stock is not None:
+            params.append(f"low_stock={'true' if low_stock else 'false'}")
+        query = f"?{'&'.join(params)}" if params else ""
+        return self.get(f"/api/v1/inventory{query}")
+
+    def create_stock_movement(self, movement_type: str, product_id: str, quantity: int,
+                              source_warehouse_id: Optional[str] = None,
+                              destination_warehouse_id: Optional[str] = None,
+                              unit_cost: Optional[int] = None,
+                              notes: Optional[str] = None,
+                              idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload: Dict[str, Any] = {
+            "movement_type": movement_type,
+            "product_id": product_id,
+            "quantity": quantity
+        }
+        if source_warehouse_id is not None:
+            payload["source_warehouse_id"] = source_warehouse_id
+        if destination_warehouse_id is not None:
+            payload["destination_warehouse_id"] = destination_warehouse_id
+        if unit_cost is not None:
+            payload["unit_cost"] = unit_cost
+        if notes is not None:
+            payload["notes"] = notes
+        return self.post("/api/v1/inventory/movements", payload, headers=headers)
+
+    def adjust_stock(self, warehouse_id: str, product_id: str, actual_quantity: int,
+                     reason: Optional[str] = None, idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload: Dict[str, Any] = {
+            "warehouse_id": warehouse_id,
+            "product_id": product_id,
+            "actual_quantity": actual_quantity
+        }
+        if reason is not None:
+            payload["reason"] = reason
+        return self.post("/api/v1/inventory/adjust", payload, headers=headers)
+
+    def transfer_stock(self, source_warehouse_id: str, destination_warehouse_id: str,
+                       product_id: str, quantity: int, notes: Optional[str] = None,
+                       idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload: Dict[str, Any] = {
+            "source_warehouse_id": source_warehouse_id,
+            "destination_warehouse_id": destination_warehouse_id,
+            "product_id": product_id,
+            "quantity": quantity
+        }
+        if notes is not None:
+            payload["notes"] = notes
+        return self.post("/api/v1/inventory/transfer", payload, headers=headers)
+
+    def create_purchase_order(self, supplier_name: str, destination_warehouse_id: str,
+                              items: List[Dict[str, Any]], notes: Optional[str] = None,
+                              idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload: Dict[str, Any] = {
+            "supplier_name": supplier_name,
+            "destination_warehouse_id": destination_warehouse_id,
+            "items": items
+        }
+        if notes is not None:
+            payload["notes"] = notes
+        return self.post("/api/v1/purchase-orders", payload, headers=headers)
+
+    def list_purchase_orders(self) -> ApiResponse:
+        return self.get("/api/v1/purchase-orders")
+
+    def get_purchase_order(self, po_id: str) -> ApiResponse:
+        return self.get(f"/api/v1/purchase-orders/{po_id}")
+
+    def order_purchase_order(self, po_id: str) -> ApiResponse:
+        return self.post(f"/api/v1/purchase-orders/{po_id}/order", {})
+
+    def receive_purchase_order(self, po_id: str, items: List[Dict[str, Any]],
+                               idempotency_key: Optional[str] = None) -> ApiResponse:
+        headers = {}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        payload = {"items": items}
+        return self.post(f"/api/v1/purchase-orders/{po_id}/receive", payload, headers=headers)
+
+    def cancel_purchase_order(self, po_id: str, reason: Optional[str] = None) -> ApiResponse:
+        payload = {}
+        if reason is not None:
+            payload["reason"] = reason
+        return self.post(f"/api/v1/purchase-orders/{po_id}/cancel", payload)
+
+
+    # =========================================================================
     # v4.1 System & Schema Probes
     # =========================================================================
     def get_system_schema(self) -> ApiResponse:

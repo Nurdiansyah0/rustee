@@ -501,11 +501,11 @@ pub async fn get_tenant_capabilities(
 
     let caps: Vec<String> = match b_type.as_str() {
         "personal" => vec!["accounts", "transactions", "budgets", "analytics"],
-        "retail" => vec!["pos", "inventory", "invoicing", "accounting", "receivables", "reports"],
-        "fnb" => vec!["pos", "tables", "kitchen", "inventory", "accounting", "reports"],
-        "rental" => vec!["inventory", "bookings", "invoicing", "receivables", "accounting"],
+        "retail" => vec!["pos", "inventory", "purchasing", "invoicing", "accounting", "receivables", "reports"],
+        "fnb" => vec!["pos", "tables", "kitchen", "inventory", "purchasing", "accounting", "reports"],
+        "rental" => vec!["inventory", "purchasing", "bookings", "invoicing", "receivables", "accounting"],
         "contractor" => vec!["projects", "milestones", "invoicing", "receivables", "accounting"],
-        _ => vec!["invoicing", "accounting", "receivables", "reports"],
+        _ => vec!["inventory", "purchasing", "invoicing", "accounting", "receivables", "reports"],
     }
     .into_iter()
     .map(String::from)

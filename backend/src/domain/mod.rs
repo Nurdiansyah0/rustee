@@ -1,5 +1,6 @@
 pub mod accounting;
 pub mod ingestion;
+pub mod inventory;
 pub mod invoice;
 pub mod money;
 pub mod outbox;
@@ -9,6 +10,7 @@ pub mod tenant;
 
 pub use accounting::*;
 pub use ingestion::*;
+pub use inventory::*;
 pub use invoice::*;
 pub use money::Rupiah;
 pub use outbox::*;

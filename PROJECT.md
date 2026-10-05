@@ -1,15 +1,19 @@
-# Project: Invinite Business OS v4.1 Phase 1 Core Foundation
+# Project: Invinite Business OS v4.1 Phase 2 Inventory & Multi-Location Stock Management
 
 ## Architecture
-Invinite Business OS v4.1 evolves the Invinite v3.1 personal finance platform (Rust Axum 0.8 + SQLite WAL + Vue 3 PWA) into a multi-tenant business operating system governed by the maxim:
-**"One Core, Many Businesses, One Financial Truth."**
+Phase 2 extends the Invinite Business OS v4.1 multi-tenant architecture with multi-warehouse tracking, stock movements, purchase orders, inventory adjustments, and automated double-entry GL ledger integration for COGS and inventory valuation.
 
 ### Core Principles
-1. **Strict Multi-Tenancy**: The tenancy root boundary is `Tenant`. All domain and repository operations require an explicit `TenantContext { tenant_id, actor_id, role }`. Cross-tenant resource queries strictly return HTTP 404 Not Found to prevent entity existence enumeration; unauthorized tenant-internal actions return HTTP 403 Forbidden.
-2. **Double-Entry Financial Truth**: Every posted business transaction is captured as balanced double-entry journal entries enforcing `SUM(debit) == SUM(credit)`. Posted journals are strictly immutable; corrections are achieved exclusively via balanced reversal journals. All monetary math operates on checked integer Rupiah (`i64`) without floating point.
-3. **Commercial Invoicing & Receivables**: Invoices progress through a deterministic lifecycle (`DRAFT` -> `ISSUED` -> `PARTIALLY_PAID` -> `PAID` / `VOIDED`). Issuing locks a frozen document snapshot and assigns a server-side sequential gapless number. Payments allocate atomically against invoice receivables with automatic ledger posting and idempotency deduplication.
-4. **Transactional Outbox & Sidecar Boundary**: Domain mutations and `outbox_events` records are committed within the same atomic SQLite transaction. Outbox events are dispatched asynchronously with at-least-once delivery, event ID deduplication, and exponential backoff. Peripheral sidecars (PDF, WhatsApp) never write directly to core tables, and third-party failures never compromise core transactions.
-5. **Universal PWA & Backward Compatibility**: A single Vue 3 Composition API frontend dynamically adapts navigation, terminology, and modules according to workspace capability configurations without destructive rewrites. Legacy personal finance endpoints and test suites remain 100% operational via auto-provisioned personal workspaces.
+1. **Strict Multi-Tenancy & Isolation (R1)**:
+   All inventory domain models (`Warehouse`, `StockItem`, `Product`, `StockMovement`, `PurchaseOrder`, `PurchaseOrderItem`, `StockAdjustment`) enforce strict `TenantContext` isolation. Cross-tenant lookups strictly return HTTP 404 Not Found (preventing enumeration), while tenant-internal unauthorized role actions return HTTP 403 Forbidden.
+2. **Stock Mutation Integrity & Atomic Negative Balance Prevention (R2)**:
+   Atomic stock movements (`INBOUND`, `OUTBOUND`, `TRANSFER`, `ADJUSTMENT`) with immutable audit trails. Negative balances are strictly prohibited across all warehouses (`CHECK (quantity_on_hand >= 0)`); deductions exceeding available balance abort with HTTP 422 Unprocessable Entity or HTTP 409 Conflict. Concurrently racing stock movements are serialized at the database/repository level using `BEGIN IMMEDIATE` write locks. Replayed mutations with identical `Idempotency-Key` headers return original responses.
+3. **Purchase Orders & Goods Receipt State Machine (R3)**:
+   Purchase order lifecycle (`DRAFT` -> `ORDERED` -> `PARTIALLY_RECEIVED` -> `RECEIVED` / `CANCELLED`) with server-side sequential numbering (`PO-YYYY-XXXXXX`). Inbound goods receipts atomically increment warehouse stock levels, update weighted average cost records, and capture supplier batch and cost details.
+4. **Weighted Average Cost (WAC) & Double-Entry Accounting Invariants (R4)**:
+   All unit costs, valuation totals, and COGS calculations operate strictly on integer Rupiah (`i64`) using `round_half_up_i128` without floating-point arithmetic. Inbound goods receipts generate balanced journal entries (`Debit Inventory 1300 / Credit Payables 2000`). Invoice fulfillments generate Cost of Goods Sold entries (`Debit COGS 5000 / Credit Inventory 1300`), strictly enforcing `SUM(debit) == SUM(credit)`. Canonical account `1300` ("Persediaan Barang Dagang") is seeded with deletion protection.
+5. **Transactional Outbox & Universal PWA Alignment (R5)**:
+   Transactional outbox events (`StockReceived`, `StockAdjusted`, `StockTransferred`) commit in the same SQLite transaction as domain mutations. Universal Vue 3 PWA navigation and Pinia stores dynamically surface inventory and purchasing capabilities when enabled, while strictly preserving personal workspace isolation and the rapid POS keypad trigger. All existing backend and E2E test suites maintain zero regressions.
 
 ---
 
@@ -17,38 +21,32 @@ Invinite Business OS v4.1 evolves the Invinite v3.1 personal finance platform (R
 
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Multi-Tenant Data Model | `tenants`, `business_profiles`, `memberships`, `users` schema & domain entities | M1 | PRD §5, §7, §10 |
-| 2 | TenantContext Repository Scoping | Mandatory `TenantContext` parameter across all business repositories | M1 | PRD §5:272-286, ORIGINAL_REQUEST §R1 |
-| 3 | Cross-Tenant HTTP 404 Isolation | Attempting to access another tenant's entity by ID strictly returns HTTP 404 | M1 | ORIGINAL_REQUEST §Acceptance Criteria |
-| 4 | RBAC Authorization & HTTP 403 | Role-based permission checks; unauthorized tenant-internal actions return HTTP 403 | M1 | PRD §6:291-304 |
-| 5 | Indonesian Localization Defaults | Currency `IDR`, locale `id-ID`, timezones `Asia/Jakarta` (WIB), WITA, WIT | M1 | PRD §7:334-356 |
-| 6 | Tenant Slug Routing & Validation | Tenant URL slug validation rejecting reserved system slugs (`admin`, `api`, etc.) | M1 | PRD §41:1537-1568 |
-| 7 | Personal Workspace Auto-Provisioning | Auto-provision default personal workspace on user registration for backward compatibility | M1 | Survey 2 & 3 |
-| 8 | Double-Entry Balancing Invariant | Enforcement of `SUM(debit) == SUM(credit)` and `trial_balance == 0` | M2 | PRD §11.1:560-575 |
-| 9 | Integer Rupiah Math Invariant | Strict `Rupiah(i64)` checked arithmetic, zero float in calculation paths | M2 | PRD §72:2565, money.rs |
-| 10 | Journal Immutability | Posted journals cannot be edited or deleted directly | M2 | PRD §11.2:577-586 |
-| 11 | Journal Reversal Workflow | Corrections performed exclusively via balanced reversal journals | M2 | PRD §11.2:587-595 |
-| 12 | Standard Chart of Accounts | Seeded system accounts (1000, 1100, 1200, 2000, 2100, 4000, 5000, 6000) with deletion protection | M2 | PRD §11.3:597-618 |
-| 13 | PPN Indonesian Tax Engine | 11% and 12% PPN calculation with deterministic half-up rounding | M2 | PRD §16:752-770 |
-| 14 | UMKM Final Tax Engine | 0.5% (50 bps) final tax calculation on gross turnover | M2 | PRD §16:752-770 |
-| 15 | Tax Inclusive/Exclusive Pricing | Deterministic net and tax extraction from gross or net unit prices | M2 | PRD §16:758-762 |
-| 16 | Commercial Invoice Lifecycle | State machine: `DRAFT` -> `ISSUED` -> `PARTIALLY_PAID` -> `PAID` / `VOIDED` | M3 | PRD §12:620-644 |
-| 17 | Server-Side Sequential Numbering | Server-authoritative sequential gapless numbering (`INV-YYYY-XXXXXX`) | M3 | PRD §14:712-732 |
-| 18 | Issued Document Snapshotting | Immutable JSON snapshot of customer, line items, and taxes captured at issue | M3 | PRD §15:734-750 |
-| 19 | Receivable Tracking & Aging | Outstanding balance tracking and aging buckets (0-30d, 31-60d, 61-90d, >90d) | M3 | PRD §17:772-800 |
-| 20 | Atomic Payment Allocation | Atomic allocation of payments against invoices with automatic journal posting | M3 | PRD §17, §18 |
-| 21 | Mutation Idempotency Engine | `Idempotency-Key` header deduplication with SHA-256 caching and HTTP 409 conflict handling | M3 | PRD §18:814-824 |
-| 22 | Transactional Outbox Persistence | Atomic commit of domain state, journal lines, and `outbox_events` in single DB transaction | M4 | PRD §20:844-883 |
-| 23 | At-Least-Once Outbox Dispatcher | Asynchronous outbox polling and delivery worker with exponential backoff retry | M4 | PRD §20:884-892 |
-| 24 | Outbox Event Deduplication | Unique event ID deduplication for consumer idempotency | M4 | PRD §20:890 |
-| 25 | Sidecar Isolation Boundary | Decoupled sidecar execution; external provider failures never fail core transactions | M4 | PRD §21, §56 |
-| 26 | Frontend Workspace Store | Pinia `useWorkspaceStore` managing active workspace, switching, and capability state | M5 | PRD §8, §35, §37 |
-| 27 | Header & Sidebar Workspace UI | Workspace dropdown switcher in `AppHeader.vue` and `DesktopSidebar.vue` | M5 | Survey 3 |
-| 28 | API Client 404 Mock Fallback Fix | Remove latent HTTP 404 mock fallback in `api.js` to preserve cross-tenant 404 isolation | M5 | Survey 3 |
-| 29 | Capability-Driven Navigation | Dynamic navigation tabs based on tenant capabilities while preserving v3.1 POS keypad | M5 | PRD §35, §37 |
-| 30 | Backend Test Harness Synchronization | Update `m1_persistence_tests.rs` table count (26 tables) & verify all 14 test suites pass | M5 | Survey 2 |
-| 31 | Full E2E Test Suite Pass (Tiers 1-4) | 100% pass across all 4 tiers of requirement-driven E2E tests | Final | Project Pattern |
-| 32 | Adversarial Hardening (Tier 5) | Comprehensive adversarial coverage testing and clean forensic audit | Final | Project Pattern |
+| 1 | Multi-Location Warehouse Management | Manage multiple warehouses per tenant with default designation and isolation | M1 | PRD §10, §27; ORIGINAL_REQUEST §R1 |
+| 2 | Product Catalog & Sequential SKU Engine | Product catalog with unique sequential SKU (`SKU-XXXXXX`), unit, cost, sale price | M1 | PRD §10, §27; ORIGINAL_REQUEST §R1 |
+| 3 | Multi-Location Stock Level Tracking | Per-location `quantity_on_hand`, `quantity_reserved`, `reorder_threshold`, `bin_location` | M1 | PRD §10, §27; ORIGINAL_REQUEST §R1 |
+| 4 | Reorder Threshold & Low Stock Alerts | Filter and alert on items where `quantity_on_hand <= reorder_threshold` | M2 | PRD §27; ORIGINAL_REQUEST §R1 |
+| 5 | Atomic Stock Movement Engine | Atomic stock movements (`INBOUND`, `OUTBOUND`, `TRANSFER`, `ADJUSTMENT`) with audit record | M2 | PRD §10, §27; ORIGINAL_REQUEST §R2 |
+| 6 | Inter-Warehouse Transfer | Atomic transfer decrements source and increments destination; prevents source == destination | M2 | PRD §27; ORIGINAL_REQUEST §R2 |
+| 7 | Immutable Stock Audit Trail | SQLite triggers prevent direct UPDATE or DELETE on `stock_movements` and `stock_adjustments` | M1 | PRD §10, §27, §72; ORIGINAL_REQUEST §R2 |
+| 8 | Concurrency Serialization & Write Locking | `BEGIN IMMEDIATE` transaction write locks serialize racing mutations, preventing overselling | M2 | PRD §72; ORIGINAL_REQUEST §R2 |
+| 9 | Mutation Idempotency Header Handling | `Idempotency-Key` header with SHA-256 payload caching returns cached replay | M2 | PRD §18, §72; ORIGINAL_REQUEST §R2 |
+| 10 | Purchase Order Lifecycle State Machine | PO workflow: `DRAFT` -> `ORDERED` -> `PARTIALLY_RECEIVED` -> `RECEIVED` / `CANCELLED` (`PO-YYYY-XXXXXX`) | M3 | PRD §10, §12, §27; ORIGINAL_REQUEST §R3 |
+| 11 | Inbound Goods Receipt Workflow | Inbound receipt increments stock, updates WAC, captures batch and unit cost | M3 | PRD §27; ORIGINAL_REQUEST §R3 |
+| 12 | Purchase Order Cancellation | Cancellation allowed only prior to receipt; once partially or fully received, cancel is blocked | M3 | PRD §27; ORIGINAL_REQUEST §R3 |
+| 13 | Weighted Average Cost (WAC) Engine | Integer Rupiah `i64` moving WAC math via `round_half_up_i128`, zero floating point | M3 | PRD §27, §72; ORIGINAL_REQUEST §R4 |
+| 14 | Inbound Receipt Double-Entry Posting | Auto-post balanced journal: `Debit 1300 (Persediaan) / Credit 2000 (Utang Usaha)` | M3 | PRD §11, §27, §62; ORIGINAL_REQUEST §R4 |
+| 15 | Invoice Fulfillment COGS Double-Entry | Auto-post balanced COGS journal: `Debit 5000 (Beban Pokok) / Credit 1300 (Persediaan)` | M3 | PRD §11, §27, §62; ORIGINAL_REQUEST §R4 |
+| 16 | Canonical Account 1300 Seeding | Seed Account `1300` in Chart of Accounts with system protection and backfill | M1 | PRD §11.3; ORIGINAL_REQUEST §R4 |
+| 17 | Physical Stock Count Adjustment | Cycle count adjustment (`ADJ-YYYY-XXXXXX`) with variance, reason, and GL journal | M2 | PRD §10, §27; ORIGINAL_REQUEST §R2 |
+| 18 | StockReceived Transactional Outbox Event | Commit `StockReceived` event in same SQLite transaction as PO receipt | M3 | PRD §20, §55; ORIGINAL_REQUEST §R5 |
+| 19 | StockAdjusted Transactional Outbox Event | Commit `StockAdjusted` event in same SQLite transaction as stock adjustment | M3 | PRD §20, §55; ORIGINAL_REQUEST §R5 |
+| 20 | StockTransferred Transactional Outbox Event | Commit `StockTransferred` event in same SQLite transaction as warehouse transfer | M3 | PRD §20, §55; ORIGINAL_REQUEST §R5 |
+| 21 | Outbox At-Least-Once Delivery & Deduplication | Outbox processor polls and delivers stock events with UUID deduplication | M3 | PRD §20; ORIGINAL_REQUEST §R5 |
+| 22 | Frontend Capability-Driven Navigation | Dynamically surface "Inventaris & Stok" and "Pesanan Pembelian" in `DesktopSidebar` & `MobileBottomNav` | M4 | PRD §35, §37; ORIGINAL_REQUEST §R5 |
+| 23 | Pinia Inventory Workspace Store Alignment | Store managing inventory state, active warehouse, and capability resolution | M4 | PRD §37; ORIGINAL_REQUEST §R5 |
+| 24 | Schema Persistence Synchronization | Synchronize table count in `m1_persistence_tests.rs` & outbox tests from 30 to 37 tables | M1 | ORIGINAL_REQUEST §Acceptance Criteria |
+| 25 | Full E2E Test Suite Pass (Tiers 1-4) | 100% pass across all 4 tiers of requirement-driven E2E tests with zero regressions | M5 | ORIGINAL_REQUEST §Acceptance Criteria |
+| 26 | Adversarial Coverage Hardening (Tier 5) | Comprehensive adversarial coverage testing and clean forensic audit | M5 | Project Pattern |
 
 ---
 
@@ -56,67 +54,102 @@ Invinite Business OS v4.1 evolves the Invinite v3.1 personal finance platform (R
 
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| Test | E2E Testing Track | Requirement-driven opaque-box test suite (Tiers 1-4) covering all 32 inventoried features; publishes `TEST_READY.md` | none | PLANNED |
-| M1 | Multi-Tenant Architecture & Identity Boundaries | R1: `Tenant`, `User`, `Membership`, `Role`, `BusinessProfile`, `TenantContext`, cross-tenant 404, internal 403, Indonesian defaults, auto-provision personal workspace | none | DONE |
-| M2 | Double-Entry Accounting Core & Financial State Machine | R2: `SUM(debit) == SUM(credit)`, integer `Rupiah(i64)`, immutable journals, reversal mechanics, Chart of Accounts, PPN/UMKM tax engine | M1 | DONE |
-| M3 | Commercial Invoicing, Receivables, & Payment Allocation | R3: Invoicing state machine, sequential numbering, snapshots, receivable aging, atomic payment allocation, Idempotency-Key | M1, M2 | DONE |
-| M4 | Transactional Outbox Pattern & Sidecar Boundary | R4: `outbox_events` table, atomic commit with domain mutations, asynchronous delivery, retry backoff, sidecar failure isolation | M1, M2, M3 | DONE |
-| M5 | Universal PWA Alignment & Test Suite Synchronization | R5: Frontend `useWorkspaceStore`, header/sidebar switcher, fix 404 mock fallback in `api.js`, capability navigation, backend `m1_persistence_tests.rs` table count sync | M1, M2, M3, M4 | DONE |
-| Final | Final Milestone & Adversarial Hardening | Phase 1: 100% E2E test suite pass (Tiers 1-4). Phase 2: Adversarial coverage hardening (Tier 5) with Challengers and Forensic Auditor | Test, M1, M2, M3, M4, M5 | DONE |
+| Test | E2E Testing Track | Design and maintain requirement-driven opaque-box test suite (Tiers 1-4) covering all 26 inventoried features; publishes `TEST_READY.md` | none | DONE |
+| M1 | Schema & Persistence Foundation | Features 1, 2, 3, 7, 16, 24: Migration `0011_v4_1_inventory_management.sql` (7 tables), domain models, Account 1300 seeding, immutability triggers, test count sync (30->37) | none | DONE |
+| M2 | Stock Movements Engine & Negative Balance Prevention | Features 4, 5, 6, 8, 9, 17: Atomic movements (`INBOUND`, `OUTBOUND`, `TRANSFER`, `ADJUSTMENT`), negative balance prevention (HTTP 422/409), `BEGIN IMMEDIATE` concurrency locks, `Idempotency-Key` caching, audit trails | M1 | PLANNED |
+| M3 | Purchase Orders, Inbound Receipt & WAC GL Accounting | Features 10, 11, 12, 13, 14, 15, 18, 19, 20, 21: PO state machine, goods receipt, integer Rupiah WAC math, GL journal postings (1300/2000, 5000/1300), transactional outbox events | M1, M2 | PLANNED |
+| M4 | Universal Vue 3 PWA Frontend & API Integration | Features 22, 23: Capability-driven navigation in `DesktopSidebar.vue` & `MobileBottomNav.vue`, `useWorkspaceStore`, POS keypad preservation, API routes mounting under `/api/v1/` | M1, M2, M3 | PLANNED |
+| M5 | Final System Integration & Adversarial Hardening | Features 25, 26: Phase 1: 100% pass of E2E test suite (Tiers 1-4), `cargo test`, `cargo clippy --all-targets -- -D warnings`, `npm run build`. Phase 2: Adversarial coverage hardening (Tier 5) with Challengers and Forensic Auditor | Test, M1, M2, M3, M4 | PLANNED |
 
 ---
 
 ## Interface Contracts
 
-### M1 (Multi-Tenancy) ↔ Repositories & Services
+### M1 ↔ Repositories & Domain
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TenantContext {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Warehouse {
+    pub id: Uuid,
     pub tenant_id: Uuid,
-    pub actor_id: Uuid,
-    pub role: Role,
+    pub code: String,
+    pub name: String,
+    pub address: Option<String>,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
 }
 
-// All tenant-scoped repositories must take &TenantContext
-pub trait TenantScopedRepository {
-    async fn find_by_id(&self, ctx: &TenantContext, id: Uuid) -> Result<Option<Entity>, RepositoryError>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Product {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub sku: String,
+    pub name: String,
+    pub unit: String,
+    pub cost_price: Rupiah,
+    pub sale_price: Rupiah,
+    pub reorder_threshold: i64,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
 }
-// Cross-tenant lookup rule: If entity exists in DB under different tenant_id, repository returns Ok(None), and HTTP handler maps to HTTP 404 Not Found.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StockItem {
+    pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub warehouse_id: Uuid,
+    pub product_id: Uuid,
+    pub quantity_on_hand: i64,
+    pub quantity_reserved: i64,
+    pub reorder_threshold: i64,
+    pub bin_location: Option<String>,
+    pub average_cost: Rupiah,
+    pub updated_at: DateTime<Utc>,
+}
 ```
 
-### M2 (Double-Entry Accounting) ↔ M3 (Invoicing & Payments)
+### M2 ↔ Stock Movement & Concurrency Contract
 ```rust
-pub struct PostJournalEntryCommand {
+pub enum StockMovementType {
+    Inbound,
+    Outbound,
+    Transfer,
+    Adjustment,
+}
+
+pub struct CreateStockMovementCommand {
     pub tenant_id: Uuid,
-    pub entry_date: DateTime<Utc>,
-    pub description: String,
-    pub source_type: String, // e.g., "INVOICE", "PAYMENT", "MANUAL"
-    pub source_id: Option<Uuid>,
-    pub lines: Vec<PostJournalLineCommand>,
+    pub movement_type: StockMovementType,
+    pub product_id: Uuid,
+    pub source_warehouse_id: Option<Uuid>,
+    pub destination_warehouse_id: Option<Uuid>,
+    pub quantity: i64, // strictly > 0
+    pub unit_cost: Option<Rupiah>,
+    pub reference_type: Option<String>, // "PURCHASE_ORDER", "INVOICE", "ADJUSTMENT"
+    pub reference_id: Option<Uuid>,
+    pub batch_number: Option<String>,
+    pub notes: Option<String>,
 }
 
-pub struct PostJournalLineCommand {
-    pub account_code: String, // e.g., "1200", "4000", "2100"
-    pub debit: Rupiah,
-    pub credit: Rupiah,
-    pub memo: Option<String>,
-}
-
-// Invariant: lines.iter().map(|l| l.debit.0).sum::<i64>() == lines.iter().map(|l| l.credit.0).sum::<i64>()
+// Invariant: If quantity_on_hand - deduction < 0 => AppError::UnprocessableEntity("INSUFFICIENT_STOCK")
+// Concurrency: Must execute within tx opened via pool.begin_with("BEGIN IMMEDIATE")
 ```
 
-### M3 (Invoicing & Payments) ↔ M4 (Transactional Outbox)
+### M3 ↔ WAC & Double-Entry Accounting Contract
 ```rust
-// Atomic transaction contract:
-// Invoices or payments must be created inside an explicit database transaction
-// that simultaneously inserts the corresponding OutboxEvent.
-pub struct OutboxEventDraft {
-    pub tenant_id: Uuid,
-    pub event_type: String,     // "InvoiceIssued", "PaymentConfirmed", etc.
-    pub aggregate_type: String, // "Invoice", "Payment"
-    pub aggregate_id: String,
-    pub payload_json: Value,
-}
+// Integer Moving Weighted Average Cost:
+// new_wac = round_half_up_i128((prev_qty * prev_wac + in_qty * in_cost), total_qty)
+
+// Inbound Goods Receipt Journal:
+// Debit 1300 (Persediaan Barang Dagang) = in_qty * in_cost
+// Credit 2000 (Utang Usaha)             = in_qty * in_cost
+
+// Invoice Fulfillment COGS Journal:
+// Debit 5000 (Beban Pokok Penjualan)   = out_qty * current_wac
+// Credit 1300 (Persediaan Barang Dagang) = out_qty * current_wac
+
+// Transactional Outbox Events:
+// Event types: "StockReceived", "StockAdjusted", "StockTransferred"
+// Aggregate type: "Inventory"
 ```
 
 ---
@@ -126,62 +159,47 @@ pub struct OutboxEventDraft {
 ```text
 backend/
 ├── migrations/
-│   ├── 0001_initial_schema.sql                # (v3.1 preserved)
-│   ├── 0002_trial_and_dana_support.sql        # (v3.1 preserved)
-│   ├── 0003_v3_1_0_schema_upgrade.sql         # (v3.1 preserved)
-│   ├── 0004_subscription_lifecycle_v3_1_0.sql # (v3.1 preserved)
-│   ├── 0005_user_preferences.sql              # (v3.1 preserved)
-│   └── 0006_v4_1_core_foundation.sql          # [v4.1] Core foundation schema
+│   ├── 0001_initial_schema.sql through 0010_password_reset_tokens.sql (Preserved)
+│   └── 0011_v4_1_inventory_management.sql      # [M1] 7 inventory tables, account 1300 seed, triggers
 ├── src/
 │   ├── domain/
-│   │   ├── money.rs                           # (Preserved Rupiah(i64))
-│   │   ├── tenant.rs                          # [M1] Tenant, Membership, Role, BusinessProfile, TenantContext
-│   │   ├── accounting.rs                      # [M2] ChartOfAccounts, JournalEntry, JournalLine, TaxRule
-│   │   ├── invoice.rs                         # [M3] Invoice, InvoiceItem, InvoiceSnapshot, InvoiceStatus
-│   │   ├── receivable.rs                      # [M3] Receivable, Payment, PaymentAllocation
-│   │   └── outbox.rs                          # [M4] OutboxEvent, OutboxStatus
+│   │   ├── money.rs                            # Checked Rupiah(i64) math
+│   │   ├── accounting.rs                       # [M1, M3] Account 1300 in canonical system accounts
+│   │   ├── outbox.rs                           # [M3] OutboxEventDraft constructors
+│   │   └── inventory.rs                        # [M1, M2, M3] Warehouse, Product, StockItem, Movements, POs
 │   ├── repository/
-│   │   ├── tenant_repo.rs                     # [M1] TenantRepository & SqlxTenantRepository
-│   │   ├── accounting_repo.rs                 # [M2] JournalRepository & AccountRepository
-│   │   ├── invoice_repo.rs                    # [M3] InvoiceRepository
-│   │   ├── receivable_repo.rs                 # [M3] ReceivableRepository
-│   │   └── outbox_repo.rs                     # [M4] OutboxRepository
+│   │   └── inventory_repo.rs                   # [M1, M2, M3] SqlxInventoryRepository with TenantContext
 │   ├── service/
-│   │   ├── tenant_service.rs                  # [M1] Workspace provisioning & validation
-│   │   ├── accounting_service.rs              # [M2] Posting, trial balance, tax calculations
-│   │   ├── invoice_service.rs                 # [M3] Sequential numbering, snapshots, lifecycle
-│   │   ├── payment_service.rs                 # [M3] Atomic payment allocation
-│   │   └── outbox_processor.rs                # [M4] Asynchronous worker with retry
+│   │   └── inventory_service.rs                # [M2, M3] Movements, WAC, PO state machine, GL postings
 │   ├── api/
-│   │   ├── middleware/
-│   │   │   ├── auth_extractor.rs              # (Enhanced with TenantContext)
-│   │   │   └── tenant_extractor.rs            # [M1] Strict TenantContext extractor
-│   │   ├── router.rs
-│   │   ├── tenants.rs                         # [M1] /api/v1/tenants routes
-│   │   ├── accounting.rs                      # [M2] /api/v1/accounting routes
-│   │   ├── invoices.rs                        # [M3] /api/v1/invoices routes
-│   │   └── receivables.rs                     # [M3] /api/v1/receivables routes
+│   │   ├── router.rs                           # [M4] Mount inventory API routes
+│   │   ├── warehouses.rs                       # [M4] /api/v1/warehouses
+│   │   ├── products.rs                         # [M4] /api/v1/products
+│   │   ├── inventory.rs                        # [M4] /api/v1/inventory (movements, stock, adjustments)
+│   │   └── purchase_orders.rs                  # [M4] /api/v1/purchase-orders
 └── tests/
-    ├── m1_persistence_tests.rs                # Synchronized table count (26)
-    ├── v4_tenant_isolation_tests.rs           # [M1] Isolation verification
-    ├── v4_double_entry_accounting_tests.rs    # [M2] Debit==Credit & tax vectors
-    ├── v4_invoicing_receivables_tests.rs      # [M3] Invoicing lifecycle & payments
-    └── v4_transactional_outbox_tests.rs       # [M4] Outbox atomic commit & worker
+    ├── m1_persistence_tests.rs                 # [M1] Synchronized table count (37)
+    ├── v4_m4_challenger_outbox_tests.rs        # [M1] Synchronized table count (37)
+    └── v4_inventory_management_tests.rs        # [M2, M3] Full integration test suite for R1-R5
 
 frontend/
 ├── src/
 │   ├── stores/
-│   │   └── workspace.js                       # [M5] useWorkspaceStore (Pinia)
-│   ├── services/
-│   │   └── api.js                             # [M5] X-Tenant-ID injection & fix 404 mock fallback
-│   └── components/layout/
-│       ├── AppHeader.vue                      # [M5] Workspace switcher dropdown
-│       ├── DesktopSidebar.vue                 # [M5] Capability-driven navigation
-│       └── MobileBottomNav.vue                # [M5] Capability-driven navigation
+│   │   └── workspace.js                        # [M4] Capabilities matrix for inventory & purchasing
+│   ├── components/layout/
+│   │   ├── DesktopSidebar.vue                  # [M4] Dynamic nav items for inventory & purchasing
+│   │   └── MobileBottomNav.vue                 # [M4] Adaptive nav slot 4, preserved POS button
+│   └── views/
+│       ├── InventoryView.vue                   # [M4] Inventory & stock management view
+│       └── PurchasingView.vue                  # [M4] Purchase orders view
 
 e2e_tests/
 ├── harness/
-│   ├── client.py                              # [Test] Tenant-aware E2E HTTP client
-│   └── server.py                              # [Test] Synchronized reference oracle
-└── runner.sh                                  # [Test] TAP v13 test runner
+│   ├── client.py                               # [Test] Extended client with inventory endpoints
+│   └── server.py                               # [Test] Reference oracle with inventory support (33 tables)
+├── tier1/test_tier1.py                         # [Test] F33-F42 coverage & table count sync (33)
+├── tier2/test_tier2.py                         # [Test] B33-B42 corner cases & table count sync (33)
+├── tier3/test_tier3.py                         # [Test] PAIR-37-PAIR-45 cross-feature tests
+├── tier4/test_tier4.py                         # [Test] SCENARIO-21-SCENARIO-24 real-world workflows
+└── runner.sh                                   # Master TAP v13 test runner
 ```

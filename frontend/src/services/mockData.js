@@ -190,6 +190,183 @@ function getDefaultDatabase() {
         created_at: '2026-09-01T00:00:00Z',
         updated_at: '2026-09-01T00:00:00Z'
       }
+    ],
+    warehouses: [
+      {
+        id: 'wh_main_01',
+        code: 'WH-01',
+        name: 'Gudang Utama (Jakarta)',
+        address: 'Jl. Sudirman Kav. 25, Jakarta Selatan',
+        is_default: true,
+        created_at: '2026-09-01T00:00:00Z'
+      },
+      {
+        id: 'wh_sec_02',
+        code: 'WH-02',
+        name: 'Gudang Transit (Bandung)',
+        address: 'Jl. Asia Afrika No. 10, Bandung',
+        is_default: false,
+        created_at: '2026-09-15T00:00:00Z'
+      }
+    ],
+    products: [
+      {
+        id: 'prd_01',
+        sku: 'SKU-000001',
+        name: 'Biji Kopi Arabika Gayo 1kg',
+        unit: 'KG',
+        cost_price: 120000,
+        sale_price: 185000,
+        reorder_threshold: 10,
+        is_active: true,
+        created_at: '2026-09-01T00:00:00Z'
+      },
+      {
+        id: 'prd_02',
+        sku: 'SKU-000002',
+        name: 'Sirup Karamel 750ml',
+        unit: 'BTL',
+        cost_price: 65000,
+        sale_price: 95000,
+        reorder_threshold: 5,
+        is_active: true,
+        created_at: '2026-09-02T00:00:00Z'
+      },
+      {
+        id: 'prd_03',
+        sku: 'SKU-000003',
+        name: 'Paper Cup Hot 8oz',
+        unit: 'SLV',
+        cost_price: 25000,
+        sale_price: 40000,
+        reorder_threshold: 15,
+        is_active: true,
+        created_at: '2026-09-03T00:00:00Z'
+      }
+    ],
+    stock_items: [
+      {
+        id: 'stk_01',
+        warehouse_id: 'wh_main_01',
+        product_id: 'prd_01',
+        quantity_on_hand: 45,
+        quantity_reserved: 5,
+        reorder_threshold: 10,
+        bin_location: 'A-01-02',
+        average_cost: 120000,
+        product_name: 'Biji Kopi Arabika Gayo 1kg',
+        product_sku: 'SKU-000001',
+        product_unit: 'KG',
+        warehouse_name: 'Gudang Utama (Jakarta)',
+        updated_at: '2026-09-01T00:00:00Z'
+      },
+      {
+        id: 'stk_02',
+        warehouse_id: 'wh_main_01',
+        product_id: 'prd_02',
+        quantity_on_hand: 4,
+        quantity_reserved: 0,
+        reorder_threshold: 5,
+        bin_location: 'B-02-01',
+        average_cost: 65000,
+        product_name: 'Sirup Karamel 750ml',
+        product_sku: 'SKU-000002',
+        product_unit: 'BTL',
+        warehouse_name: 'Gudang Utama (Jakarta)',
+        updated_at: '2026-09-02T00:00:00Z'
+      },
+      {
+        id: 'stk_03',
+        warehouse_id: 'wh_main_01',
+        product_id: 'prd_03',
+        quantity_on_hand: 60,
+        quantity_reserved: 10,
+        reorder_threshold: 15,
+        bin_location: 'C-01-05',
+        average_cost: 25000,
+        product_name: 'Paper Cup Hot 8oz',
+        product_sku: 'SKU-000003',
+        product_unit: 'SLV',
+        warehouse_name: 'Gudang Utama (Jakarta)',
+        updated_at: '2026-09-03T00:00:00Z'
+      },
+      {
+        id: 'stk_04',
+        warehouse_id: 'wh_sec_02',
+        product_id: 'prd_01',
+        quantity_on_hand: 20,
+        quantity_reserved: 0,
+        reorder_threshold: 10,
+        bin_location: 'T-01-01',
+        average_cost: 120000,
+        product_name: 'Biji Kopi Arabika Gayo 1kg',
+        product_sku: 'SKU-000001',
+        product_unit: 'KG',
+        warehouse_name: 'Gudang Transit (Bandung)',
+        updated_at: '2026-09-15T00:00:00Z'
+      }
+    ],
+    stock_movements: [
+      {
+        id: 'mov_01',
+        movement_type: 'INBOUND',
+        product_id: 'prd_01',
+        destination_warehouse_id: 'wh_main_01',
+        source_warehouse_id: null,
+        quantity: 50,
+        unit_cost: 120000,
+        reference_type: 'PURCHASE_ORDER',
+        reference_id: 'po_01',
+        batch_number: 'BATCH-2026-09A',
+        notes: 'Penerimaan PO awal',
+        created_at: '2026-09-01T00:00:00Z'
+      }
+    ],
+    purchase_orders: [
+      {
+        id: 'po_01',
+        po_number: 'PO-2026-000001',
+        supplier_name: 'PT Kopi Nusantara Jaya',
+        destination_warehouse_id: 'wh_main_01',
+        status: 'RECEIVED',
+        total_amount: 6000000,
+        notes: 'Pengadaan kopi rutin bulanan',
+        items: [
+          {
+            id: 'poi_01',
+            purchase_order_id: 'po_01',
+            product_id: 'prd_01',
+            quantity_ordered: 50,
+            quantity_received: 50,
+            unit_cost: 120000,
+            total_cost: 6000000
+          }
+        ],
+        created_at: '2026-09-01T00:00:00Z',
+        updated_at: '2026-09-02T00:00:00Z'
+      },
+      {
+        id: 'po_02',
+        po_number: 'PO-2026-000002',
+        supplier_name: 'CV Sirup Manis Sentosa',
+        destination_warehouse_id: 'wh_main_01',
+        status: 'ORDERED',
+        total_amount: 1950000,
+        notes: 'Restock sirup karamel',
+        items: [
+          {
+            id: 'poi_02',
+            purchase_order_id: 'po_02',
+            product_id: 'prd_02',
+            quantity_ordered: 30,
+            quantity_received: 0,
+            unit_cost: 65000,
+            total_cost: 1950000
+          }
+        ],
+        created_at: '2026-09-20T00:00:00Z',
+        updated_at: '2026-09-21T00:00:00Z'
+      }
     ]
   };
 }
@@ -737,11 +914,11 @@ export function handleMockApiRequest(path, options = {}) {
     const bType = tenant?.business_type || (tenant?.is_personal ? 'personal' : 'general');
     const capMap = {
       personal: ['accounts', 'transactions', 'budgets', 'analytics'],
-      retail: ['pos', 'inventory', 'invoicing', 'accounting', 'receivables', 'reports'],
-      fnb: ['pos', 'tables', 'kitchen', 'inventory', 'accounting', 'reports'],
-      rental: ['inventory', 'bookings', 'invoicing', 'receivables', 'accounting'],
+      retail: ['pos', 'inventory', 'purchasing', 'invoicing', 'accounting', 'receivables', 'reports'],
+      fnb: ['pos', 'tables', 'kitchen', 'inventory', 'purchasing', 'accounting', 'reports'],
+      rental: ['inventory', 'purchasing', 'bookings', 'invoicing', 'receivables', 'accounting'],
       contractor: ['projects', 'milestones', 'invoicing', 'receivables', 'accounting'],
-      general: ['invoicing', 'accounting', 'receivables', 'reports']
+      general: ['inventory', 'purchasing', 'invoicing', 'accounting', 'receivables', 'reports']
     };
     const caps = capMap[bType] || capMap.general;
     return {
@@ -750,6 +927,413 @@ export function handleMockApiRequest(path, options = {}) {
       role: tenant?.role || 'owner',
       capabilities: caps
     };
+  }
+
+  // 23. Warehouses: GET & POST
+  if (pathname === '/api/v1/warehouses' && method === 'GET') {
+    const list = db.warehouses || [];
+    return { warehouses: list, count: list.length };
+  }
+
+  if (pathname === '/api/v1/warehouses' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const newWh = {
+      id: 'wh_' + Math.random().toString(36).substring(2, 9),
+      code: body.code || 'WH-' + String((db.warehouses?.length || 0) + 1).padStart(2, '0'),
+      name: body.name || 'Gudang Baru',
+      address: body.address || null,
+      is_default: Boolean(body.is_default),
+      created_at: new Date().toISOString()
+    };
+    if (!db.warehouses) db.warehouses = [];
+    if (newWh.is_default) {
+      db.warehouses.forEach(w => { w.is_default = false; });
+    }
+    db.warehouses.push(newWh);
+    saveDatabase(db);
+    return newWh;
+  }
+
+  if (pathname.startsWith('/api/v1/warehouses/') && method === 'GET') {
+    const id = pathname.split('/').pop();
+    const wh = (db.warehouses || []).find(w => w.id === id);
+    if (!wh) throw new Error('Warehouse not found');
+    return wh;
+  }
+
+  // 24. Products: GET & POST
+  if (pathname === '/api/v1/products' && method === 'GET') {
+    const list = db.products || [];
+    return { products: list, count: list.length };
+  }
+
+  if (pathname === '/api/v1/products' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const newPrd = {
+      id: 'prd_' + Math.random().toString(36).substring(2, 9),
+      sku: 'SKU-' + String((db.products?.length || 0) + 1).padStart(6, '0'),
+      name: body.name || 'Produk Baru',
+      unit: body.unit || 'PCS',
+      cost_price: parseInt(body.cost_price || 0, 10),
+      sale_price: parseInt(body.sale_price || 0, 10),
+      reorder_threshold: parseInt(body.reorder_threshold || 10, 10),
+      is_active: true,
+      created_at: new Date().toISOString()
+    };
+    if (!db.products) db.products = [];
+    db.products.push(newPrd);
+
+    // Also seed default stock items for existing warehouses
+    if (!db.stock_items) db.stock_items = [];
+    (db.warehouses || []).forEach(wh => {
+      db.stock_items.push({
+        id: 'stk_' + Math.random().toString(36).substring(2, 9),
+        warehouse_id: wh.id,
+        product_id: newPrd.id,
+        quantity_on_hand: 0,
+        quantity_reserved: 0,
+        reorder_threshold: newPrd.reorder_threshold,
+        bin_location: null,
+        average_cost: newPrd.cost_price,
+        product_name: newPrd.name,
+        product_sku: newPrd.sku,
+        product_unit: newPrd.unit,
+        warehouse_name: wh.name,
+        updated_at: new Date().toISOString()
+      });
+    });
+
+    saveDatabase(db);
+    return newPrd;
+  }
+
+  if (pathname.startsWith('/api/v1/products/') && method === 'GET') {
+    const id = pathname.split('/').pop();
+    const prd = (db.products || []).find(p => p.id === id);
+    if (!prd) throw new Error('Product not found');
+    return prd;
+  }
+
+  // 25. Inventory Stock: GET
+  if ((pathname === '/api/v1/inventory' || pathname === '/api/v1/inventory/stock') && method === 'GET') {
+    let items = db.stock_items || [];
+    const whId = searchParams.get('warehouse_id');
+    const prdId = searchParams.get('product_id');
+    const lowStock = searchParams.get('low_stock');
+
+    if (whId) items = items.filter(i => i.warehouse_id === whId);
+    if (prdId) items = items.filter(i => i.product_id === prdId);
+    if (lowStock === 'true') items = items.filter(i => i.quantity_on_hand <= i.reorder_threshold);
+
+    return { stock_items: items, count: items.length };
+  }
+
+  // 26. Stock Movements: GET & POST
+  if (pathname === '/api/v1/inventory/movements' && method === 'GET') {
+    let movs = db.stock_movements || [];
+    const whId = searchParams.get('warehouse_id');
+    const prdId = searchParams.get('product_id');
+
+    if (whId) {
+      movs = movs.filter(m => m.source_warehouse_id === whId || m.destination_warehouse_id === whId);
+    }
+    if (prdId) movs = movs.filter(m => m.product_id === prdId);
+
+    return { movements: movs, count: movs.length };
+  }
+
+  if (pathname === '/api/v1/inventory/movements' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const newMov = {
+      id: 'mov_' + Math.random().toString(36).substring(2, 9),
+      movement_type: body.movement_type,
+      product_id: body.product_id,
+      source_warehouse_id: body.source_warehouse_id || null,
+      destination_warehouse_id: body.destination_warehouse_id || null,
+      quantity: parseInt(body.quantity || 0, 10),
+      unit_cost: body.unit_cost ? parseInt(body.unit_cost, 10) : null,
+      notes: body.notes || null,
+      batch_number: body.batch_number || null,
+      created_at: new Date().toISOString()
+    };
+    if (!db.stock_movements) db.stock_movements = [];
+    db.stock_movements.unshift(newMov);
+
+    // Update stock item
+    const targetWhId = newMov.destination_warehouse_id || newMov.source_warehouse_id;
+    const stockItem = (db.stock_items || []).find(s => s.product_id === newMov.product_id && s.warehouse_id === targetWhId);
+    if (stockItem) {
+      if (newMov.movement_type === 'INBOUND') {
+        stockItem.quantity_on_hand += newMov.quantity;
+      } else if (newMov.movement_type === 'OUTBOUND') {
+        stockItem.quantity_on_hand = Math.max(0, stockItem.quantity_on_hand - newMov.quantity);
+      }
+      stockItem.updated_at = new Date().toISOString();
+    }
+    saveDatabase(db);
+    return {
+      id: newMov.id,
+      movement_type: newMov.movement_type,
+      product_id: newMov.product_id,
+      quantity: newMov.quantity,
+      resulting_stock: stockItem ? stockItem.quantity_on_hand : 0,
+      created_at: newMov.created_at
+    };
+  }
+
+  // 27. Stock Transfer: POST
+  if ((pathname === '/api/v1/inventory/transfer' || pathname === '/api/v1/inventory/transfers') && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const qty = parseInt(body.quantity || 0, 10);
+    const srcWhId = body.source_warehouse_id;
+    const dstWhId = body.destination_warehouse_id;
+    const prdId = body.product_id;
+
+    const srcItem = (db.stock_items || []).find(s => s.product_id === prdId && s.warehouse_id === srcWhId);
+    let dstItem = (db.stock_items || []).find(s => s.product_id === prdId && s.warehouse_id === dstWhId);
+
+    if (srcItem) {
+      srcItem.quantity_on_hand = Math.max(0, srcItem.quantity_on_hand - qty);
+      srcItem.updated_at = new Date().toISOString();
+    }
+
+    if (!dstItem && srcItem) {
+      dstItem = {
+        id: 'stk_' + Math.random().toString(36).substring(2, 9),
+        warehouse_id: dstWhId,
+        product_id: prdId,
+        quantity_on_hand: 0,
+        quantity_reserved: 0,
+        reorder_threshold: srcItem.reorder_threshold,
+        bin_location: null,
+        average_cost: srcItem.average_cost,
+        product_name: srcItem.product_name,
+        product_sku: srcItem.product_sku,
+        product_unit: srcItem.product_unit,
+        warehouse_name: (db.warehouses || []).find(w => w.id === dstWhId)?.name || 'Gudang Tujuan',
+        updated_at: new Date().toISOString()
+      };
+      if (!db.stock_items) db.stock_items = [];
+      db.stock_items.push(dstItem);
+    }
+
+    if (dstItem) {
+      dstItem.quantity_on_hand += qty;
+      dstItem.updated_at = new Date().toISOString();
+    }
+
+    const movId = 'mov_' + Math.random().toString(36).substring(2, 9);
+    if (!db.stock_movements) db.stock_movements = [];
+    db.stock_movements.unshift({
+      id: movId,
+      movement_type: 'TRANSFER',
+      product_id: prdId,
+      source_warehouse_id: srcWhId,
+      destination_warehouse_id: dstWhId,
+      quantity: qty,
+      unit_cost: srcItem?.average_cost || 0,
+      notes: body.notes || 'Inter-warehouse transfer',
+      created_at: new Date().toISOString()
+    });
+
+    saveDatabase(db);
+    return {
+      movement_id: movId,
+      source_warehouse_id: srcWhId,
+      destination_warehouse_id: dstWhId,
+      product_id: prdId,
+      quantity: qty,
+      status: 'COMPLETED',
+      source_remaining: srcItem?.quantity_on_hand || 0,
+      destination_total: dstItem?.quantity_on_hand || 0,
+      created_at: new Date().toISOString()
+    };
+  }
+
+  // 28. Stock Adjustment: POST
+  if ((pathname === '/api/v1/inventory/adjust' || pathname === '/api/v1/inventory/adjustments') && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const whId = body.warehouse_id;
+    const prdId = body.product_id;
+    const actualQty = parseInt(body.actual_quantity || 0, 10);
+    const reason = body.reason || 'Cycle count opname';
+
+    let item = (db.stock_items || []).find(s => s.product_id === prdId && s.warehouse_id === whId);
+    const prevQty = item ? item.quantity_on_hand : 0;
+    const variance = actualQty - prevQty;
+
+    if (item) {
+      item.quantity_on_hand = actualQty;
+      item.updated_at = new Date().toISOString();
+    }
+
+    const adjId = 'adj_' + Math.random().toString(36).substring(2, 9);
+    const adjNum = 'ADJ-2026-' + String(Math.floor(100000 + Math.random() * 900000));
+
+    if (!db.stock_movements) db.stock_movements = [];
+    db.stock_movements.unshift({
+      id: 'mov_' + Math.random().toString(36).substring(2, 9),
+      movement_type: 'ADJUSTMENT',
+      product_id: prdId,
+      source_warehouse_id: variance < 0 ? whId : null,
+      destination_warehouse_id: variance > 0 ? whId : null,
+      quantity: Math.abs(variance),
+      unit_cost: item?.average_cost || 0,
+      reference_type: 'ADJUSTMENT',
+      reference_id: adjId,
+      notes: reason,
+      created_at: new Date().toISOString()
+    });
+
+    saveDatabase(db);
+    return {
+      id: adjId,
+      adjustment_number: adjNum,
+      warehouse_id: whId,
+      product_id: prdId,
+      previous_quantity: prevQty,
+      actual_quantity: actualQty,
+      new_quantity: actualQty,
+      variance,
+      variance_quantity: variance,
+      reason,
+      created_at: new Date().toISOString()
+    };
+  }
+
+  // 29. Purchase Orders: GET & POST
+  if (pathname === '/api/v1/purchase-orders' && method === 'GET') {
+    const list = db.purchase_orders || [];
+    return { purchase_orders: list, count: list.length };
+  }
+
+  if (pathname === '/api/v1/purchase-orders' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    const items = (body.items || []).map((it, idx) => ({
+      id: 'poi_' + Math.random().toString(36).substring(2, 9),
+      product_id: it.product_id,
+      quantity_ordered: parseInt(it.quantity_ordered || 0, 10),
+      quantity_received: 0,
+      unit_cost: parseInt(it.unit_cost || 0, 10),
+      total_cost: parseInt(it.quantity_ordered || 0, 10) * parseInt(it.unit_cost || 0, 10)
+    }));
+    const totalAmount = items.reduce((acc, it) => acc + it.total_cost, 0);
+    const newPO = {
+      id: 'po_' + Math.random().toString(36).substring(2, 9),
+      po_number: 'PO-2026-' + String((db.purchase_orders?.length || 0) + 1).padStart(6, '0'),
+      supplier_name: body.supplier_name || 'Pemasok',
+      destination_warehouse_id: body.destination_warehouse_id,
+      status: 'DRAFT',
+      total_amount: totalAmount,
+      notes: body.notes || null,
+      items,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (!db.purchase_orders) db.purchase_orders = [];
+    db.purchase_orders.unshift(newPO);
+    saveDatabase(db);
+    return newPO;
+  }
+
+  if (pathname.startsWith('/api/v1/purchase-orders/') && method === 'GET') {
+    const id = pathname.split('/').pop();
+    const po = (db.purchase_orders || []).find(p => p.id === id);
+    if (!po) throw new Error('Purchase order not found');
+    return po;
+  }
+
+  // PO Order action
+  if (pathname.startsWith('/api/v1/purchase-orders/') && pathname.endsWith('/order') && method === 'POST') {
+    const parts = pathname.split('/');
+    const poId = parts[parts.length - 2];
+    const po = (db.purchase_orders || []).find(p => p.id === poId);
+    if (po) {
+      po.status = 'ORDERED';
+      po.updated_at = new Date().toISOString();
+      saveDatabase(db);
+      return { id: po.id, status: 'ORDERED', updated_at: po.updated_at };
+    }
+  }
+
+  // PO Receive action
+  if (pathname.startsWith('/api/v1/purchase-orders/') && pathname.endsWith('/receive') && method === 'POST') {
+    const parts = pathname.split('/');
+    const poId = parts[parts.length - 2];
+    const body = JSON.parse(options.body || '{}');
+    const po = (db.purchase_orders || []).find(p => p.id === poId);
+
+    if (po) {
+      let totalReceivedVal = 0;
+      (body.items || []).forEach(recv => {
+        const line = po.items.find(it => it.product_id === recv.product_id);
+        const qty = parseInt(recv.quantity_received || 0, 10);
+        const unitCost = recv.unit_cost ? parseInt(recv.unit_cost, 10) : (line?.unit_cost || 0);
+
+        if (line) {
+          line.quantity_received += qty;
+          totalReceivedVal += qty * unitCost;
+        }
+
+        // Increment stock
+        const stk = (db.stock_items || []).find(s => s.product_id === recv.product_id && s.warehouse_id === po.destination_warehouse_id);
+        if (stk) {
+          // Weighted average cost update: (prev_qty * prev_cost + in_qty * in_cost) / total_qty
+          const prevTotalVal = stk.quantity_on_hand * stk.average_cost;
+          const incomingVal = qty * unitCost;
+          const newTotalQty = stk.quantity_on_hand + qty;
+          if (newTotalQty > 0) {
+            stk.average_cost = Math.round((prevTotalVal + incomingVal) / newTotalQty);
+          }
+          stk.quantity_on_hand += qty;
+          stk.updated_at = new Date().toISOString();
+        }
+
+        // Record inbound movement
+        if (!db.stock_movements) db.stock_movements = [];
+        db.stock_movements.unshift({
+          id: 'mov_' + Math.random().toString(36).substring(2, 9),
+          movement_type: 'INBOUND',
+          product_id: recv.product_id,
+          source_warehouse_id: null,
+          destination_warehouse_id: po.destination_warehouse_id,
+          quantity: qty,
+          unit_cost: unitCost,
+          reference_type: 'PURCHASE_ORDER',
+          reference_id: po.id,
+          batch_number: recv.batch_number || null,
+          notes: 'Penerimaan PO ' + po.po_number,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      const allFulfilled = po.items.every(it => it.quantity_received >= it.quantity_ordered);
+      po.status = allFulfilled ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+      po.updated_at = new Date().toISOString();
+      saveDatabase(db);
+
+      return {
+        id: po.id,
+        po_number: po.po_number,
+        status: po.status,
+        total_receipt_value: totalReceivedVal,
+        updated_at: po.updated_at
+      };
+    }
+  }
+
+  // PO Cancel action
+  if (pathname.startsWith('/api/v1/purchase-orders/') && pathname.endsWith('/cancel') && method === 'POST') {
+    const parts = pathname.split('/');
+    const poId = parts[parts.length - 2];
+    const po = (db.purchase_orders || []).find(p => p.id === poId);
+    if (po) {
+      po.status = 'CANCELLED';
+      po.updated_at = new Date().toISOString();
+      saveDatabase(db);
+      return { id: po.id, status: 'CANCELLED', updated_at: po.updated_at };
+    }
   }
 
   // Fallback

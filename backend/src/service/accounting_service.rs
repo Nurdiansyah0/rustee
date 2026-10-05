@@ -309,10 +309,23 @@ impl AccountingService {
         }
 
         // 9. Source Type Validation
-        const VALID_SOURCE_TYPES: &[&str] = &["MANUAL", "INVOICE", "PAYMENT", "REVERSAL", "SYSTEM"];
+        const VALID_SOURCE_TYPES: &[&str] = &[
+            "MANUAL",
+            "INVOICE",
+            "PAYMENT",
+            "REVERSAL",
+            "SYSTEM",
+            "PURCHASE_ORDER_RECEIPT",
+            "INVENTORY_INBOUND",
+            "INVENTORY_OUTBOUND",
+            "STOCK_ADJUSTMENT",
+        ];
         if !VALID_SOURCE_TYPES.contains(&cmd.source_type.as_str()) {
             return Err(AppError::BadRequest(
-                format!("Invalid source type '{}'. Allowed: MANUAL, INVOICE, PAYMENT, REVERSAL, SYSTEM", cmd.source_type),
+                format!(
+                    "Invalid source type '{}'. Allowed: MANUAL, INVOICE, PAYMENT, REVERSAL, SYSTEM, PURCHASE_ORDER_RECEIPT, INVENTORY_INBOUND, INVENTORY_OUTBOUND, STOCK_ADJUSTMENT",
+                    cmd.source_type
+                ),
                 "INVALID_SOURCE_TYPE",
             ));
         }

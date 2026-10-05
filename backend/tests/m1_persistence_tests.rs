@@ -42,7 +42,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     assert!(pragmas.foreign_keys);
     assert_eq!(pragmas.synchronous, 1); // 1 = NORMAL
 
-    // 2. Verify all 30 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table + 1 password_reset_tokens table)
+    // 2. Verify all 37 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table + 1 password_reset_tokens table + 7 v4.1 inventory tables)
     let table_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%';"
     )
@@ -51,8 +51,8 @@ async fn test_pool_pragmas_and_migration_execution() {
     .expect("Failed to query tables");
 
     assert_eq!(
-        table_count, 30,
-        "Expected 30 domain tables after v4.1 core foundation, accounting, invoicing, outbox, and password reset token migrations"
+        table_count, 37,
+        "Expected 37 domain tables after v4.1 core foundation, accounting, invoicing, outbox, password reset token, and inventory management migrations"
     );
 
     // 3. Verify mandatory composite and acceleration indexes
@@ -103,6 +103,28 @@ async fn test_pool_pragmas_and_migration_execution() {
         "idx_outbox_events_tenant_created",
         "idx_outbox_events_aggregate",
         "idx_outbox_events_tenant_status",
+        // v4.1 Inventory additions:
+        "idx_warehouses_tenant",
+        "idx_warehouses_tenant_code",
+        "idx_products_tenant",
+        "idx_products_tenant_sku",
+        "idx_stock_items_tenant",
+        "idx_stock_items_lookup",
+        "idx_stock_items_product",
+        "idx_stock_items_warehouse",
+        "idx_stock_movements_tenant",
+        "idx_stock_movements_product",
+        "idx_stock_movements_created",
+        "idx_stock_movements_ref",
+        "idx_purchase_orders_tenant",
+        "idx_purchase_orders_number",
+        "idx_purchase_orders_status",
+        "idx_purchase_order_items_po",
+        "idx_purchase_order_items_tenant",
+        "idx_purchase_order_items_product",
+        "idx_stock_adjustments_tenant",
+        "idx_stock_adjustments_number",
+        "idx_stock_adjustments_wh_prod",
     ];
 
     for idx_name in required_indexes {
@@ -859,3 +881,197 @@ async fn test_migration_0003_v3_1_0_schema_upgrade() {
             .expect("Failed to fetch sync_cursor");
     assert_eq!(last_cursor, 42);
 }
+
+#[tokio::test]
+async fn test_v4_1_inventory_persistence_foundation_and_triggers() {
+    let (pool, _dir) = setup_test_db().await;
+
+    let tenant_id = "tenant_m1_test";
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, status, is_personal, created_at, updated_at) VALUES (?1, 'Tenant M1', 'tenant-m1', 'ACTIVE', 0, '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert tenant");
+
+    // 1. Warehouse insertion and uniqueness
+    let wh_id = "wh_1";
+    sqlx::query(
+        "INSERT INTO warehouses (id, tenant_id, code, name, address, is_default, created_at, updated_at) VALUES (?1, ?2, 'WH-01', 'Gudang Utama', 'Jakarta', 1, '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(wh_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert warehouse");
+
+    let err_wh_dup = sqlx::query(
+        "INSERT INTO warehouses (id, tenant_id, code, name, address, is_default, created_at, updated_at) VALUES ('wh_dup', ?1, 'WH-01', 'Gudang Lain', NULL, 0, '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap_err();
+    assert!(
+        err_wh_dup.to_string().to_lowercase().contains("unique"),
+        "Expected unique constraint error on warehouse code"
+    );
+
+    // 2. Product insertion and uniqueness
+    let prod_id = "prod_1";
+    sqlx::query(
+        "INSERT INTO products (id, tenant_id, sku, name, unit, cost_price, sale_price, reorder_threshold, is_active, created_at, updated_at) VALUES (?1, ?2, 'SKU-000001', 'Indomie Goreng', 'PCS', 2500, 3500, 10, 1, '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(prod_id)
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert product");
+
+    let err_prod_dup = sqlx::query(
+        "INSERT INTO products (id, tenant_id, sku, name, unit, cost_price, sale_price, reorder_threshold, is_active, created_at, updated_at) VALUES ('prod_dup', ?1, 'SKU-000001', 'Indomie Kari', 'PCS', 2500, 3500, 10, 1, '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(tenant_id)
+    .execute(&pool)
+    .await
+    .unwrap_err();
+    assert!(
+        err_prod_dup.to_string().to_lowercase().contains("unique"),
+        "Expected unique constraint error on product sku"
+    );
+
+    // 3. Stock item insertion and negative balance check
+    let stock_id = "stock_1";
+    sqlx::query(
+        "INSERT INTO stock_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved, reorder_threshold, bin_location, average_cost, updated_at) VALUES (?1, ?2, ?3, ?4, 100, 0, 10, 'A-01', 2500, '2026-10-01T00:00:00Z')",
+    )
+    .bind(stock_id)
+    .bind(tenant_id)
+    .bind(wh_id)
+    .bind(prod_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert stock item");
+
+    let err_neg_stock = sqlx::query(
+        "UPDATE stock_items SET quantity_on_hand = -5 WHERE id = ?1",
+    )
+    .bind(stock_id)
+    .execute(&pool)
+    .await
+    .unwrap_err();
+    assert!(
+        err_neg_stock.to_string().to_lowercase().contains("check"),
+        "Expected check constraint error on negative stock"
+    );
+
+    // 4. Stock movement insertion and immutability triggers
+    let mov_id = "mov_1";
+    sqlx::query(
+        "INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, source_warehouse_id, destination_warehouse_id, quantity, unit_cost, reference_type, reference_id, batch_number, notes, created_at, actor_id) VALUES (?1, ?2, 'INBOUND', ?3, NULL, ?4, 50, 2500, 'PO', 'po_1', 'BATCH-001', 'Initial receipt', '2026-10-01T00:00:00Z', 'actor_1')",
+    )
+    .bind(mov_id)
+    .bind(tenant_id)
+    .bind(prod_id)
+    .bind(wh_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert stock movement");
+
+    let err_mov_upd = sqlx::query("UPDATE stock_movements SET quantity = 100 WHERE id = ?1")
+        .bind(mov_id)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    assert!(
+        err_mov_upd.to_string().to_lowercase().contains("immutable"),
+        "Expected immutability trigger abort on movement update"
+    );
+
+    let err_mov_del = sqlx::query("DELETE FROM stock_movements WHERE id = ?1")
+        .bind(mov_id)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    assert!(
+        err_mov_del.to_string().to_lowercase().contains("immutable"),
+        "Expected immutability trigger abort on movement delete"
+    );
+
+    // 5. Purchase Order and Line Items
+    let po_id = "po_1";
+    sqlx::query(
+        "INSERT INTO purchase_orders (id, tenant_id, po_number, supplier_name, destination_warehouse_id, status, total_amount, notes, created_at, updated_at) VALUES (?1, ?2, 'PO-2026-000001', 'PT Supplier Sukses', ?3, 'DRAFT', 250000, 'Test PO', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+    )
+    .bind(po_id)
+    .bind(tenant_id)
+    .bind(wh_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert purchase order");
+
+    let po_item_id = "poi_1";
+    sqlx::query(
+        "INSERT INTO purchase_order_items (id, tenant_id, purchase_order_id, product_id, quantity_ordered, quantity_received, unit_cost, total_cost) VALUES (?1, ?2, ?3, ?4, 100, 0, 2500, 250000)",
+    )
+    .bind(po_item_id)
+    .bind(tenant_id)
+    .bind(po_id)
+    .bind(prod_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert purchase order item");
+
+    // 6. Stock Adjustment insertion and immutability triggers
+    let adj_id = "adj_1";
+    sqlx::query(
+        "INSERT INTO stock_adjustments (id, tenant_id, adjustment_number, warehouse_id, product_id, variance_quantity, previous_quantity, new_quantity, reason, journal_entry_id, created_at, actor_id) VALUES (?1, ?2, 'ADJ-2026-000001', ?3, ?4, -2, 100, 98, 'Broken items', NULL, '2026-10-01T00:00:00Z', 'actor_1')",
+    )
+    .bind(adj_id)
+    .bind(tenant_id)
+    .bind(wh_id)
+    .bind(prod_id)
+    .execute(&pool)
+    .await
+    .expect("Failed to insert stock adjustment");
+
+    let err_adj_upd = sqlx::query("UPDATE stock_adjustments SET variance_quantity = -5 WHERE id = ?1")
+        .bind(adj_id)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    assert!(
+        err_adj_upd.to_string().to_lowercase().contains("immutable"),
+        "Expected immutability trigger abort on adjustment update"
+    );
+
+    let err_adj_del = sqlx::query("DELETE FROM stock_adjustments WHERE id = ?1")
+        .bind(adj_id)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    assert!(
+        err_adj_del.to_string().to_lowercase().contains("immutable"),
+        "Expected immutability trigger abort on adjustment delete"
+    );
+
+    // 7. Canonical Account 1300 Seeding
+    let mut tx = pool.begin().await.expect("Failed to start transaction");
+    backend::repository::SqlxAccountingRepository::seed_default_accounts_tx(&mut tx, tenant_id)
+        .await
+        .expect("Failed to seed default accounts");
+    tx.commit().await.expect("Failed to commit transaction");
+
+    let (acc_1300_name, is_sys): (String, i64) = sqlx::query_as(
+        "SELECT name, is_system FROM chart_of_accounts WHERE tenant_id = ?1 AND code = '1300'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to query account 1300");
+
+    assert_eq!(acc_1300_name, "Persediaan Barang Dagang");
+    assert_eq!(is_sys, 1);
+}
+

@@ -250,4 +250,115 @@ export const api = {
       method: 'POST',
     }),
   getTenantCapabilities: (id) => request(`/api/v1/tenants/${id}/capabilities`),
+
+  // Warehouses (v4.1 Features 1, 22)
+  getWarehouses: () => request('/api/v1/warehouses'),
+  createWarehouse: (data) =>
+    request('/api/v1/warehouses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getWarehouse: (id) => request(`/api/v1/warehouses/${id}`),
+
+  // Products & SKU Engine (v4.1 Features 2, 22)
+  getProducts: () => request('/api/v1/products'),
+  createProduct: (data) =>
+    request('/api/v1/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getProduct: (id) => request(`/api/v1/products/${id}`),
+
+  // Multi-Location Inventory & Movements (v4.1 Features 3, 4, 5, 6, 8, 9, 17, 23)
+  getStockItems: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.warehouse_id) query.set('warehouse_id', params.warehouse_id);
+    if (params.product_id) query.set('product_id', params.product_id);
+    if (params.low_stock !== undefined) query.set('low_stock', params.low_stock);
+    const queryString = query.toString();
+    return request(`/api/v1/inventory${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getStockMovements: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.warehouse_id) query.set('warehouse_id', params.warehouse_id);
+    if (params.product_id) query.set('product_id', params.product_id);
+    if (params.limit) query.set('limit', params.limit);
+    if (params.offset) query.set('offset', params.offset);
+    const queryString = query.toString();
+    return request(`/api/v1/inventory/movements${queryString ? `?${queryString}` : ''}`);
+  },
+
+  createStockMovement: (data) => {
+    const idempotencyKey = data.idempotency_key || generateUUID();
+    return request('/api/v1/inventory/movements', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    });
+  },
+
+  transferStock: (data) => {
+    const idempotencyKey = data.idempotency_key || generateUUID();
+    return request('/api/v1/inventory/transfer', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    });
+  },
+
+  adjustStock: (data) => {
+    const idempotencyKey = data.idempotency_key || generateUUID();
+    return request('/api/v1/inventory/adjust', {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    });
+  },
+
+  // Purchase Orders & Goods Receipt (v4.1 Features 10, 11, 12, 13, 14, 23)
+  getPurchaseOrders: () => request('/api/v1/purchase-orders'),
+  createPurchaseOrder: (data) =>
+    request('/api/v1/purchase-orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getPurchaseOrder: (id) => request(`/api/v1/purchase-orders/${id}`),
+  orderPurchaseOrder: (id) =>
+    request(`/api/v1/purchase-orders/${id}/order`, {
+      method: 'POST',
+    }),
+  receivePurchaseOrder: (id, data = {}) => {
+    const idempotencyKey = data.idempotency_key || generateUUID();
+    return request(`/api/v1/purchase-orders/${id}/receive`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    });
+  },
+  cancelPurchaseOrder: (id, data = {}) =>
+    request(`/api/v1/purchase-orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

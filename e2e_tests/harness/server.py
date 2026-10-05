@@ -407,6 +407,121 @@ def init_db():
             FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
         );
 
+        -- Phase 2 Inventory & Multi-Location Stock Management Tables (§10, §27)
+        CREATE TABLE IF NOT EXISTS warehouses (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            address TEXT,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            UNIQUE(tenant_id, code)
+        );
+
+        CREATE TABLE IF NOT EXISTS products (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            name TEXT NOT NULL,
+            unit TEXT NOT NULL DEFAULT 'pcs',
+            cost_price INTEGER NOT NULL DEFAULT 0,
+            sale_price INTEGER NOT NULL DEFAULT 0,
+            reorder_threshold INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            UNIQUE(tenant_id, sku)
+        );
+
+        CREATE TABLE IF NOT EXISTS stock_items (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            warehouse_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            quantity_on_hand INTEGER NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
+            quantity_reserved INTEGER NOT NULL DEFAULT 0,
+            reorder_threshold INTEGER NOT NULL DEFAULT 0,
+            bin_location TEXT,
+            average_cost INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            UNIQUE(tenant_id, warehouse_id, product_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS stock_movements (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            movement_type TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            source_warehouse_id TEXT,
+            destination_warehouse_id TEXT,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            unit_cost INTEGER,
+            reference_type TEXT,
+            reference_id TEXT,
+            batch_number TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_warehouse_id) REFERENCES warehouses(id) ON DELETE SET NULL,
+            FOREIGN KEY (destination_warehouse_id) REFERENCES warehouses(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            po_number TEXT NOT NULL,
+            supplier_name TEXT NOT NULL,
+            destination_warehouse_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'DRAFT',
+            total_amount INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (destination_warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+            UNIQUE(tenant_id, po_number)
+        );
+
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            purchase_order_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
+            quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0),
+            unit_cost INTEGER NOT NULL CHECK (unit_cost >= 0),
+            total_cost INTEGER NOT NULL CHECK (total_cost >= 0),
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS stock_adjustments (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            adjustment_number TEXT NOT NULL,
+            warehouse_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            previous_quantity INTEGER NOT NULL,
+            actual_quantity INTEGER NOT NULL CHECK (actual_quantity >= 0),
+            variance INTEGER NOT NULL,
+            reason TEXT,
+            journal_entry_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE SET NULL,
+            UNIQUE(tenant_id, adjustment_number)
+        );
+
         -- Mandatory Canonical Composite Indexes (§16)
         CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date);
         CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
@@ -424,6 +539,38 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_receivables_tenant ON receivables(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_outbox_tenant_status ON outbox_events(tenant_id, status);
+        CREATE INDEX IF NOT EXISTS idx_warehouses_tenant ON warehouses(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_stock_items_tenant ON stock_items(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_stock_movements_tenant ON stock_movements(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_pos_tenant ON purchase_orders(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(purchase_order_id);
+        CREATE INDEX IF NOT EXISTS idx_stock_adj_tenant ON stock_adjustments(tenant_id);
+
+        -- Triggers preventing UPDATE/DELETE on immutable audit tables (§72)
+        CREATE TRIGGER IF NOT EXISTS trg_stock_movements_prevent_update
+        BEFORE UPDATE ON stock_movements
+        BEGIN
+            SELECT RAISE(ABORT, 'Stock movements are immutable audit records');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_stock_movements_prevent_delete
+        BEFORE DELETE ON stock_movements
+        BEGIN
+            SELECT RAISE(ABORT, 'Stock movements cannot be deleted');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_stock_adjustments_prevent_update
+        BEFORE UPDATE ON stock_adjustments
+        BEGIN
+            SELECT RAISE(ABORT, 'Stock adjustments are immutable audit records');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_stock_adjustments_prevent_delete
+        BEFORE DELETE ON stock_adjustments
+        BEGIN
+            SELECT RAISE(ABORT, 'Stock adjustments cannot be deleted');
+        END;
         """)
 
 def seed_chart_of_accounts(conn, tenant_id: str, created_at: str):
@@ -431,6 +578,7 @@ def seed_chart_of_accounts(conn, tenant_id: str, created_at: str):
         ("1000", "Kas", "asset", 1),
         ("1100", "Bank", "asset", 1),
         ("1200", "Piutang Usaha", "asset", 1),
+        ("1300", "Persediaan", "asset", 1),
         ("2000", "Utang Usaha", "liability", 1),
         ("2100", "Utang Pajak (PPN/PPh)", "liability", 1),
         ("4000", "Pendapatan Usaha", "income", 1),
@@ -684,6 +832,33 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                 c.commit()
         return evt_id
 
+    def post_balanced_journal(self, tenant_id: str, description: str, source_type: str, source_id: str, lines: List[Dict[str, Any]], conn = None) -> str:
+        j_id = str(uuid.uuid4())
+        now_iso = utc_now_iso()
+        def _execute(c):
+            cur_c = c.execute("SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?", (tenant_id,))
+            seq = cur_c.fetchone()[0] + 1
+            entry_number = f"JRN-{datetime.now(timezone.utc).year}-{seq:06d}"
+            c.execute(
+                """
+                INSERT INTO journal_entries (id, tenant_id, entry_number, entry_date, description, source_type, source_id, status, is_reversed, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'POSTED', 0, ?)
+                """,
+                (j_id, tenant_id, entry_number, now_iso, description, source_type, source_id, now_iso)
+            )
+            for l in lines:
+                c.execute(
+                    "INSERT INTO journal_lines (id, journal_id, tenant_id, account_code, debit, credit, memo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (str(uuid.uuid4()), j_id, tenant_id, l["account_code"], l["debit"], l["credit"], l.get("memo"))
+                )
+        if conn is not None:
+            _execute(conn)
+        else:
+            with get_db() as c:
+                _execute(c)
+                c.commit()
+        return j_id
+
     def read_json_body(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -915,14 +1090,14 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                     return
                 b_type = row["business_type"] or "general"
                 cap_map = {
-                    "general": ["invoicing", "accounting", "receivables", "reports"],
-                    "retail": ["pos", "inventory", "invoicing", "accounting", "receivables", "reports"],
-                    "fnb": ["pos", "tables", "kitchen", "inventory", "accounting", "reports"],
-                    "rental": ["inventory", "bookings", "invoicing", "receivables", "accounting"],
+                    "general": ["inventory", "purchasing", "invoicing", "accounting", "receivables", "reports"],
+                    "retail": ["pos", "inventory", "purchasing", "invoicing", "accounting", "receivables", "reports"],
+                    "fnb": ["pos", "tables", "kitchen", "inventory", "purchasing", "accounting", "reports"],
+                    "rental": ["inventory", "purchasing", "bookings", "invoicing", "receivables", "accounting"],
                     "contractor": ["projects", "milestones", "invoicing", "receivables", "accounting"],
                     "personal": ["accounts", "transactions", "budgets", "analytics"]
                 }
-                caps = cap_map.get(b_type, ["invoicing", "accounting", "receivables", "reports"])
+                caps = cap_map.get(b_type, ["inventory", "purchasing", "invoicing", "accounting", "receivables", "reports"])
                 self.send_json(200, {
                     "tenant_id": t_id,
                     "business_type": b_type,
@@ -1150,6 +1325,143 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                         ed["payload"] = ed["payload_json"]
                     evts.append(ed)
                 self.send_json(200, {"events": evts, "count": len(evts)})
+            return
+
+        # =====================================================================
+        # Phase 2 Inventory & Multi-Location Stock Management GET Endpoints
+        # =====================================================================
+        if path == "/api/v1/warehouses":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM warehouses WHERE tenant_id = ? ORDER BY created_at ASC", (tenant_id,))
+                whs = [dict(r) for r in cur.fetchall()]
+                for w in whs:
+                    w["is_default"] = bool(w["is_default"])
+                self.send_json(200, {"warehouses": whs, "count": len(whs)})
+            return
+
+        if re.match(r"^/api/v1/warehouses/[^/]+$", path):
+            wh_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM warehouses WHERE id = ? AND tenant_id = ?", (wh_id, tenant_id))
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", f"Warehouse '{wh_id}' not found", "NOT_FOUND")
+                    return
+                wd = dict(row)
+                wd["is_default"] = bool(wd["is_default"])
+                self.send_json(200, wd)
+            return
+
+        if path == "/api/v1/products":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM products WHERE tenant_id = ? ORDER BY created_at ASC", (tenant_id,))
+                prods = [dict(r) for r in cur.fetchall()]
+                for p in prods:
+                    p["is_active"] = bool(p["is_active"])
+                self.send_json(200, {"products": prods, "count": len(prods)})
+            return
+
+        if re.match(r"^/api/v1/products/[^/]+$", path):
+            prod_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM products WHERE id = ? AND tenant_id = ?", (prod_id, tenant_id))
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", f"Product '{prod_id}' not found", "NOT_FOUND")
+                    return
+                pd = dict(row)
+                pd["is_active"] = bool(pd["is_active"])
+                self.send_json(200, pd)
+            return
+
+        if path == "/api/v1/inventory":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            wh_filter = qs.get("warehouse_id", [None])[0]
+            prod_filter = qs.get("product_id", [None])[0]
+            low_stock_filter = qs.get("low_stock", ["false"])[0].lower() in ["true", "1"]
+
+            query = """
+                SELECT si.*, p.name as product_name, p.sku as product_sku, p.unit as product_unit,
+                       w.name as warehouse_name, w.code as warehouse_code
+                FROM stock_items si
+                JOIN products p ON p.id = si.product_id
+                JOIN warehouses w ON w.id = si.warehouse_id
+                WHERE si.tenant_id = ?
+            """
+            params: List[Any] = [tenant_id]
+            if wh_filter:
+                query += " AND si.warehouse_id = ?"
+                params.append(wh_filter)
+            if prod_filter:
+                query += " AND si.product_id = ?"
+                params.append(prod_filter)
+
+            query += " ORDER BY si.updated_at DESC"
+            with get_db() as conn:
+                cur = conn.execute(query, params)
+                items = []
+                for r in cur.fetchall():
+                    item = dict(r)
+                    q_on_hand = item["quantity_on_hand"]
+                    thresh = item["reorder_threshold"]
+                    item["is_low_stock"] = (q_on_hand <= thresh)
+                    if low_stock_filter and not item["is_low_stock"]:
+                        continue
+                    items.append(item)
+                self.send_json(200, {"stock_items": items, "count": len(items)})
+            return
+
+        if path == "/api/v1/purchase-orders":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM purchase_orders WHERE tenant_id = ? ORDER BY created_at DESC", (tenant_id,))
+                pos = []
+                for r in cur.fetchall():
+                    po_dict = dict(r)
+                    cur_it = conn.execute("SELECT * FROM purchase_order_items WHERE purchase_order_id = ? ORDER BY created_at ASC", (po_dict["id"],))
+                    po_dict["items"] = [dict(it) for it in cur_it.fetchall()]
+                    pos.append(po_dict)
+                self.send_json(200, {"purchase_orders": pos, "count": len(pos)})
+            return
+
+        if re.match(r"^/api/v1/purchase-orders/[^/]+$", path):
+            po_id = path.split("/")[-1]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?", (po_id, tenant_id))
+                row = cur.fetchone()
+                if not row:
+                    self.send_rfc7807(404, "Not Found", f"Purchase order '{po_id}' not found", "NOT_FOUND")
+                    return
+                po_dict = dict(row)
+                cur_it = conn.execute("SELECT * FROM purchase_order_items WHERE purchase_order_id = ? ORDER BY created_at ASC", (po_id,))
+                po_dict["items"] = [dict(it) for it in cur_it.fetchall()]
+                self.send_json(200, po_dict)
             return
 
         # 1. Auth Me
@@ -2433,6 +2745,732 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
                     })
                     return
 
+        # =====================================================================
+        # Phase 2 Inventory & Multi-Location Stock Management POST Endpoints
+        # =====================================================================
+        if path == "/api/v1/warehouses":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "code" not in body or "name" not in body or not str(body.get("code", "")).strip() or not str(body.get("name", "")).strip():
+                self.send_rfc7807(400, "Bad Request", "Warehouse code and name are required", "MISSING_REQUIRED_FIELDS")
+                return
+            code = str(body["code"]).strip()
+            name = str(body["name"]).strip()
+            address = body.get("address")
+            is_def = 1 if body.get("is_default") else 0
+            now_iso = utc_now_iso()
+            wh_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT id FROM warehouses WHERE tenant_id = ? AND code = ?", (tenant_id, code))
+                if cur.fetchone():
+                    self.send_rfc7807(409, "Conflict", f"Warehouse with code '{code}' already exists", "DUPLICATE_WAREHOUSE_CODE")
+                    return
+                if is_def == 1:
+                    conn.execute("UPDATE warehouses SET is_default = 0 WHERE tenant_id = ?", (tenant_id,))
+                conn.execute(
+                    """
+                    INSERT INTO warehouses (id, tenant_id, code, name, address, is_default, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (wh_id, tenant_id, code, name, address, is_def, now_iso)
+                )
+                conn.commit()
+            self.send_json(201, {
+                "id": wh_id,
+                "tenant_id": tenant_id,
+                "code": code,
+                "name": name,
+                "address": address,
+                "is_default": bool(is_def),
+                "created_at": now_iso
+            })
+            return
+
+        if path == "/api/v1/products":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "name" not in body or not str(body.get("name", "")).strip():
+                self.send_rfc7807(400, "Bad Request", "Product name is required", "MISSING_REQUIRED_FIELDS")
+                return
+            name = str(body["name"]).strip()
+            unit = str(body.get("unit", "pcs")).strip()
+            cost_price = body.get("cost_price", 0)
+            sale_price = body.get("sale_price", 0)
+            reorder_threshold = body.get("reorder_threshold", 0)
+            if not isinstance(cost_price, int) or cost_price < 0 or not isinstance(sale_price, int) or sale_price <= 0:
+                self.send_rfc7807(400, "Bad Request", "Sale price must be a positive integer Rupiah and cost price non-negative", "INVALID_PRICE")
+                return
+            if not isinstance(reorder_threshold, int) or reorder_threshold < 0:
+                self.send_rfc7807(400, "Bad Request", "Reorder threshold must be non-negative integer", "INVALID_THRESHOLD")
+                return
+
+            sku_input = body.get("sku")
+            now_iso = utc_now_iso()
+            prod_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                if sku_input and str(sku_input).strip():
+                    sku = str(sku_input).strip()
+                    cur = conn.execute("SELECT id FROM products WHERE tenant_id = ? AND sku = ?", (tenant_id, sku))
+                    if cur.fetchone():
+                        self.send_rfc7807(409, "Conflict", f"Product with SKU '{sku}' already exists", "DUPLICATE_SKU")
+                        return
+                else:
+                    cur_c = conn.execute("SELECT COUNT(*) FROM products WHERE tenant_id = ?", (tenant_id,))
+                    seq = cur_c.fetchone()[0] + 1
+                    sku = f"SKU-{seq:06d}"
+
+                conn.execute(
+                    """
+                    INSERT INTO products (id, tenant_id, sku, name, unit, cost_price, sale_price, reorder_threshold, is_active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    """,
+                    (prod_id, tenant_id, sku, name, unit, cost_price, sale_price, reorder_threshold, now_iso)
+                )
+                conn.commit()
+
+            self.send_json(201, {
+                "id": prod_id,
+                "tenant_id": tenant_id,
+                "sku": sku,
+                "name": name,
+                "unit": unit,
+                "cost_price": cost_price,
+                "sale_price": sale_price,
+                "reorder_threshold": reorder_threshold,
+                "is_active": True,
+                "created_at": now_iso
+            })
+            return
+
+        if path == "/api/v1/inventory/movements":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "movement_type" not in body or "product_id" not in body or "quantity" not in body:
+                self.send_rfc7807(400, "Bad Request", "movement_type, product_id, and quantity are required", "MISSING_REQUIRED_FIELDS")
+                return
+
+            m_type = str(body["movement_type"]).upper()
+            prod_id = body["product_id"]
+            raw_qty = body["quantity"]
+            if not isinstance(raw_qty, int) or raw_qty <= 0:
+                self.send_rfc7807(400, "Bad Request", "Quantity must be a positive integer", "INVALID_QUANTITY")
+                return
+
+            src_wh = body.get("source_warehouse_id")
+            dst_wh = body.get("destination_warehouse_id")
+            unit_cost = body.get("unit_cost")
+            notes = body.get("notes")
+            batch_num = body.get("batch_number")
+            now_iso = utc_now_iso()
+            mov_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur_p = conn.execute("SELECT * FROM products WHERE id = ? AND tenant_id = ?", (prod_id, tenant_id))
+                product = cur_p.fetchone()
+                if not product:
+                    self.send_rfc7807(404, "Not Found", f"Product '{prod_id}' not found", "NOT_FOUND")
+                    return
+
+                if src_wh:
+                    cur_sw = conn.execute("SELECT id FROM warehouses WHERE id = ? AND tenant_id = ?", (src_wh, tenant_id))
+                    if not cur_sw.fetchone():
+                        self.send_rfc7807(404, "Not Found", f"Source warehouse '{src_wh}' not found", "NOT_FOUND")
+                        return
+
+                if dst_wh:
+                    cur_dw = conn.execute("SELECT id FROM warehouses WHERE id = ? AND tenant_id = ?", (dst_wh, tenant_id))
+                    if not cur_dw.fetchone():
+                        self.send_rfc7807(404, "Not Found", f"Destination warehouse '{dst_wh}' not found", "NOT_FOUND")
+                        return
+
+                if m_type == "OUTBOUND":
+                    if not src_wh:
+                        self.send_rfc7807(400, "Bad Request", "Source warehouse required for OUTBOUND", "MISSING_SOURCE_WAREHOUSE")
+                        return
+                    cur_si = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, src_wh, prod_id))
+                    stock_item = cur_si.fetchone()
+                    current_on_hand = stock_item["quantity_on_hand"] if stock_item else 0
+                    if current_on_hand < raw_qty:
+                        self.send_rfc7807(422, "Unprocessable Entity", f"Insufficient stock: requested {raw_qty}, available {current_on_hand}", "INSUFFICIENT_STOCK")
+                        return
+
+                    new_q = current_on_hand - raw_qty
+                    conn.execute("UPDATE stock_items SET quantity_on_hand = ?, updated_at = ? WHERE id = ?", (new_q, now_iso, stock_item["id"]))
+                    effective_cost = stock_item["average_cost"] if stock_item and stock_item["average_cost"] > 0 else (unit_cost or product["cost_price"])
+                    conn.execute(
+                        """
+                        INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, source_warehouse_id, quantity, unit_cost, reference_type, notes, batch_number, created_at)
+                        VALUES (?, ?, 'OUTBOUND', ?, ?, ?, ?, 'DIRECT_MUTATION', ?, ?, ?)
+                        """,
+                        (mov_id, tenant_id, prod_id, src_wh, raw_qty, effective_cost, notes, batch_num, now_iso)
+                    )
+                    cogs_val = raw_qty * effective_cost
+                    if cogs_val > 0:
+                        self.post_balanced_journal(
+                            tenant_id, f"Fulfillment Beban Pokok Penjualan ({product['name']})", "INVENTORY_OUTBOUND", mov_id,
+                            [
+                                {"account_code": "5000", "debit": cogs_val, "credit": 0, "memo": "Beban Pokok Penjualan"},
+                                {"account_code": "1300", "debit": 0, "credit": cogs_val, "memo": "Persediaan Barang Dagang"}
+                            ],
+                            conn=conn
+                        )
+                    self.post_outbox_event(tenant_id, "StockDeducted", "Inventory", mov_id, {"movement_id": mov_id, "product_id": prod_id, "warehouse_id": src_wh, "quantity": raw_qty}, conn=conn)
+                    conn.commit()
+                    self.send_json(201, {"id": mov_id, "movement_type": "OUTBOUND", "product_id": prod_id, "quantity": raw_qty, "remaining_stock": new_q, "created_at": now_iso})
+                    return
+
+                elif m_type == "INBOUND":
+                    if not dst_wh:
+                        self.send_rfc7807(400, "Bad Request", "Destination warehouse required for INBOUND", "MISSING_DESTINATION_WAREHOUSE")
+                        return
+                    cur_si = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, dst_wh, prod_id))
+                    stock_item = cur_si.fetchone()
+                    effective_cost = unit_cost if unit_cost is not None else product["cost_price"]
+                    if stock_item:
+                        prev_q = stock_item["quantity_on_hand"]
+                        prev_wac = stock_item["average_cost"]
+                        new_q = prev_q + raw_qty
+                        new_wac = ((prev_q * prev_wac) + (raw_qty * effective_cost)) // new_q if new_q > 0 else effective_cost
+                        conn.execute("UPDATE stock_items SET quantity_on_hand = ?, average_cost = ?, updated_at = ? WHERE id = ?", (new_q, new_wac, now_iso, stock_item["id"]))
+                    else:
+                        new_q = raw_qty
+                        new_wac = effective_cost
+                        conn.execute(
+                            """
+                            INSERT INTO stock_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved, reorder_threshold, average_cost, updated_at)
+                            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                            """,
+                            (str(uuid.uuid4()), tenant_id, dst_wh, prod_id, new_q, product["reorder_threshold"], new_wac, now_iso)
+                        )
+                    conn.execute(
+                        """
+                        INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, destination_warehouse_id, quantity, unit_cost, reference_type, notes, batch_number, created_at)
+                        VALUES (?, ?, 'INBOUND', ?, ?, ?, ?, 'DIRECT_MUTATION', ?, ?, ?)
+                        """,
+                        (mov_id, tenant_id, prod_id, dst_wh, raw_qty, effective_cost, notes, batch_num, now_iso)
+                    )
+                    rcv_val = raw_qty * effective_cost
+                    if rcv_val > 0:
+                        self.post_balanced_journal(
+                            tenant_id, f"Inbound Stock Receipt ({product['name']})", "INVENTORY_INBOUND", mov_id,
+                            [
+                                {"account_code": "1300", "debit": rcv_val, "credit": 0, "memo": "Persediaan Barang Dagang"},
+                                {"account_code": "2000", "debit": 0, "credit": rcv_val, "memo": "Utang Usaha"}
+                            ],
+                            conn=conn
+                        )
+                    self.post_outbox_event(tenant_id, "StockReceived", "Inventory", mov_id, {"movement_id": mov_id, "product_id": prod_id, "warehouse_id": dst_wh, "quantity": raw_qty}, conn=conn)
+                    conn.commit()
+                    self.send_json(201, {"id": mov_id, "movement_type": "INBOUND", "product_id": prod_id, "quantity": raw_qty, "resulting_stock": new_q, "average_cost": new_wac, "created_at": now_iso})
+                    return
+                else:
+                    self.send_rfc7807(400, "Bad Request", f"Unsupported movement_type '{m_type}'", "INVALID_MOVEMENT_TYPE")
+                    return
+
+        if path == "/api/v1/inventory/transfer":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "source_warehouse_id" not in body or "destination_warehouse_id" not in body or "product_id" not in body or "quantity" not in body:
+                self.send_rfc7807(400, "Bad Request", "source_warehouse_id, destination_warehouse_id, product_id, and quantity are required", "MISSING_REQUIRED_FIELDS")
+                return
+
+            src_wh = body["source_warehouse_id"]
+            dst_wh = body["destination_warehouse_id"]
+            prod_id = body["product_id"]
+            raw_qty = body["quantity"]
+
+            if src_wh == dst_wh:
+                self.send_rfc7807(400, "Bad Request", "Source and destination warehouses cannot be the same", "SAME_WAREHOUSE_TRANSFER")
+                return
+            if not isinstance(raw_qty, int) or raw_qty <= 0:
+                self.send_rfc7807(400, "Bad Request", "Transfer quantity must be a positive integer", "INVALID_QUANTITY")
+                return
+
+            now_iso = utc_now_iso()
+            mov_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur_sw = conn.execute("SELECT id FROM warehouses WHERE id = ? AND tenant_id = ?", (src_wh, tenant_id))
+                if not cur_sw.fetchone():
+                    self.send_rfc7807(404, "Not Found", f"Source warehouse '{src_wh}' not found", "NOT_FOUND")
+                    return
+
+                cur_dw = conn.execute("SELECT id FROM warehouses WHERE id = ? AND tenant_id = ?", (dst_wh, tenant_id))
+                if not cur_dw.fetchone():
+                    self.send_rfc7807(404, "Not Found", f"Destination warehouse '{dst_wh}' not found", "NOT_FOUND")
+                    return
+
+                cur_p = conn.execute("SELECT id FROM products WHERE id = ? AND tenant_id = ?", (prod_id, tenant_id))
+                if not cur_p.fetchone():
+                    self.send_rfc7807(404, "Not Found", f"Product '{prod_id}' not found", "NOT_FOUND")
+                    return
+
+                cur_si = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, src_wh, prod_id))
+                src_item = cur_si.fetchone()
+                src_on_hand = src_item["quantity_on_hand"] if src_item else 0
+                if src_on_hand < raw_qty:
+                    self.send_rfc7807(422, "Unprocessable Entity", f"Insufficient source stock: requested {raw_qty}, available {src_on_hand}", "INSUFFICIENT_STOCK")
+                    return
+
+                new_src_q = src_on_hand - raw_qty
+                conn.execute("UPDATE stock_items SET quantity_on_hand = ?, updated_at = ? WHERE id = ?", (new_src_q, now_iso, src_item["id"]))
+
+                cur_dst = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, dst_wh, prod_id))
+                dst_item = cur_dst.fetchone()
+                if dst_item:
+                    new_dst_q = dst_item["quantity_on_hand"] + raw_qty
+                    conn.execute("UPDATE stock_items SET quantity_on_hand = ?, updated_at = ? WHERE id = ?", (new_dst_q, now_iso, dst_item["id"]))
+                else:
+                    new_dst_q = raw_qty
+                    cur_p = conn.execute("SELECT * FROM products WHERE id = ? AND tenant_id = ?", (prod_id, tenant_id))
+                    p_row = cur_p.fetchone()
+                    reorder_th = p_row["reorder_threshold"] if p_row else 0
+                    conn.execute(
+                        """
+                        INSERT INTO stock_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved, reorder_threshold, average_cost, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                        """,
+                        (str(uuid.uuid4()), tenant_id, dst_wh, prod_id, new_dst_q, reorder_th, src_item["average_cost"], now_iso)
+                    )
+
+                conn.execute(
+                    """
+                    INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, source_warehouse_id, destination_warehouse_id, quantity, unit_cost, reference_type, notes, created_at)
+                    VALUES (?, ?, 'TRANSFER', ?, ?, ?, ?, ?, 'TRANSFER', ?, ?)
+                    """,
+                    (mov_id, tenant_id, prod_id, src_wh, dst_wh, raw_qty, src_item["average_cost"], body.get("notes"), now_iso)
+                )
+
+                self.post_outbox_event(tenant_id, "StockTransferred", "Inventory", mov_id, {
+                    "movement_id": mov_id, "source_warehouse_id": src_wh, "destination_warehouse_id": dst_wh,
+                    "product_id": prod_id, "quantity": raw_qty
+                }, conn=conn)
+
+                conn.commit()
+
+            self.send_json(200, {
+                "movement_id": mov_id,
+                "source_warehouse_id": src_wh,
+                "destination_warehouse_id": dst_wh,
+                "product_id": prod_id,
+                "quantity": raw_qty,
+                "status": "COMPLETED",
+                "source_remaining": new_src_q,
+                "destination_total": new_dst_q,
+                "created_at": now_iso
+            })
+            return
+
+        if path == "/api/v1/inventory/adjust":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "warehouse_id" not in body or "product_id" not in body or "actual_quantity" not in body:
+                self.send_rfc7807(400, "Bad Request", "warehouse_id, product_id, and actual_quantity are required", "MISSING_REQUIRED_FIELDS")
+                return
+
+            wh_id = body["warehouse_id"]
+            prod_id = body["product_id"]
+            act_qty = body["actual_quantity"]
+            if not isinstance(act_qty, int) or act_qty < 0:
+                self.send_rfc7807(422, "Unprocessable Entity", "Actual stock quantity cannot be negative", "NEGATIVE_STOCK_PROHIBITED")
+                return
+
+            reason = body.get("reason", "Physical inventory count adjustment")
+            now_iso = utc_now_iso()
+            adj_id = str(uuid.uuid4())
+            mov_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur_wh = conn.execute("SELECT id FROM warehouses WHERE id = ? AND tenant_id = ?", (wh_id, tenant_id))
+                if not cur_wh.fetchone():
+                    self.send_rfc7807(404, "Not Found", f"Warehouse '{wh_id}' not found", "NOT_FOUND")
+                    return
+
+                cur_p = conn.execute("SELECT * FROM products WHERE id = ? AND tenant_id = ?", (prod_id, tenant_id))
+                prod = cur_p.fetchone()
+                if not prod:
+                    self.send_rfc7807(404, "Not Found", f"Product '{prod_id}' not found", "NOT_FOUND")
+                    return
+
+                cur_si = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, wh_id, prod_id))
+                stock_item = cur_si.fetchone()
+                prev_q = stock_item["quantity_on_hand"] if stock_item else 0
+                avg_cost = stock_item["average_cost"] if stock_item and stock_item["average_cost"] > 0 else prod["cost_price"]
+
+                variance = act_qty - prev_q
+                if stock_item:
+                    conn.execute("UPDATE stock_items SET quantity_on_hand = ?, updated_at = ? WHERE id = ?", (act_qty, now_iso, stock_item["id"]))
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO stock_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved, reorder_threshold, average_cost, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                        """,
+                        (str(uuid.uuid4()), tenant_id, wh_id, prod_id, act_qty, prod["reorder_threshold"], avg_cost, now_iso)
+                    )
+
+                cur_c = conn.execute("SELECT COUNT(*) FROM stock_adjustments WHERE tenant_id = ?", (tenant_id,))
+                seq = cur_c.fetchone()[0] + 1
+                adj_num = f"ADJ-{datetime.now(timezone.utc).year}-{seq:06d}"
+
+                j_id = None
+                if variance != 0 and avg_cost > 0:
+                    diff_val = abs(variance) * avg_cost
+                    if variance > 0:
+                        j_lines = [
+                            {"account_code": "1300", "debit": diff_val, "credit": 0, "memo": f"Penyesuaian Fisik Lebih {adj_num}"},
+                            {"account_code": "5000", "debit": 0, "credit": diff_val, "memo": "Penyesuaian Selisih Persediaan Lebih"}
+                        ]
+                    else:
+                        j_lines = [
+                            {"account_code": "5000", "debit": diff_val, "credit": 0, "memo": "Penyesuaian Selisih Persediaan Kurang"},
+                            {"account_code": "1300", "debit": 0, "credit": diff_val, "memo": f"Penyesuaian Fisik Kurang {adj_num}"}
+                        ]
+                    j_id = self.post_balanced_journal(tenant_id, f"Penyesuaian Stok Fisik {adj_num} ({prod['name']})", "STOCK_ADJUSTMENT", adj_id, j_lines, conn=conn)
+
+                conn.execute(
+                    """
+                    INSERT INTO stock_adjustments (id, tenant_id, adjustment_number, warehouse_id, product_id, previous_quantity, actual_quantity, variance, reason, journal_entry_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (adj_id, tenant_id, adj_num, wh_id, prod_id, prev_q, act_qty, variance, reason, j_id, now_iso)
+                )
+
+                conn.execute(
+                    """
+                    INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, destination_warehouse_id, quantity, unit_cost, reference_type, reference_id, notes, created_at)
+                    VALUES (?, ?, 'ADJUSTMENT', ?, ?, ?, ?, 'ADJUSTMENT', ?, ?, ?)
+                    """,
+                    (mov_id, tenant_id, prod_id, wh_id, abs(variance) if variance != 0 else 1, avg_cost, adj_id, reason, now_iso)
+                )
+
+                self.post_outbox_event(tenant_id, "StockAdjusted", "Inventory", adj_id, {
+                    "adjustment_id": adj_id, "adjustment_number": adj_num, "warehouse_id": wh_id,
+                    "product_id": prod_id, "previous_quantity": prev_q, "actual_quantity": act_qty, "variance": variance
+                }, conn=conn)
+
+                conn.commit()
+
+            self.send_json(200, {
+                "id": adj_id,
+                "adjustment_number": adj_num,
+                "warehouse_id": wh_id,
+                "product_id": prod_id,
+                "previous_quantity": prev_q,
+                "actual_quantity": act_qty,
+                "variance": variance,
+                "reason": reason,
+                "journal_entry_id": j_id,
+                "created_at": now_iso
+            })
+            return
+
+        if path == "/api/v1/purchase-orders":
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            if not body or "supplier_name" not in body or "destination_warehouse_id" not in body or "items" not in body:
+                self.send_rfc7807(400, "Bad Request", "supplier_name, destination_warehouse_id, and items are required", "MISSING_REQUIRED_FIELDS")
+                return
+
+            items = body.get("items", [])
+            if not items or not isinstance(items, list):
+                self.send_rfc7807(400, "Bad Request", "Purchase order requires at least one line item", "EMPTY_LINE_ITEMS")
+                return
+
+            for it in items:
+                q = it.get("quantity_ordered")
+                c = it.get("unit_cost")
+                if not isinstance(q, int) or q <= 0:
+                    self.send_rfc7807(400, "Bad Request", "quantity_ordered must be a positive integer", "INVALID_QUANTITY")
+                    return
+                if not isinstance(c, int) or c < 0:
+                    self.send_rfc7807(400, "Bad Request", "unit_cost must be non-negative integer", "INVALID_UNIT_COST")
+                    return
+
+            supp_name = str(body["supplier_name"]).strip()
+            dst_wh = body["destination_warehouse_id"]
+            notes = body.get("notes")
+            now_iso = utc_now_iso()
+            po_id = str(uuid.uuid4())
+
+            with get_db() as conn:
+                cur_c = conn.execute("SELECT COUNT(*) FROM purchase_orders WHERE tenant_id = ?", (tenant_id,))
+                seq = cur_c.fetchone()[0] + 1
+                po_num = f"PO-{datetime.now(timezone.utc).year}-{seq:06d}"
+                total_amt = sum(it["quantity_ordered"] * it["unit_cost"] for it in items)
+
+                conn.execute(
+                    """
+                    INSERT INTO purchase_orders (id, tenant_id, po_number, supplier_name, destination_warehouse_id, status, total_amount, notes, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
+                    """,
+                    (po_id, tenant_id, po_num, supp_name, dst_wh, total_amt, notes, now_iso, now_iso)
+                )
+
+                saved_items = []
+                for it in items:
+                    item_id = str(uuid.uuid4())
+                    subtot = it["quantity_ordered"] * it["unit_cost"]
+                    conn.execute(
+                        """
+                        INSERT INTO purchase_order_items (id, tenant_id, purchase_order_id, product_id, quantity_ordered, quantity_received, unit_cost, total_cost, created_at)
+                        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                        """,
+                        (item_id, tenant_id, po_id, it["product_id"], it["quantity_ordered"], it["unit_cost"], subtot, now_iso)
+                    )
+                    saved_items.append({
+                        "id": item_id,
+                        "purchase_order_id": po_id,
+                        "product_id": it["product_id"],
+                        "quantity_ordered": it["quantity_ordered"],
+                        "quantity_received": 0,
+                        "unit_cost": it["unit_cost"],
+                        "total_cost": subtot
+                    })
+
+                conn.commit()
+
+            self.send_json(201, {
+                "id": po_id,
+                "tenant_id": tenant_id,
+                "po_number": po_num,
+                "supplier_name": supp_name,
+                "destination_warehouse_id": dst_wh,
+                "status": "DRAFT",
+                "total_amount": total_amt,
+                "notes": notes,
+                "items": saved_items,
+                "created_at": now_iso,
+                "updated_at": now_iso
+            })
+            return
+
+        if re.match(r"^/api/v1/purchase-orders/[^/]+/order$", path):
+            po_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            now_iso = utc_now_iso()
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?", (po_id, tenant_id))
+                po_row = cur.fetchone()
+                if not po_row:
+                    self.send_rfc7807(404, "Not Found", f"Purchase order '{po_id}' not found", "NOT_FOUND")
+                    return
+                if po_row["status"] != "DRAFT":
+                    self.send_rfc7807(422, "Unprocessable Entity", f"Cannot order PO in status '{po_row['status']}'", "PO_NOT_DRAFT")
+                    return
+                conn.execute("UPDATE purchase_orders SET status = 'ORDERED', updated_at = ? WHERE id = ?", (now_iso, po_id))
+                conn.commit()
+            self.send_json(200, {"id": po_id, "status": "ORDERED", "updated_at": now_iso})
+            return
+
+        if re.match(r"^/api/v1/purchase-orders/[^/]+/receive$", path):
+            po_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+
+            idempotency_key = self.headers.get("Idempotency-Key")
+            if idempotency_key:
+                payload_hash = hashlib.sha256(raw_str.encode("utf-8")).hexdigest()
+                with get_db() as conn:
+                    cur = conn.execute("SELECT * FROM idempotency_keys WHERE user_id = ? AND key = ?", (user_id, idempotency_key))
+                    cached = cur.fetchone()
+                    if cached:
+                        cached_data = json.loads(cached["response_body"])
+                        self.send_json(cached["response_status"], cached_data, headers={"X-Cache-Replay": "true"})
+                        return
+
+            if not body or "items" not in body:
+                self.send_rfc7807(400, "Bad Request", "Items payload is required for goods receipt", "MISSING_REQUIRED_FIELDS")
+                return
+
+            rcv_items = body.get("items", [])
+            if not rcv_items or not isinstance(rcv_items, list):
+                self.send_rfc7807(400, "Bad Request", "Goods receipt requires at least one received item", "EMPTY_ITEMS")
+                return
+
+            now_iso = utc_now_iso()
+
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?", (po_id, tenant_id))
+                po_row = cur.fetchone()
+                if not po_row:
+                    self.send_rfc7807(404, "Not Found", f"Purchase order '{po_id}' not found", "NOT_FOUND")
+                    return
+                if po_row["status"] == "DRAFT":
+                    self.send_rfc7807(422, "Unprocessable Entity", "Cannot receive items on DRAFT purchase order; must be ORDERED", "PO_NOT_ORDERED")
+                    return
+                if po_row["status"] == "CANCELLED":
+                    self.send_rfc7807(422, "Unprocessable Entity", "Cannot receive items on CANCELLED purchase order", "PO_CANCELLED")
+                    return
+                if po_row["status"] == "RECEIVED":
+                    self.send_rfc7807(422, "Unprocessable Entity", "Purchase order has already been fully received", "PO_ALREADY_RECEIVED")
+                    return
+
+                cur_lines = conn.execute("SELECT * FROM purchase_order_items WHERE purchase_order_id = ? ORDER BY rowid ASC", (po_id,))
+                lines = [dict(row) for row in cur_lines.fetchall()]
+                po_prods = {l["product_id"] for l in lines}
+
+                for r_it in rcv_items:
+                    pid = r_it.get("product_id")
+                    q_rcv = r_it.get("quantity_received", 0)
+                    if not isinstance(q_rcv, int) or q_rcv <= 0:
+                        self.send_rfc7807(400, "Bad Request", "quantity_received must be a positive integer", "INVALID_QUANTITY")
+                        return
+                    if pid not in po_prods:
+                        self.send_rfc7807(422, "Unprocessable Entity", f"Product '{pid}' is not part of this purchase order", "INVALID_PRODUCT_LINE")
+                        return
+
+                # Cumulative requested vs remaining check
+                req_qty_by_prod = {}
+                for r_it in rcv_items:
+                    pid = r_it.get("product_id")
+                    req_qty_by_prod[pid] = req_qty_by_prod.get(pid, 0) + r_it.get("quantity_received", 0)
+
+                po_rem_by_prod = {}
+                for l in lines:
+                    pid = l["product_id"]
+                    rem = l["quantity_ordered"] - l["quantity_received"]
+                    po_rem_by_prod[pid] = po_rem_by_prod.get(pid, 0) + rem
+
+                for pid, total_req in req_qty_by_prod.items():
+                    remain = po_rem_by_prod.get(pid, 0)
+                    if total_req > remain:
+                        self.send_rfc7807(422, "Unprocessable Entity", f"Received quantity {total_req} exceeds remaining ordered quantity {remain}", "QUANTITY_EXCEEDS_ORDERED")
+                        return
+
+                total_receipt_value = 0
+                dst_wh = po_row["destination_warehouse_id"]
+
+                for r_it in rcv_items:
+                    pid = r_it["product_id"]
+                    q_rcv = r_it["quantity_received"]
+                    remaining_to_fill = q_rcv
+                    fallback_unit_cost = None
+                    for line in lines:
+                        if line["product_id"] == pid:
+                            if fallback_unit_cost is None:
+                                fallback_unit_cost = line["unit_cost"]
+                            rem = line["quantity_ordered"] - line["quantity_received"]
+                            if rem > 0 and remaining_to_fill > 0:
+                                alloc = min(remaining_to_fill, rem)
+                                line["quantity_received"] += alloc
+                                remaining_to_fill -= alloc
+                                conn.execute("UPDATE purchase_order_items SET quantity_received = ? WHERE id = ?", (line["quantity_received"], line["id"]))
+
+                    unit_c = r_it.get("unit_cost", fallback_unit_cost or 0)
+                    batch_n = r_it.get("batch_number", "BATCH-DEFAULT")
+                    line_val = q_rcv * unit_c
+                    total_receipt_value += line_val
+
+                    cur_si = conn.execute("SELECT * FROM stock_items WHERE tenant_id = ? AND warehouse_id = ? AND product_id = ?", (tenant_id, dst_wh, pid))
+                    si = cur_si.fetchone()
+                    if si:
+                        prev_q = si["quantity_on_hand"]
+                        prev_wac = si["average_cost"]
+                        new_q = prev_q + q_rcv
+                        new_wac = ((prev_q * prev_wac) + (q_rcv * unit_c)) // new_q if new_q > 0 else unit_c
+                        conn.execute("UPDATE stock_items SET quantity_on_hand = ?, average_cost = ?, updated_at = ? WHERE id = ?", (new_q, new_wac, now_iso, si["id"]))
+                    else:
+                        new_q = q_rcv
+                        new_wac = unit_c
+                        cur_p = conn.execute("SELECT * FROM products WHERE id = ? AND tenant_id = ?", (pid, tenant_id))
+                        p_row = cur_p.fetchone()
+                        reorder_th = p_row["reorder_threshold"] if p_row else 0
+                        conn.execute(
+                            """
+                            INSERT INTO stock_items (id, tenant_id, warehouse_id, product_id, quantity_on_hand, quantity_reserved, reorder_threshold, average_cost, updated_at)
+                            VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                            """,
+                            (str(uuid.uuid4()), tenant_id, dst_wh, pid, new_q, reorder_th, new_wac, now_iso)
+                        )
+
+                    conn.execute(
+                        """
+                        INSERT INTO stock_movements (id, tenant_id, movement_type, product_id, destination_warehouse_id, quantity, unit_cost, reference_type, reference_id, batch_number, created_at)
+                        VALUES (?, ?, 'INBOUND', ?, ?, ?, ?, 'PURCHASE_ORDER', ?, ?, ?)
+                        """,
+                        (str(uuid.uuid4()), tenant_id, pid, dst_wh, q_rcv, unit_c, po_id, batch_n, now_iso)
+                    )
+
+                j_id = None
+                if total_receipt_value > 0:
+                    j_id = self.post_balanced_journal(
+                        tenant_id, f"Penerimaan Barang Pesanan {po_row['po_number']}", "PURCHASE_ORDER_RECEIPT", po_id,
+                        [
+                            {"account_code": "1300", "debit": total_receipt_value, "credit": 0, "memo": f"Persediaan Masuk PO {po_row['po_number']}"},
+                            {"account_code": "2000", "debit": 0, "credit": total_receipt_value, "memo": f"Utang Usaha PO {po_row['po_number']}"}
+                        ],
+                        conn=conn
+                    )
+
+                self.post_outbox_event(tenant_id, "StockReceived", "PurchaseOrder", po_id, {
+                    "po_id": po_id, "po_number": po_row["po_number"], "total_receipt_value": total_receipt_value, "journal_id": j_id
+                }, conn=conn)
+
+                all_received = all(l["quantity_received"] >= l["quantity_ordered"] for l in lines)
+                new_status = "RECEIVED" if all_received else "PARTIALLY_RECEIVED"
+                conn.execute("UPDATE purchase_orders SET status = ?, updated_at = ? WHERE id = ?", (new_status, now_iso, po_id))
+
+                res_data = {
+                    "id": po_id,
+                    "po_number": po_row["po_number"],
+                    "status": new_status,
+                    "total_receipt_value": total_receipt_value,
+                    "journal_entry_id": j_id,
+                    "updated_at": now_iso
+                }
+
+                if idempotency_key:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO idempotency_keys (user_id, key, payload_hash, response_status, response_body, created_at) VALUES (?, ?, ?, 200, ?, ?)",
+                        (user_id, idempotency_key, payload_hash, json.dumps(res_data), now_iso)
+                    )
+
+                conn.commit()
+
+            self.send_json(200, res_data)
+            return
+
+        if re.match(r"^/api/v1/purchase-orders/[^/]+/cancel$", path):
+            po_id = path.split("/")[-2]
+            tenant_id, role, err = self.resolve_tenant_context(user_id, path)
+            if err == "NOT_FOUND":
+                self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
+                return
+            now_iso = utc_now_iso()
+            with get_db() as conn:
+                cur = conn.execute("SELECT * FROM purchase_orders WHERE id = ? AND tenant_id = ?", (po_id, tenant_id))
+                po_row = cur.fetchone()
+                if not po_row:
+                    self.send_rfc7807(404, "Not Found", f"Purchase order '{po_id}' not found", "NOT_FOUND")
+                    return
+                if po_row["status"] in ["PARTIALLY_RECEIVED", "RECEIVED"]:
+                    self.send_rfc7807(422, "Unprocessable Entity", f"Cannot cancel purchase order in status '{po_row['status']}'", "CANNOT_CANCEL_RECEIVED_PO")
+                    return
+                conn.execute("UPDATE purchase_orders SET status = 'CANCELLED', updated_at = ? WHERE id = ?", (now_iso, po_id))
+                conn.commit()
+            self.send_json(200, {"id": po_id, "status": "CANCELLED", "updated_at": now_iso})
+            return
+
         # 5. Progressive Onboarding & Vocabulary Configuration (§3, §4, §6, REQ-FE-04)
         if path == "/api/v1/users/onboarding":
             if not body:
@@ -3152,7 +4190,7 @@ class InviniteRequestHandler(BaseHTTPRequestHandler):
             if err == "NOT_FOUND":
                 self.send_rfc7807(404, "Not Found", "Workspace not found", "NOT_FOUND")
                 return
-            if code in ["1000", "1100", "1200", "2000", "2100", "4000", "5000", "6000"]:
+            if code in ["1000", "1100", "1200", "1300", "2000", "2100", "4000", "5000", "6000"]:
                 self.send_rfc7807(403, "Forbidden", f"System account '{code}' is protected from deletion", "SYSTEM_ACCOUNT_PROTECTED")
                 return
             with get_db() as conn:

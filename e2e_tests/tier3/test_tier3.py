@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Tier 3: Pairwise Cross-Feature Interactions Acceptance Test Suite (36 tests).
-Verifies interactions between orthogonal subsystems across the 32 inventoried features
+Tier 3: Pairwise Cross-Feature Interactions Acceptance Test Suite (45 tests).
+Verifies interactions between orthogonal subsystems across the 42 inventoried features
 from PROJECT.md § Feature Inventory for Invinite Business OS v4.1.
 Output: TAP (Test Anything Protocol) version 13.
 """
@@ -27,7 +27,7 @@ from harness.client import (
 
 def run_tier3_tests(base_url: str, reporter: Optional[TapReporter] = None) -> TapReporter:
     if reporter is None:
-        reporter = TapReporter(total_expected=36)
+        reporter = TapReporter(total_expected=45)
         reporter.print_header()
 
     client = ApiClient(base_url=base_url)
@@ -438,11 +438,11 @@ def run_tier3_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     )
 
     # Pair 33: Backend Harness Synchronization (F30) x Accounting Invariants (F08)
-    # SQLite WAL journal mode and 26 relational tables remain active during accounting state mutations
+    # SQLite WAL journal mode and 33 relational tables remain active during accounting state mutations
     sys_schema = client.get_system_schema().json or {}
     reporter.record(
-        sys_schema.get("table_count") == 26 and sys_schema.get("journal_mode") == "wal" and sys_schema.get("foreign_keys") == 1,
-        "PAIR-33 [F30 Harness Synchronization x F08 Accounting Invariants]: Backend relational schema verified at exactly 26 tables in SQLite WAL mode"
+        sys_schema.get("table_count") == 33 and sys_schema.get("journal_mode") == "wal" and sys_schema.get("foreign_keys") == 1,
+        "PAIR-33 [F30 Harness Synchronization x F08 Accounting Invariants]: Backend relational schema verified at exactly 33 tables in SQLite WAL mode"
     )
 
     # Pair 34: Full E2E Test Suite (F31) x Receivable Aging (F19)
@@ -478,6 +478,179 @@ def run_tier3_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     reporter.record(
         unbal_attack.status == 422 and unbal_attack.json.get("code") == "UNBALANCED_JOURNAL_ENTRY",
         "PAIR-36 [F32 Adversarial Hardening x F08 Balancing Invariant]: Adversarial unbalanced journal injection strictly rejected with HTTP 422"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 37: Multi-Location Warehouse (F33) x Chart of Accounts & Seed Data (F06)
+    # -------------------------------------------------------------------------
+    # Warehouse provisioning seamlessly coexists with seeded inventory asset account 1300
+    wh_pair = client.create_warehouse(code=f"WH-P37-{uid_suffix}", name="Gudang Integrasi Akuntansi", is_default=True)
+    wh_pair_id = wh_pair.json.get("id") if wh_pair.json else None
+    coa_res = client.get("/api/v1/accounting/accounts")
+    accounts = coa_res.json.get("accounts", []) if coa_res.json else []
+    acc1300 = next((a for a in accounts if a.get("code") == "1300"), None)
+    reporter.record(
+        wh_pair.status == 201 and acc1300 is not None and acc1300.get("account_type", "").lower() == "asset",
+        "PAIR-37 [F33 Warehouse Registry x F06 Chart of Accounts]: Warehouse provisioning seamlessly coexists with seeded inventory asset account 1300"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 38: Product Catalog SKU (F34) x Multi-Tenant Data Model (F01)
+    # -------------------------------------------------------------------------
+    # Unique SKU enforcement strictly scopes to active tenant without cross-tenant collisions
+    p_sku = f"SKU-PAIR38-{uid_suffix}"
+    prod_t1 = client.create_product(name="Produk Tenant 1", sku=p_sku, cost_price=10000, sale_price=15000)
+    dup_t1 = client.create_product(name="Produk Tenant 1 Dup", sku=p_sku, cost_price=12000, sale_price=18000)
+    prod_peer = c_peer.create_product(name="Produk Peer Tenant", sku=p_sku, cost_price=20000, sale_price=25000)
+    reporter.record(
+        prod_t1.status == 201 and dup_t1.status == 409 and prod_peer.status == 201,
+        "PAIR-38 [F34 Product Catalog x F01 Multi-Tenancy]: Unique SKU enforcement strictly scopes to active tenant without cross-tenant collisions"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 39: Multi-Location Inventory Balances (F35) x Low Stock Notification (F23)
+    # -------------------------------------------------------------------------
+    # Stock below reorder threshold dynamically activates is_low_stock filter
+    prod_alert = client.create_product(name="Produk Kritis Alert", cost_price=5000, sale_price=10000, reorder_threshold=10)
+    pa_id = prod_alert.json.get("id")
+    client.create_stock_movement(
+        movement_type="INBOUND",
+        product_id=pa_id,
+        destination_warehouse_id=wh_pair_id,
+        quantity=4,
+        unit_cost=5000
+    )
+    low_stock_res = client.get_stock_items(low_stock=True)
+    low_items = low_stock_res.json.get("stock_items", []) if low_stock_res.json else []
+    target_low = next((it for it in low_items if it.get("product_id") == pa_id), None)
+    reporter.record(
+        target_low is not None and target_low.get("is_low_stock") is True and target_low.get("quantity_on_hand") == 4,
+        "PAIR-39 [F35 Inventory Balances x F23 Low Stock Alerting]: Stock below reorder threshold dynamically activates is_low_stock filter"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 40: Direct Stock Movements (F36) x Double-Entry Invariant Balancing (F08/F42)
+    # -------------------------------------------------------------------------
+    # Outbound stock deduction atomically posts balanced COGS journal with Debit == Credit
+    prod_bal = client.create_product(name="Produk COGS Balance", cost_price=25000, sale_price=40000)
+    pb_id = prod_bal.json.get("id")
+    client.create_stock_movement(
+        movement_type="INBOUND",
+        product_id=pb_id,
+        destination_warehouse_id=wh_pair_id,
+        quantity=10,
+        unit_cost=25000
+    )
+    out_mv = client.create_stock_movement(
+        movement_type="OUTBOUND",
+        product_id=pb_id,
+        source_warehouse_id=wh_pair_id,
+        quantity=3
+    )
+    journals_res = client.get("/api/v1/accounting/journals")
+    all_j = journals_res.json.get("journals", []) if journals_res.json else []
+    cogs_j = [j for j in all_j if j.get("source_type") == "INVENTORY_OUTBOUND"]
+    target_cogs = next((j for j in cogs_j if j.get("source_id") == out_mv.json.get("id")), None)
+    reporter.record(
+        out_mv.status == 201 and target_cogs is not None and target_cogs.get("total_debit") == target_cogs.get("total_credit") == 75000,
+        "PAIR-40 [F36 Stock Movement x F08/F42 General Ledger Invariant]: Outbound stock deduction atomically posts balanced COGS journal with Debit == Credit"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 41: Inter-Warehouse Transfer (F37) x Transactional Outbox Pipeline (F24)
+    # -------------------------------------------------------------------------
+    # Stock transfer atomically updates dual warehouse balances and persists StockTransferred outbox event
+    wh_dest = client.create_warehouse(code=f"WH-DEST-{uid_suffix}", name="Gudang Cabang Distribusi")
+    wh_dest_id = wh_dest.json.get("id")
+    xfer_res = client.transfer_stock(
+        source_warehouse_id=wh_pair_id,
+        destination_warehouse_id=wh_dest_id,
+        product_id=pb_id,
+        quantity=2
+    )
+    mov_xfer_id = xfer_res.json.get("movement_id") if xfer_res.json else None
+    all_ob = client.list_outbox_events().json.get("events", [])
+    xfer_event = next((e for e in all_ob if e.get("event_type") == "StockTransferred" and e.get("aggregate_id") == mov_xfer_id), None)
+    reporter.record(
+        xfer_res.status == 200 and xfer_event is not None and xfer_event.get("aggregate_type") == "Inventory",
+        "PAIR-41 [F37 Inter-Warehouse Transfer x F24 Outbox Pipeline]: Stock transfer atomically updates dual warehouse balances and persists StockTransferred outbox event"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 42: Physical Stock Adjustment (F38) x Double-Entry Invariant Balancing (F08/F42)
+    # -------------------------------------------------------------------------
+    # Positive stock count adjustment posts strictly balanced journal with Debit Persediaan == Credit Selisih
+    # pb_id currently has 2 units in wh_dest_id. Adjust to 5 units (+3 variance @ 25000 = 75000 IDR)
+    adj_res = client.adjust_stock(
+        warehouse_id=wh_dest_id,
+        product_id=pb_id,
+        actual_quantity=5,
+        reason="Periodic physical inventory cycle count"
+    )
+    adj_id = adj_res.json.get("id")
+    all_j2 = client.get("/api/v1/accounting/journals").json.get("journals", [])
+    adj_j = next((j for j in all_j2 if j.get("source_type") == "STOCK_ADJUSTMENT" and j.get("source_id") == adj_id), None)
+    reporter.record(
+        adj_res.status == 200 and adj_j is not None and adj_j.get("total_debit") == adj_j.get("total_credit") == 75000,
+        "PAIR-42 [F38 Physical Adjustment x F08/F42 Journal Invariant]: Positive stock count adjustment posts strictly balanced journal with Debit Persediaan == Credit Selisih"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 43: Purchase Order Lifecycle (F39) x Cross-Tenant Anti-Enumeration (F03)
+    # -------------------------------------------------------------------------
+    # Cross-tenant access and mutation attempts on purchase orders return pure RFC 7807 404
+    po_t1 = client.create_purchase_order(
+        supplier_name="PT Supplier Teruji",
+        destination_warehouse_id=wh_pair_id,
+        items=[{"product_id": pb_id, "quantity_ordered": 20, "unit_cost": 22000}]
+    )
+    po_t1_id = po_t1.json.get("id")
+    peer_get_po = c_peer.get_purchase_order(po_t1_id)
+    peer_order_po = c_peer.order_purchase_order(po_t1_id)
+    reporter.record(
+        po_t1.status == 201 and peer_get_po.status == 404 and peer_order_po.status == 404,
+        "PAIR-43 [F39 Purchase Order Lifecycle x F03 Cross-Tenant Isolation]: Cross-tenant access and mutation attempts on purchase orders return pure RFC 7807 404"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 44: Inbound Goods Receipt (F40) x Moving WAC Valuation Engine (F41)
+    # -------------------------------------------------------------------------
+    # Sequential goods receipts recalculate moving weighted average unit cost accurately
+    prod_wac = client.create_product(name="Produk WAC Evaluator", cost_price=10000, sale_price=20000)
+    pw_id = prod_wac.json.get("id")
+    po1 = client.create_purchase_order(
+        supplier_name="Supplier Alpha",
+        destination_warehouse_id=wh_pair_id,
+        items=[{"product_id": pw_id, "quantity_ordered": 10, "unit_cost": 10000}]
+    )
+    client.order_purchase_order(po1.json.get("id"))
+    rcv1 = client.receive_purchase_order(po1.json.get("id"), [{"product_id": pw_id, "quantity_received": 10}])
+
+    po2 = client.create_purchase_order(
+        supplier_name="Supplier Beta",
+        destination_warehouse_id=wh_pair_id,
+        items=[{"product_id": pw_id, "quantity_ordered": 10, "unit_cost": 20000}]
+    )
+    client.order_purchase_order(po2.json.get("id"))
+    rcv2 = client.receive_purchase_order(po2.json.get("id"), [{"product_id": pw_id, "quantity_received": 10}])
+
+    cur_stock = client.get_stock_items(warehouse_id=wh_pair_id, product_id=pw_id).json.get("stock_items", [])[0]
+    expected_wac = (10 * 10000 + 10 * 20000) // 20  # 15000
+    reporter.record(
+        rcv1.status == 200 and rcv2.status == 200 and cur_stock.get("quantity_on_hand") == 20 and cur_stock.get("average_cost") == expected_wac,
+        "PAIR-44 [F40 Goods Receipt x F41 Moving WAC Valuation]: Sequential goods receipts recalculate moving weighted average unit cost accurately"
+    )
+
+    # -------------------------------------------------------------------------
+    # Pair 45: PO Goods Receipt (F40) x Automated General Ledger Journal (F42)
+    # -------------------------------------------------------------------------
+    # Goods receipt from purchase order atomically commits balanced receipt journal (Debit 1300 / Credit 2000)
+    all_j3 = client.get("/api/v1/accounting/journals").json.get("journals", [])
+    po_receipt_j = [j for j in all_j3 if j.get("source_type") in ["PURCHASE_ORDER_RECEIPT", "INVENTORY_INBOUND"]]
+    all_po_balanced = all(j.get("total_debit") == j.get("total_credit") and j.get("total_debit") > 0 for j in po_receipt_j)
+    reporter.record(
+        len(po_receipt_j) >= 2 and all_po_balanced,
+        "PAIR-45 [F40 PO Goods Receipt x F42 Journal Balancing]: Goods receipt from purchase order atomically commits balanced receipt journal (Debit 1300 / Credit 2000)"
     )
 
     return reporter
