@@ -802,7 +802,8 @@ onMounted(() => {
 })
 
 const filteredProjects = computed(() => {
-  return projectsStore.projects.filter((p) => {
+  const list = Array.isArray(projectsStore.projects) ? projectsStore.projects : []
+  return list.filter((p) => {
     const matchesSearch =
       !searchQuery.value ||
       p.name?.toLowerCase().includes(searchQuery.value.toLowerCase()) ||

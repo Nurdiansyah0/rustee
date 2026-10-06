@@ -1336,6 +1336,72 @@ export function handleMockApiRequest(path, options = {}) {
     }
   }
 
+  // Projects & Contractor Operations Mock Handlers (Phase 3)
+  if (pathname === '/api/v1/projects' && method === 'GET') {
+    if (!db.projects) db.projects = [];
+    return { projects: db.projects, count: db.projects.length };
+  }
+
+  if (pathname === '/api/v1/projects' && method === 'POST') {
+    const body = JSON.parse(options.body || '{}');
+    if (!db.projects) db.projects = [];
+    const seq = String(db.projects.length + 1).padStart(6, '0');
+    const newProj = {
+      id: 'prj_' + Math.random().toString(36).substring(2, 9),
+      code: `PRJ-2026-${seq}`,
+      project_number: `PRJ-2026-${seq}`,
+      name: body.name || 'Proyek Baru',
+      description: body.description || '',
+      status: 'draft',
+      billing_model: body.billing_model || 'milestone_based',
+      contract_amount: parseInt(body.contract_amount || 0, 10),
+      budget_amount: parseInt(body.contract_amount || 0, 10),
+      start_date: body.start_date || null,
+      end_date: body.end_date || null,
+      created_at: new Date().toISOString()
+    };
+    db.projects.unshift(newProj);
+    saveDatabase(db);
+    return newProj;
+  }
+
+  if (pathname.startsWith('/api/v1/projects/')) {
+    const sub = pathname.replace('/api/v1/projects/', '');
+    const segments = sub.split('/');
+    const projId = segments[0];
+
+    if (segments.length === 1 && method === 'GET') {
+      const p = (db.projects || []).find(x => x.id === projId) || {
+        id: projId,
+        code: 'PRJ-2026-000001',
+        name: 'Proyek Konstruksi',
+        status: 'in_progress',
+        contract_amount: 150000000,
+        billing_model: 'milestone_based'
+      };
+      return p;
+    }
+
+    if (segments[1] === 'profitability') {
+      return {
+        project_id: projId,
+        contract_amount: 150000000,
+        total_cost: 45000000,
+        total_billed: 60000000,
+        gross_profit: 15000000,
+        margin_percentage: 25.0
+      };
+    }
+
+    if (segments[1] === 'milestones') return { milestones: [], data: [] };
+    if (segments[1] === 'tasks') return { tasks: [], data: [] };
+    if (segments[1] === 'materials') return { materials: [], data: [] };
+    if (segments[1] === 'labor') return { labor: [], data: [] };
+    if (segments[1] === 'expenses') return { expenses: [], data: [] };
+    if (segments[1] === 'progress') return { progress_records: [], data: [] };
+    if (segments[1] === 'members') return { members: [], data: [] };
+  }
+
   // Fallback
   return { success: true };
 }

@@ -20,16 +20,17 @@ export const useProjectsStore = defineStore('projects', () => {
   const error = ref(null)
 
   // Computed summary metrics
-  const totalProjects = computed(() => projects.value.length)
+  const projectList = computed(() => (Array.isArray(projects.value) ? projects.value : []))
+  const totalProjects = computed(() => projectList.value.length)
   const activeProjects = computed(() =>
-    projects.value.filter((p) => p.status === 'in_progress' || p.status === 'active')
+    projectList.value.filter((p) => p.status === 'in_progress' || p.status === 'active')
   )
   const completedProjects = computed(() =>
-    projects.value.filter((p) => p.status === 'completed')
+    projectList.value.filter((p) => p.status === 'completed')
   )
 
   const overallBudget = computed(() =>
-    projects.value.reduce((acc, p) => acc + (p.contract_amount || 0), 0)
+    projectList.value.reduce((acc, p) => acc + (p.contract_amount || 0), 0)
   )
 
   // Actions
@@ -38,9 +39,11 @@ export const useProjectsStore = defineStore('projects', () => {
     error.value = null
     try {
       const res = await api.getProjects(filter)
-      projects.value = res?.data || res || []
+      const list = res?.projects || res?.data || (Array.isArray(res) ? res : [])
+      projects.value = Array.isArray(list) ? list : []
     } catch (err) {
       error.value = err.message || 'Gagal memuat daftar proyek'
+      projects.value = []
       throw err
     } finally {
       loading.value = false
@@ -88,15 +91,20 @@ export const useProjectsStore = defineStore('projects', () => {
         api.getProjectMembers(id).catch(() => ({ data: [] }))
       ])
 
+      const extractList = (raw) => {
+        const val = raw?.data || raw?.milestones || raw?.tasks || raw?.materials || raw?.labor || raw?.expenses || raw?.progress_records || raw?.members || (Array.isArray(raw) ? raw : [])
+        return Array.isArray(val) ? val : []
+      }
+
       currentProject.value = proj
-      milestones.value = mList?.data || mList || []
-      tasks.value = tList?.data || tList || []
-      materials.value = matList?.data || matList || []
-      labor.value = labList?.data || labList || []
-      expenses.value = expList?.data || expList || []
+      milestones.value = extractList(mList)
+      tasks.value = extractList(tList)
+      materials.value = extractList(matList)
+      labor.value = extractList(labList)
+      expenses.value = extractList(expList)
       profitability.value = prof
-      progressRecords.value = progList?.data || progList || []
-      members.value = memList?.data || memList || []
+      progressRecords.value = extractList(progList)
+      members.value = extractList(memList)
     } catch (err) {
       error.value = err.message || 'Gagal memuat detail proyek'
       throw err
