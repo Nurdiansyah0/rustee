@@ -649,7 +649,7 @@ async fn challenge_persistence_29_domain_tables_and_outbox_indexes() {
     .await
     .expect("Failed to query tables");
 
-    assert_eq!(table_count, 37, "Domain table count must be exactly 37");
+    assert_eq!(table_count, 45, "Domain table count must be exactly 45");
 
     // Fetch all table names
     let rows: Vec<(String,)> = sqlx::query_as(
@@ -678,11 +678,18 @@ async fn challenge_persistence_29_domain_tables_and_outbox_indexes() {
         "journal_entries",
         "journal_lines",
         "memberships",
+        "milestones",
         "outbox_events",
         "password_reset_tokens",
         "payment_allocations",
         "payments",
         "products",
+        "progress_records",
+        "project_expenses",
+        "project_labor",
+        "project_materials",
+        "project_members",
+        "projects",
         "purchase_order_items",
         "purchase_orders",
         "receivables",
@@ -692,6 +699,7 @@ async fn challenge_persistence_29_domain_tables_and_outbox_indexes() {
         "subscription_events",
         "subscriptions",
         "sync_cursors",
+        "tasks",
         "tax_rules",
         "tenants",
         "transactions",

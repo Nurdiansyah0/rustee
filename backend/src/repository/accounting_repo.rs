@@ -271,11 +271,14 @@ impl SqlxAccountingRepository {
     pub async fn get_journal_count_tx(
         tx: &mut Transaction<'_, Sqlite>,
         tenant_id: &str,
+        year: i32,
     ) -> Result<i64, DbError> {
+        let prefix = format!("JRN-{}-", year);
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1",
+            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1 AND entry_number LIKE ?2",
         )
         .bind(tenant_id)
+        .bind(format!("{}%", prefix))
         .fetch_one(&mut **tx)
         .await
         .map_err(DbError::from_sqlx)?;
@@ -417,10 +420,12 @@ impl SqlxAccountingRepository {
 #[async_trait]
 impl JournalRepository for SqlxAccountingRepository {
     async fn get_journal_count(&self, ctx: &TenantContext) -> Result<i64, DbError> {
+        let year = Utc::now().year();
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1",
+            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1 AND entry_number LIKE ?2",
         )
         .bind(ctx.tenant_id_str())
+        .bind(format!("JRN-{}-", year) + "%")
         .fetch_one(&self.pool)
         .await
         .map_err(DbError::from_sqlx)?;
@@ -457,40 +462,53 @@ impl JournalRepository for SqlxAccountingRepository {
         .await
         .map_err(DbError::from_sqlx)?;
 
-        let mut journals = Vec::with_capacity(rows.len());
-        for row in rows {
-            let j_id: String = row.get("id");
-            let line_rows = sqlx::query(
-                r#"
-                SELECT id, account_code, debit, credit, memo
-                FROM journal_lines
-                WHERE journal_id = ?1 AND tenant_id = ?2
-                ORDER BY id ASC
-                "#,
-            )
-            .bind(&j_id)
-            .bind(ctx.tenant_id_str())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(DbError::from_sqlx)?;
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
 
-            let mut lines = Vec::with_capacity(line_rows.len());
-            let mut total_debit = 0i64;
-            let mut total_credit = 0i64;
+        // Fetch all lines for all tenant journals in a single query (O(N+M) instead of O(N*M) N+1 query)
+        let line_rows = sqlx::query(
+            r#"
+            SELECT id, journal_id, account_code, debit, credit, memo
+            FROM journal_lines
+            WHERE tenant_id = ?1
+            ORDER BY id ASC
+            "#,
+        )
+        .bind(ctx.tenant_id_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(DbError::from_sqlx)?;
 
-            for lr in line_rows {
-                let debit: i64 = lr.get("debit");
-                let credit: i64 = lr.get("credit");
-                total_debit += debit;
-                total_credit += credit;
+        use std::collections::HashMap;
+        let mut lines_by_journal: HashMap<String, Vec<JournalLineDto>> = HashMap::new();
+        for lr in line_rows {
+            let journal_id: String = lr.get("journal_id");
+            let debit: i64 = lr.get("debit");
+            let credit: i64 = lr.get("credit");
 
-                lines.push(JournalLineDto {
+            lines_by_journal
+                .entry(journal_id)
+                .or_default()
+                .push(JournalLineDto {
                     id: lr.get("id"),
                     account_code: lr.get("account_code"),
                     debit,
                     credit,
                     memo: lr.get("memo"),
                 });
+        }
+
+        let mut journals = Vec::with_capacity(rows.len());
+        for row in rows {
+            let j_id: String = row.get("id");
+            let lines = lines_by_journal.remove(&j_id).unwrap_or_default();
+
+            let mut total_debit = 0i64;
+            let mut total_credit = 0i64;
+            for l in &lines {
+                total_debit += l.debit;
+                total_credit += l.credit;
             }
 
             journals.push(JournalEntryWithLines {
@@ -595,7 +613,7 @@ impl JournalRepository for SqlxAccountingRepository {
         reversal_entry: &JournalEntry,
         reversal_lines: &[JournalLine],
     ) -> Result<JournalEntryWithLines, DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
 
         let now_iso = Utc::now().to_rfc3339();
 
@@ -633,16 +651,18 @@ impl JournalRepository for SqlxAccountingRepository {
         }
 
         // Generate sequential reversal number safely inside the write transaction
+        let now = Utc::now();
+        let rev_year = now.year();
         let count_row = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1",
+            "SELECT COUNT(*) FROM journal_entries WHERE tenant_id = ?1 AND entry_number LIKE ?2",
         )
         .bind(ctx.tenant_id_str())
+        .bind(format!("REV-{}-", rev_year) + "%")
         .fetch_one(&mut *tx)
         .await
         .map_err(DbError::from_sqlx)?;
 
-        let now = Utc::now();
-        let rev_num = format!("REV-{}-{:06}", now.year(), count_row + 1);
+        let rev_num = format!("REV-{}-{:06}", rev_year, count_row + 1);
 
         // Insert reversal header
         sqlx::query(
@@ -750,7 +770,12 @@ impl JournalRepository for SqlxAccountingRepository {
                 COALESCE(SUM(jl.debit), 0) AS total_debit,
                 COALESCE(SUM(jl.credit), 0) AS total_credit
             FROM chart_of_accounts coa
-            LEFT JOIN journal_lines jl ON jl.tenant_id = coa.tenant_id AND jl.account_code = coa.code
+            LEFT JOIN (
+                SELECT jl.tenant_id, jl.account_code, jl.debit, jl.credit
+                FROM journal_lines jl
+                JOIN journal_entries je ON je.id = jl.journal_id AND je.tenant_id = jl.tenant_id
+                WHERE je.status = 'POSTED'
+            ) jl ON jl.tenant_id = coa.tenant_id AND jl.account_code = coa.code
             WHERE coa.tenant_id = ?1
             GROUP BY coa.code, coa.name, coa.account_type
             ORDER BY coa.code ASC

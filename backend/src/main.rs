@@ -60,16 +60,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_migrations(&pool).await?;
     println!("Database migrations up to date.");
 
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-        "default_insecure_jwt_secret_change_in_production_32_bytes".to_string()
-    });
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+    let is_production = app_env.eq_ignore_ascii_case("production") || !cfg!(debug_assertions);
+
+    let jwt_secret = match std::env::var("JWT_SECRET") {
+        Ok(secret) => {
+            if is_production && secret == "default_insecure_jwt_secret_change_in_production_32_bytes" {
+                panic!("FATAL: JWT_SECRET must be explicitly set to a secure custom value in production!");
+            }
+            if secret.len() < 32 {
+                panic!("FATAL: JWT_SECRET must be at least 32 characters long for security!");
+            }
+            secret
+        }
+        Err(_) => {
+            if is_production {
+                panic!("FATAL: JWT_SECRET environment variable is missing in production!");
+            }
+            println!("⚠️  WARNING: Using default insecure JWT_SECRET. Set JWT_SECRET in .env for security.");
+            "default_insecure_jwt_secret_change_in_production_32_bytes".to_string()
+        }
+    };
+
     let jwt_ttl: u64 = std::env::var("JWT_TTL_SECONDS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(900);
     let secure_cookie = std::env::var("COOKIE_SECURE")
         .map(|v| v.to_lowercase() == "true")
-        .unwrap_or(false);
+        .unwrap_or_else(|_| is_production);
 
     let midtrans_key = std::env::var("MIDTRANS_SERVER_KEY")
         .unwrap_or_else(|_| "midtrans_test_server_key".to_string());
@@ -172,6 +191,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool,
         rate_limiter,
     };
+
+    // Spawn background outbox poller — dispatches PENDING events every 500ms.
+    // Without this, all outbox events (InvoiceIssued, ProjectMaterialIssued, etc.)
+    // would remain PENDING forever in production.
+    let outbox_processor = app_state.outbox_processor();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+        loop {
+            interval.tick().await;
+            let _ = outbox_processor.process_all_pending(false).await;
+        }
+    });
 
     let app = create_app(app_state);
 

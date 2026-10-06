@@ -42,7 +42,7 @@ async fn test_pool_pragmas_and_migration_execution() {
     assert!(pragmas.foreign_keys);
     assert_eq!(pragmas.synchronous, 1); // 1 = NORMAL
 
-    // 2. Verify all 37 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table + 1 password_reset_tokens table + 7 v4.1 inventory tables)
+    // 2. Verify all 45 tables exist (10 baseline + 4 v3.1.0 support tables + 1 user_preferences + 3 v4.1 tenancy tables + 4 v4.1 accounting tables + 6 v4.1 invoicing/receivables tables + 1 v4.1 outbox table + 1 password_reset_tokens table + 7 v4.1 inventory tables + 8 v4.1 project management tables)
     let table_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_%';"
     )
@@ -51,8 +51,8 @@ async fn test_pool_pragmas_and_migration_execution() {
     .expect("Failed to query tables");
 
     assert_eq!(
-        table_count, 37,
-        "Expected 37 domain tables after v4.1 core foundation, accounting, invoicing, outbox, password reset token, and inventory management migrations"
+        table_count, 45,
+        "Expected 45 domain tables after v4.1 core foundation, accounting, invoicing, outbox, password reset token, inventory management, and project management migrations"
     );
 
     // 3. Verify mandatory composite and acceleration indexes
@@ -125,6 +125,34 @@ async fn test_pool_pragmas_and_migration_execution() {
         "idx_stock_adjustments_tenant",
         "idx_stock_adjustments_number",
         "idx_stock_adjustments_wh_prod",
+        // v4.1 Milestone 1 Project Management additions:
+        "idx_projects_tenant",
+        "idx_projects_tenant_number",
+        "idx_projects_status",
+        "idx_project_members_tenant",
+        "idx_project_members_project",
+        "idx_project_members_user",
+        "idx_milestones_tenant",
+        "idx_milestones_project",
+        "idx_milestones_status",
+        "idx_tasks_tenant",
+        "idx_tasks_project",
+        "idx_tasks_milestone",
+        "idx_tasks_assignee",
+        "idx_progress_records_tenant",
+        "idx_progress_records_project",
+        "idx_progress_records_date",
+        "idx_project_materials_tenant",
+        "idx_project_materials_project",
+        "idx_project_materials_product",
+        "idx_project_materials_warehouse",
+        "idx_project_labor_tenant",
+        "idx_project_labor_project",
+        "idx_project_expenses_tenant",
+        "idx_project_expenses_project",
+        // v4.1 Milestone 4 Invoice Accountability additions:
+        "idx_invoices_tenant_created_by",
+        "idx_invoices_tenant_issued_by",
     ];
 
     for idx_name in required_indexes {

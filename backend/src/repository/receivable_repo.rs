@@ -256,7 +256,7 @@ impl ReceivableRepository for SqlxReceivableRepository {
         payment: &Payment,
         allocation: &PaymentAllocation,
     ) -> Result<(), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from)?;
 
         sqlx::query(
             r#"

@@ -214,7 +214,7 @@ impl LedgerService {
             IdempotencyLockResult::Acquired => {}
         }
 
-        let mut db_tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut db_tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
 
         let transaction_id = uuid::Uuid::new_v4().to_string();
         let new_tx = NewTransaction {
@@ -338,7 +338,7 @@ impl LedgerService {
         user_id: &str,
         transaction_id: &str,
     ) -> Result<(), LedgerError> {
-        let mut db_tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut db_tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
 
         let record = self
             .transaction_repo

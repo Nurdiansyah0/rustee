@@ -361,4 +361,156 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Projects & Contractor Operations (v4.1 Phase 3, Milestones 1-4)
+  getProjects: (params = {}) => {
+    const query = new URLSearchParams()
+    if (params.status) query.set('status', params.status)
+    if (params.customer_id) query.set('customer_id', params.customer_id)
+    if (params.search) query.set('search', params.search)
+    if (params.limit) query.set('limit', params.limit)
+    if (params.offset) query.set('offset', params.offset)
+    const qs = query.toString()
+    return request(`/api/v1/projects${qs ? `?${qs}` : ''}`)
+  },
+  createProject: (data) =>
+    request('/api/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getProject: (id) => request(`/api/v1/projects/${id}`),
+  updateProjectStatus: (id, status) =>
+    request(`/api/v1/projects/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  getProjectMembers: (id) => request(`/api/v1/projects/${id}/members`),
+  addProjectMember: (id, data) =>
+    request(`/api/v1/projects/${id}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getProjectMilestones: (id) => request(`/api/v1/projects/${id}/milestones`),
+  createProjectMilestone: (id, data) =>
+    request(`/api/v1/projects/${id}/milestones`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateProjectMilestoneStatus: (id, milestoneId, status) =>
+    request(`/api/v1/projects/${id}/milestones/${milestoneId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  completeProjectMilestone: (id, milestoneId, data = {}) =>
+    request(`/api/v1/projects/${id}/milestones/${milestoneId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  billProjectMilestone: (id, milestoneId, data = {}) => {
+    const idempotencyKey = data.idempotency_key || generateUUID()
+    return request(`/api/v1/projects/${id}/milestones/${milestoneId}/bill`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    })
+  },
+  getProjectTasks: (id, params = {}) => {
+    const query = new URLSearchParams()
+    if (params.milestone_id) query.set('milestone_id', params.milestone_id)
+    if (params.assigned_to) query.set('assigned_to', params.assigned_to)
+    if (params.status) query.set('status', params.status)
+    const qs = query.toString()
+    return request(`/api/v1/projects/${id}/tasks${qs ? `?${qs}` : ''}`)
+  },
+  createProjectTask: (id, data) =>
+    request(`/api/v1/projects/${id}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateProjectTaskStatus: (id, taskId, status) =>
+    request(`/api/v1/projects/${id}/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  getProjectLabor: (id) => request(`/api/v1/projects/${id}/labor`),
+  logProjectLabor: (id, data) =>
+    request(`/api/v1/projects/${id}/labor`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteProjectLabor: (id, laborId) =>
+    request(`/api/v1/projects/${id}/labor/${laborId}`, {
+      method: 'DELETE',
+    }),
+  getProjectExpenses: (id) => request(`/api/v1/projects/${id}/expenses`),
+  createProjectExpense: (id, data) =>
+    request(`/api/v1/projects/${id}/expenses`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteProjectExpense: (id, expenseId) =>
+    request(`/api/v1/projects/${id}/expenses/${expenseId}`, {
+      method: 'DELETE',
+    }),
+  getProjectMaterials: (id) => request(`/api/v1/projects/${id}/materials`),
+  createProjectMaterial: (id, data) =>
+    request(`/api/v1/projects/${id}/materials`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  issueProjectMaterial: (id, materialId, data = {}) => {
+    const idempotencyKey = data.idempotency_key || generateUUID()
+    return request(`/api/v1/projects/${id}/materials/${materialId}/issue`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    })
+  },
+  directIssueProjectMaterial: (id, data = {}) => {
+    const idempotencyKey = data.idempotency_key || generateUUID()
+    return request(`/api/v1/projects/${id}/materials/issue`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    })
+  },
+  deleteProjectMaterial: (id, materialId) =>
+    request(`/api/v1/projects/${id}/materials/${materialId}`, {
+      method: 'DELETE',
+    }),
+  getProjectProfitability: (id) => request(`/api/v1/projects/${id}/profitability`),
+  billProjectProgress: (id, data = {}) => {
+    const idempotencyKey = data.idempotency_key || generateUUID()
+    return request(`/api/v1/projects/${id}/billing/progress`, {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...data,
+        idempotency_key: idempotencyKey,
+      }),
+    })
+  },
+  getProjectProgressRecords: (id) => request(`/api/v1/projects/${id}/progress`),
+  createProjectProgressRecord: (id, data) =>
+    request(`/api/v1/projects/${id}/progress`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

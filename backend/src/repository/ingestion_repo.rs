@@ -259,7 +259,7 @@ impl IngestionRepository for SqlxIngestionRepository {
         &self,
         params: &CreateIngestedTxParams,
     ) -> Result<(TransactionRecord, Rupiah), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
         let now = Utc::now().to_rfc3339();
 
         // 1. Insert transaction row with source, external_reference, merchant, confidence, ingestion_id

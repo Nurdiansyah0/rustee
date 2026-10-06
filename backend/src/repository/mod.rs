@@ -9,6 +9,7 @@ pub mod ingestion_repo;
 pub mod inventory_repo;
 pub mod invoice_repo;
 pub mod outbox_repo;
+pub mod project_repo;
 pub mod receivable_repo;
 pub mod subscription_repo;
 pub mod tenant_repo;
@@ -20,6 +21,9 @@ pub use account_repo::{Account, AccountRepository, NewAccount, SqlxAccountReposi
 pub use inventory_repo::{InventoryRepository, SqlxInventoryRepository};
 pub use invoice_repo::{InvoiceRepository, SqlxInvoiceRepository};
 pub use outbox_repo::{OutboxRepository, SqlxOutboxRepository};
+pub use project_repo::{
+    ProjectFilter, ProjectMemberWithUser, ProjectRepository, SqlxProjectRepository, TaskFilter,
+};
 pub use receivable_repo::{ReceivableRepository, SqlxReceivableRepository};
 pub use accounting_repo::{
     AccountingRepository, ChartOfAccountsRepository, JournalRepository, SqlxAccountingRepository,

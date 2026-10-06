@@ -100,7 +100,7 @@ impl InvoiceRepository for SqlxInvoiceRepository {
         invoice: &Invoice,
         items: &[InvoiceItem],
     ) -> Result<(), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from)?;
 
         sqlx::query(
             r#"
@@ -108,9 +108,9 @@ impl InvoiceRepository for SqlxInvoiceRepository {
                 id, tenant_id, invoice_number, status, customer_id, customer_name,
                 customer_address, customer_email, issue_date, due_date, currency,
                 subtotal, discount, tax_type, tax_amount, total_amount, balance_due,
-                snapshot_json, notes, created_at, updated_at
+                snapshot_json, notes, created_by, issued_by, authorized_by, created_at, updated_at
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24
             )
             "#,
         )
@@ -133,6 +133,9 @@ impl InvoiceRepository for SqlxInvoiceRepository {
         .bind(invoice.balance_due)
         .bind(&invoice.snapshot_json)
         .bind(&invoice.notes)
+        .bind(&invoice.created_by)
+        .bind(&invoice.issued_by)
+        .bind(&invoice.authorized_by)
         .bind(&invoice.created_at)
         .bind(&invoice.updated_at)
         .execute(&mut *tx)
@@ -177,7 +180,7 @@ impl InvoiceRepository for SqlxInvoiceRepository {
             SELECT id, tenant_id, invoice_number, status, customer_id, customer_name,
                    customer_address, customer_email, issue_date, due_date, currency,
                    subtotal, discount, tax_type, tax_amount, total_amount, balance_due,
-                   snapshot_json, notes, created_at, updated_at
+                   snapshot_json, notes, created_by, issued_by, authorized_by, created_at, updated_at
             FROM invoices
             WHERE id = ?1 AND tenant_id = ?2
             "#,
@@ -220,7 +223,7 @@ impl InvoiceRepository for SqlxInvoiceRepository {
             SELECT id, tenant_id, invoice_number, status, customer_id, customer_name,
                    customer_address, customer_email, issue_date, due_date, currency,
                    subtotal, discount, tax_type, tax_amount, total_amount, balance_due,
-                   snapshot_json, notes, created_at, updated_at
+                   snapshot_json, notes, created_by, issued_by, authorized_by, created_at, updated_at
             FROM invoices
             WHERE tenant_id = ?1
             ORDER BY created_at DESC

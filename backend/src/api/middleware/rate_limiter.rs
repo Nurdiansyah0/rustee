@@ -182,39 +182,70 @@ impl ProblemDetails {
     }
 }
 
+/// Checks whether an IP address belongs to a trusted proxy or local loopback/private network.
+fn is_trusted_peer(ip: &IpAddr) -> bool {
+    // If explicitly configured via env var, check comma-separated list
+    if let Ok(trusted_str) = std::env::var("TRUSTED_PROXIES") {
+        let is_in_list = trusted_str
+            .split(',')
+            .filter_map(|s| s.trim().parse::<IpAddr>().ok())
+            .any(|trusted_ip| &trusted_ip == ip);
+        if is_in_list {
+            return true;
+        }
+    }
+
+    // By default, trust loopback (127.0.0.1, ::1) as standard reverse-proxy setup (e.g. Nginx, Caddy on same host)
+    // and private local network ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+    match ip {
+        IpAddr::V4(ipv4) => ipv4.is_loopback() || ipv4.is_private(),
+        IpAddr::V6(ipv6) => ipv6.is_loopback(),
+    }
+}
+
 /// Extracts client IP with proxy-aware fallback and validation.
+/// Prevents IP-spoofing by only trusting X-Forwarded-For/CF/Real-IP headers if
+/// the direct connection originated from a trusted peer/reverse proxy.
 pub fn extract_client_ip(headers: &HeaderMap, connect_info: Option<&SocketAddr>) -> String {
-    // 1. Cloudflare header
-    if let Some(cf_ip) = headers
-        .get("cf-connecting-ip")
-        .and_then(|h| h.to_str().ok())
-    {
-        let trimmed = cf_ip.trim();
-        if trimmed.parse::<IpAddr>().is_ok() {
-            return trimmed.to_string();
-        }
-    }
+    let peer_ip = connect_info.map(|ci| ci.ip());
 
-    // 2. Nginx Real IP header
-    if let Some(real_ip) = headers.get("x-real-ip").and_then(|h| h.to_str().ok()) {
-        let trimmed = real_ip.trim();
-        if trimmed.parse::<IpAddr>().is_ok() {
-            return trimmed.to_string();
-        }
-    }
+    // Only honor forwarding headers if connection came from a trusted reverse proxy/loopback
+    // or if connect_info is None (such as in local integration tests).
+    let should_trust_headers = peer_ip.map(|ip| is_trusted_peer(&ip)).unwrap_or(true);
 
-    // 3. Standard X-Forwarded-For (leftmost client IP)
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
-        if let Some(client_ip) = xff.split(',').next().map(|s| s.trim()) {
-            if client_ip.parse::<IpAddr>().is_ok() {
-                return client_ip.to_string();
+    if should_trust_headers {
+        // 1. Cloudflare header
+        if let Some(cf_ip) = headers
+            .get("cf-connecting-ip")
+            .and_then(|h| h.to_str().ok())
+        {
+            let trimmed = cf_ip.trim();
+            if trimmed.parse::<IpAddr>().is_ok() {
+                return trimmed.to_string();
+            }
+        }
+
+        // 2. Nginx Real IP header
+        if let Some(real_ip) = headers.get("x-real-ip").and_then(|h| h.to_str().ok()) {
+            let trimmed = real_ip.trim();
+            if trimmed.parse::<IpAddr>().is_ok() {
+                return trimmed.to_string();
+            }
+        }
+
+        // 3. Standard X-Forwarded-For (leftmost client IP)
+        if let Some(xff) = headers.get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
+            if let Some(client_ip) = xff.split(',').next().map(|s| s.trim()) {
+                if client_ip.parse::<IpAddr>().is_ok() {
+                    return client_ip.to_string();
+                }
             }
         }
     }
 
     // 4. Direct socket address from Axum ConnectInfo
-    if let Some(addr) = connect_info {
-        return addr.ip().to_string();
+    if let Some(ip) = peer_ip {
+        return ip.to_string();
     }
 
     // 5. Test runner fallback
@@ -486,8 +517,12 @@ mod tests {
         headers.insert("x-real-ip", "198.51.100.1".parse().unwrap());
         assert_eq!(extract_client_ip(&headers, Some(&socket)), "198.51.100.1");
 
-        // 5. CF-Connecting-IP precedence over Real-IP
+        // 5. CF-Connecting-IP precedence over Real-IP when from trusted peer (192.168.10.5 is private/trusted)
         headers.insert("cf-connecting-ip", "1.1.1.1".parse().unwrap());
         assert_eq!(extract_client_ip(&headers, Some(&socket)), "1.1.1.1");
+
+        // 6. Security verification: Direct connection from public untrusted IP MUST ignore spoofed headers
+        let public_socket: SocketAddr = "203.0.113.50:4321".parse().unwrap();
+        assert_eq!(extract_client_ip(&headers, Some(&public_socket)), "203.0.113.50");
     }
 }

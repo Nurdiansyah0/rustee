@@ -9,6 +9,7 @@ pub mod jwt;
 pub mod ledger_service;
 pub mod outbox_processor;
 pub mod payment_service;
+pub mod project_service;
 pub mod tenant_service;
 
 pub use accounting_service::*;
@@ -16,6 +17,7 @@ pub use email_service::*;
 pub use inventory_service::*;
 pub use invoice_service::*;
 pub use outbox_processor::*;
+pub use project_service::*;
 
 pub use auth_service::*;
 pub use crypto::*;

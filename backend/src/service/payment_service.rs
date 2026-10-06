@@ -1312,7 +1312,7 @@ impl PaymentService {
         let now_str = now.to_rfc3339();
         let trial_ends_str = trial_ends.to_rfc3339();
 
-        let mut tx = pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
 
         let update_res = sqlx::query(
             r#"

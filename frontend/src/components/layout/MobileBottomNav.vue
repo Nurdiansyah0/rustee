@@ -80,7 +80,8 @@ import {
   FileText,
   BookOpen,
   Package,
-  ShoppingCart
+  ShoppingCart,
+  FolderKanban
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -99,11 +100,17 @@ const slot4Tab = computed(() => {
   if (props.activeTab === 'analytics') {
     return { id: 'analytics', label: 'Analitik', icon: PieChart }
   }
+  if (props.activeTab === 'projects') {
+    return { id: 'projects', label: 'Proyek', icon: FolderKanban }
+  }
   if (props.activeTab === 'purchasing') {
     return { id: 'purchasing', label: 'Beli', icon: ShoppingCart }
   }
   if (props.activeTab === 'inventory') {
     return { id: 'inventory', label: 'Stok', icon: Package }
+  }
+  if (workspaceStore.hasCapability('projects')) {
+    return { id: 'projects', label: 'Proyek', icon: FolderKanban }
   }
   if (workspaceStore.hasCapability('inventory')) {
     return { id: 'inventory', label: 'Stok', icon: Package }

@@ -150,7 +150,7 @@ impl AuthService {
         let now = Utc::now().to_rfc3339();
 
         // Transactional execution: User + Default Cash Account + Starter Categories
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         // 1. Insert User
         sqlx::query(
@@ -481,7 +481,7 @@ impl AuthService {
 
         let now_str = Utc::now().to_rfc3339();
 
-        let mut tx = self.pool.begin().await.map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(|e| AppError::Internal(e.to_string()))?;
 
         sqlx::query("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
             .bind(&password_hash)

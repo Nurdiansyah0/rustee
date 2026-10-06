@@ -522,6 +522,179 @@ def init_db():
             UNIQUE(tenant_id, adjustment_number)
         );
 
+        -- Phase 3 Project & Contractor Management Tables (Features 1-10, Migration 0012)
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_number TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            customer_id TEXT,
+            customer_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED')),
+            billing_type TEXT NOT NULL DEFAULT 'MILESTONE' CHECK (billing_type IN ('MILESTONE', 'PERCENTAGE_OF_COMPLETION', 'TIME_AND_MATERIALS', 'HYBRID')),
+            budget_amount INTEGER NOT NULL DEFAULT 0 CHECK (budget_amount >= 0),
+            contract_amount INTEGER NOT NULL DEFAULT 0 CHECK (contract_amount >= 0),
+            start_date TEXT,
+            end_date TEXT,
+            actual_completion_date TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            UNIQUE (tenant_id, project_number)
+        );
+
+        CREATE TABLE IF NOT EXISTS project_members (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'CONTRIBUTOR',
+            cost_rate INTEGER NOT NULL DEFAULT 0 CHECK (cost_rate >= 0),
+            billing_rate INTEGER NOT NULL DEFAULT 0 CHECK (billing_rate >= 0),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE (tenant_id, project_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS milestones (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL DEFAULT 1 CHECK (sequence_order > 0),
+            title TEXT NOT NULL,
+            description TEXT,
+            target_date TEXT NOT NULL,
+            completed_at TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+            billable_amount INTEGER NOT NULL DEFAULT 0 CHECK (billable_amount >= 0),
+            is_billed INTEGER NOT NULL DEFAULT 0 CHECK (is_billed IN (0, 1)),
+            invoice_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            milestone_id TEXT,
+            assignee_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED')),
+            priority TEXT NOT NULL DEFAULT 'MEDIUM' CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'URGENT')),
+            estimated_hours INTEGER NOT NULL DEFAULT 0 CHECK (estimated_hours >= 0),
+            actual_hours INTEGER NOT NULL DEFAULT 0 CHECK (actual_hours >= 0),
+            due_date TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE SET NULL,
+            FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS progress_records (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            milestone_id TEXT,
+            percentage INTEGER NOT NULL CHECK (percentage >= 0 AND percentage <= 100),
+            record_date TEXT NOT NULL,
+            verified_by TEXT,
+            notes TEXT,
+            evidence_url TEXT,
+            is_billed INTEGER NOT NULL DEFAULT 0 CHECK (is_billed IN (0, 1)),
+            invoice_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE SET NULL,
+            FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS project_materials (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            task_id TEXT,
+            product_id TEXT NOT NULL,
+            warehouse_id TEXT NOT NULL,
+            quantity_planned INTEGER NOT NULL DEFAULT 0 CHECK (quantity_planned >= 0),
+            quantity_issued INTEGER NOT NULL DEFAULT 0 CHECK (quantity_issued >= 0),
+            unit_cost INTEGER NOT NULL DEFAULT 0 CHECK (unit_cost >= 0),
+            total_cost INTEGER NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
+            status TEXT NOT NULL DEFAULT 'PLANNED' CHECK (status IN ('PLANNED', 'ISSUED', 'RETURNED', 'CANCELLED')),
+            is_billable INTEGER NOT NULL DEFAULT 1 CHECK (is_billable IN (0, 1)),
+            stock_movement_id TEXT,
+            journal_entry_id TEXT,
+            issued_at TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
+            FOREIGN KEY (stock_movement_id) REFERENCES stock_movements(id) ON DELETE SET NULL,
+            FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS project_labor (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            task_id TEXT,
+            worker_id TEXT,
+            worker_name TEXT NOT NULL,
+            work_date TEXT NOT NULL,
+            hours_worked INTEGER NOT NULL CHECK (hours_worked > 0),
+            hourly_rate INTEGER NOT NULL DEFAULT 0 CHECK (hourly_rate >= 0),
+            total_cost INTEGER NOT NULL DEFAULT 0 CHECK (total_cost >= 0),
+            billing_rate INTEGER NOT NULL DEFAULT 0 CHECK (billing_rate >= 0),
+            is_billable INTEGER NOT NULL DEFAULT 1 CHECK (is_billable IN (0, 1)),
+            description TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+            FOREIGN KEY (worker_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS project_expenses (
+            id TEXT PRIMARY KEY NOT NULL,
+            tenant_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            task_id TEXT,
+            category TEXT NOT NULL,
+            description TEXT NOT NULL,
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            expense_date TEXT NOT NULL,
+            vendor_name TEXT,
+            receipt_ref TEXT,
+            is_billable INTEGER NOT NULL DEFAULT 1 CHECK (is_billable IN (0, 1)),
+            journal_entry_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+            FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE SET NULL
+        );
+
         -- Mandatory Canonical Composite Indexes (§16)
         CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date);
         CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);

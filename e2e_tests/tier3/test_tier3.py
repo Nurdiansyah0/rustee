@@ -438,11 +438,11 @@ def run_tier3_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     )
 
     # Pair 33: Backend Harness Synchronization (F30) x Accounting Invariants (F08)
-    # SQLite WAL journal mode and 33 relational tables remain active during accounting state mutations
+    # SQLite WAL journal mode and 41 relational tables remain active during accounting state mutations
     sys_schema = client.get_system_schema().json or {}
     reporter.record(
-        sys_schema.get("table_count") == 33 and sys_schema.get("journal_mode") == "wal" and sys_schema.get("foreign_keys") == 1,
-        "PAIR-33 [F30 Harness Synchronization x F08 Accounting Invariants]: Backend relational schema verified at exactly 33 tables in SQLite WAL mode"
+        sys_schema.get("table_count") == 41 and sys_schema.get("journal_mode") == "wal" and sys_schema.get("foreign_keys") == 1,
+        "PAIR-33 [F30 Harness Synchronization x F08 Accounting Invariants]: Backend relational schema verified at exactly 41 tables in SQLite WAL mode"
     )
 
     # Pair 34: Full E2E Test Suite (F31) x Receivable Aging (F19)

@@ -331,12 +331,12 @@ impl AccountingService {
         }
 
         // 10. Generate sequential gapless entry number inside transaction: JRN-YYYY-XXXXXX
-        let count = SqlxAccountingRepository::get_journal_count_tx(tx, &ctx.tenant_id_str())
+        let year = cmd.entry_date.year();
+        let count = SqlxAccountingRepository::get_journal_count_tx(tx, &ctx.tenant_id_str(), year)
             .await
             .map_err(AppError::from)?;
         let now = Utc::now();
         let entry_date_str = cmd.entry_date.to_rfc3339();
-        let year = cmd.entry_date.year();
         let entry_number = format!("JRN-{}-{:06}", year, count + 1);
 
         let journal_id = Uuid::new_v4().to_string();

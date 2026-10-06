@@ -241,7 +241,8 @@ import {
   FileText,
   BookOpen,
   Package,
-  ShoppingCart
+  ShoppingCart,
+  FolderKanban
 } from 'lucide-vue-next'
 
 defineProps({
@@ -297,6 +298,9 @@ const navItems = computed(() => {
   ]
 
   // Capability modules for business workspaces
+  if (workspaceStore.hasCapability('projects')) {
+    items.push({ id: 'projects', label: 'Proyek & Kontraktor', icon: markRaw(FolderKanban) })
+  }
   if (workspaceStore.hasCapability('inventory')) {
     items.push({ id: 'inventory', label: 'Inventaris & Stok', icon: markRaw(Package) })
   }

@@ -12,7 +12,7 @@
 use chrono::Utc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -580,6 +580,110 @@ impl InventoryService {
 
         tx.commit().await.map_err(AppError::from)?;
         Ok((result, false))
+    }
+
+    /// Atomically validates warehouse, product, stock item balance under write transaction,
+    /// decrements stock item on hand preventing negative balance, captures WAC unit cost,
+    /// and inserts an OUTBOUND stock movement referencing the project material.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn issue_stock_for_material_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        ctx: &TenantContext,
+        warehouse_id: Uuid,
+        product_id: Uuid,
+        quantity: i64,
+        material_id: Uuid,
+        notes: Option<String>,
+    ) -> Result<(Uuid, Rupiah, Product), AppError> {
+        if quantity <= 0 {
+            return Err(AppError::BadRequest(
+                "Quantity to issue must be greater than zero".to_string(),
+                "INVALID_QUANTITY",
+            ));
+        }
+
+        // Validate warehouse exists in caller tenant
+        let _warehouse = self
+            .repo
+            .find_warehouse_by_id(ctx, warehouse_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::NotFound(
+                    format!("Warehouse '{}' not found", warehouse_id),
+                    "NOT_FOUND",
+                )
+            })?;
+
+        // Validate product exists in caller tenant
+        let product = self
+            .repo
+            .find_product_by_id(ctx, product_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::NotFound(
+                    format!("Product '{}' not found", product_id),
+                    "NOT_FOUND",
+                )
+            })?;
+
+        // Check stock item under transaction
+        let stock_item = self
+            .repo
+            .find_stock_item_tx(tx, ctx, warehouse_id, product_id)
+            .await?;
+
+        let current_on_hand = stock_item.as_ref().map(|s| s.quantity_on_hand).unwrap_or(0);
+        let current_reserved = stock_item.as_ref().map(|s| s.quantity_reserved).unwrap_or(0);
+        let available_stock = current_on_hand.saturating_sub(current_reserved);
+
+        // ATOMIC NEGATIVE BALANCE PREVENTION INVARIANT
+        if quantity > available_stock {
+            return Err(AppError::UnprocessableEntity(
+                format!(
+                    "Insufficient stock: requested {}, available {}",
+                    quantity, available_stock
+                ),
+                "INSUFFICIENT_STOCK",
+            ));
+        }
+
+        let s_item = stock_item.expect("Stock item must exist if available_stock >= quantity");
+        let new_on_hand = current_on_hand - quantity;
+
+        self.repo
+            .update_stock_item_tx(tx, ctx, s_item.id, new_on_hand, s_item.average_cost)
+            .await?;
+
+        let unit_cost = if s_item.average_cost.as_i64() > 0 {
+            s_item.average_cost
+        } else {
+            product.cost_price
+        };
+
+        let now = Utc::now();
+        let mov_id = Uuid::new_v4();
+
+        let movement = StockMovement {
+            id: mov_id,
+            tenant_id: ctx.tenant_id,
+            movement_type: StockMovementType::Outbound,
+            product_id,
+            source_warehouse_id: Some(warehouse_id),
+            destination_warehouse_id: None,
+            quantity,
+            unit_cost: Some(unit_cost),
+            reference_type: Some("PROJECT_MATERIAL".to_string()),
+            reference_id: Some(material_id),
+            batch_number: None,
+            notes,
+            created_at: now,
+            actor_id: Some(ctx.actor_id),
+        };
+
+        self.repo.insert_stock_movement_tx(tx, ctx, &movement).await?;
+
+        Ok((mov_id, unit_cost, product))
     }
 
     // =========================================================================

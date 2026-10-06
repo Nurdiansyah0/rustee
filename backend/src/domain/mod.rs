@@ -4,6 +4,8 @@ pub mod inventory;
 pub mod invoice;
 pub mod money;
 pub mod outbox;
+pub mod project;
+pub mod project_costing;
 pub mod receivable;
 pub mod subscription;
 pub mod tenant;
@@ -14,6 +16,7 @@ pub use inventory::*;
 pub use invoice::*;
 pub use money::Rupiah;
 pub use outbox::*;
+pub use project::*;
 pub use receivable::*;
 pub use subscription::{
     SubscriptionPlan, SubscriptionState, SubscriptionStatus, PREMIUM_ANNUAL_PRICE,

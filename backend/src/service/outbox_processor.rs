@@ -241,7 +241,7 @@ impl OutboxProcessor {
 
             match dispatch_result {
                 Ok(()) => {
-                    let mut up_tx = self.pool.begin().await.map_err(AppError::from)?;
+                    let mut up_tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
                     sqlx::query(
                         r#"
                         UPDATE outbox_events 
@@ -262,7 +262,7 @@ impl OutboxProcessor {
                     let new_attempts = event.attempt_count + 1;
                     let err_msg = err.to_string();
 
-                    let mut up_tx = self.pool.begin().await.map_err(AppError::from)?;
+                    let mut up_tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
                     if new_attempts >= event.max_retries {
                         // Exhausted max attempts: transition to DEAD_LETTER
                         sqlx::query(

@@ -443,7 +443,7 @@ impl InventoryRepository for SqlxInventoryRepository {
     // --- Warehouse Operations ---
 
     async fn create_warehouse(&self, ctx: &TenantContext, warehouse: &Warehouse) -> Result<(), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
         self.create_warehouse_tx(&mut tx, ctx, warehouse).await?;
         tx.commit().await.map_err(DbError::from_sqlx)?;
         Ok(())
@@ -576,7 +576,7 @@ impl InventoryRepository for SqlxInventoryRepository {
     // --- Product Operations ---
 
     async fn create_product(&self, ctx: &TenantContext, product: &Product) -> Result<(), DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
         self.create_product_tx(&mut tx, ctx, product).await?;
         tx.commit().await.map_err(DbError::from_sqlx)?;
         Ok(())
@@ -1360,26 +1360,34 @@ impl InventoryRepository for SqlxInventoryRepository {
         .await
         .map_err(DbError::from_sqlx)?;
 
+        if po_rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Batch query all items for the tenant's purchase orders (O(N+M) instead of N+1)
+        let item_rows = sqlx::query(
+            r#"
+            SELECT * FROM purchase_order_items
+            WHERE tenant_id = ?1
+            ORDER BY rowid ASC
+            "#,
+        )
+        .bind(ctx.tenant_id_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(DbError::from_sqlx)?;
+
+        use std::collections::HashMap;
+        let mut items_by_po: HashMap<Uuid, Vec<crate::domain::inventory::PurchaseOrderItem>> = HashMap::new();
+        for ir in &item_rows {
+            let item = Self::row_to_purchase_order_item(ir)?;
+            items_by_po.entry(item.purchase_order_id).or_default().push(item);
+        }
+
         let mut res = Vec::with_capacity(po_rows.len());
         for row in &po_rows {
             let po = Self::row_to_purchase_order_header(row)?;
-            let item_rows = sqlx::query(
-                r#"
-                SELECT * FROM purchase_order_items
-                WHERE purchase_order_id = ?1 AND tenant_id = ?2
-                ORDER BY rowid ASC
-                "#,
-            )
-            .bind(po.id.to_string())
-            .bind(ctx.tenant_id_str())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(DbError::from_sqlx)?;
-
-            let items = item_rows
-                .iter()
-                .map(Self::row_to_purchase_order_item)
-                .collect::<Result<Vec<_>, _>>()?;
+            let items = items_by_po.remove(&po.id).unwrap_or_default();
 
             res.push(PurchaseOrderWithItems {
                 id: po.id,

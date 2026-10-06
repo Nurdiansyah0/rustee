@@ -1027,9 +1027,9 @@ def run_tier1_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     # =========================================================================
     schema_probe = client.get_system_schema()
     s_data = schema_probe.json or {}
-    # 30.1 System schema endpoint verifies exactly 33 relational tables exist
-    reporter.record(schema_probe.status == 200 and s_data.get("table_count") == 33,
-                    "F30.1: Backend schema verification probe confirms exactly 33 relational tables")
+    # 30.1 System schema endpoint verifies exactly 41 relational tables exist
+    reporter.record(schema_probe.status == 200 and s_data.get("table_count") == 41,
+                    "F30.1: Backend schema verification probe confirms exactly 41 relational tables")
 
     # 30.2 SQLite WAL journal_mode verified active
     reporter.record(s_data.get("journal_mode") == "wal",

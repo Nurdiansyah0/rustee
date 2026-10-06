@@ -34,6 +34,7 @@ pub struct CreateInvoiceRequest {
     pub due_date: Option<String>,
     pub currency: Option<String>,
     pub tax_type: Option<String>,
+    pub authorized_by: Option<String>,
     pub items: Vec<CreateInvoiceItemRequest>,
 }
 
@@ -43,6 +44,7 @@ pub struct UpdateInvoiceRequest {
     pub customer_address: Option<String>,
     pub customer_email: Option<String>,
     pub due_date: Option<String>,
+    pub authorized_by: Option<String>,
     pub items: Option<Vec<CreateInvoiceItemRequest>>,
 }
 
@@ -77,6 +79,12 @@ pub struct InvoiceSnapshotDto {
     pub subtotal: i64,
     pub tax_amount: i64,
     pub total_amount: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issued_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authorized_by: Option<String>,
     pub issued_at: String,
 }
 
@@ -101,6 +109,12 @@ pub struct InvoiceResponse {
     pub items: Option<Vec<InvoiceItemDto>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<InvoiceSnapshotDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issued_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authorized_by: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -272,17 +286,20 @@ impl InvoiceService {
             })?
         };
 
+        let authorized_by = req.authorized_by.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let created_by = Some(ctx.actor_id_str());
+
         let invoice_id = Uuid::new_v4().to_string();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
 
         sqlx::query(
             r#"
             INSERT INTO invoices 
                 (id, tenant_id, invoice_number, customer_name, customer_address, customer_email,
                  due_date, currency, tax_type, subtotal, discount, tax_amount, total_amount, balance_due,
-                 status, created_at, updated_at)
-            VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11, ?11, 'DRAFT', ?12, ?12)
+                 status, created_by, authorized_by, created_at, updated_at)
+            VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11, ?11, 'DRAFT', ?12, ?13, ?14, ?14)
             "#,
         )
         .bind(&invoice_id)
@@ -296,6 +313,8 @@ impl InvoiceService {
         .bind(subtotal)
         .bind(tax_amount)
         .bind(total_amount)
+        .bind(&created_by)
+        .bind(&authorized_by)
         .bind(&now_iso)
         .execute(&mut *tx)
         .await
@@ -344,6 +363,9 @@ impl InvoiceService {
             status: "DRAFT".to_string(),
             items: Some(computed_items),
             snapshot: None,
+            created_by,
+            issued_by: None,
+            authorized_by,
             created_at: now_iso.clone(),
             updated_at: now_iso,
         })
@@ -366,7 +388,7 @@ impl InvoiceService {
 
         // 1. Fetch invoice with lock within transaction
         let inv_row = sqlx::query(
-            "SELECT id, tenant_id, customer_name, customer_address, customer_email, due_date, currency, tax_type, subtotal, tax_amount, total_amount, status FROM invoices WHERE id = ?1 AND tenant_id = ?2",
+            "SELECT id, tenant_id, customer_name, customer_address, customer_email, due_date, currency, tax_type, subtotal, tax_amount, total_amount, status, created_by, authorized_by, created_at FROM invoices WHERE id = ?1 AND tenant_id = ?2",
         )
         .bind(invoice_id)
         .bind(ctx.tenant_id_str())
@@ -393,6 +415,9 @@ impl InvoiceService {
         let subtotal: i64 = inv_row.get("subtotal");
         let tax_amount: i64 = inv_row.get("tax_amount");
         let total_amount: i64 = inv_row.get("total_amount");
+        let created_by: Option<String> = inv_row.get("created_by");
+        let authorized_by: Option<String> = inv_row.get("authorized_by");
+        let created_at: String = inv_row.get("created_at");
 
         // 2. Fetch line items
         let item_rows = sqlx::query(
@@ -434,15 +459,18 @@ impl InvoiceService {
             .filter(|p| !p.trim().is_empty())
             .unwrap_or_else(|| "INV".to_string());
 
+        let year_pattern = format!("{}-{}-%", pfx, year);
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM invoices WHERE tenant_id = ?1 AND invoice_number IS NOT NULL",
+            "SELECT COUNT(*) FROM invoices WHERE tenant_id = ?1 AND invoice_number IS NOT NULL AND invoice_number LIKE ?2",
         )
         .bind(ctx.tenant_id_str())
+        .bind(&year_pattern)
         .fetch_one(&mut *tx)
         .await
         .map_err(AppError::from)?;
 
         let inv_number = format!("{}-{}-{:06}", pfx, year, count + 1);
+        let issued_by = Some(ctx.actor_id_str());
 
         // 4. Capture frozen snapshot
         let snapshot = InvoiceSnapshotDto {
@@ -454,6 +482,9 @@ impl InvoiceService {
             subtotal,
             tax_amount,
             total_amount,
+            created_by: created_by.clone(),
+            issued_by: issued_by.clone(),
+            authorized_by: authorized_by.clone(),
             issued_at: now_iso.clone(),
         };
         let snapshot_json = serde_json::to_string(&snapshot).unwrap_or_default();
@@ -462,13 +493,14 @@ impl InvoiceService {
         let update_res = sqlx::query(
             r#"
             UPDATE invoices 
-            SET invoice_number = ?1, status = 'ISSUED', issue_date = ?2, snapshot_json = ?3, updated_at = ?2
-            WHERE id = ?4 AND status = 'DRAFT'
+            SET invoice_number = ?1, status = 'ISSUED', issue_date = ?2, snapshot_json = ?3, issued_by = ?4, updated_at = ?2
+            WHERE id = ?5 AND status = 'DRAFT'
             "#,
         )
         .bind(&inv_number)
         .bind(&now_iso)
         .bind(&snapshot_json)
+        .bind(&issued_by)
         .bind(invoice_id)
         .execute(&mut *tx)
         .await
@@ -603,6 +635,374 @@ impl InvoiceService {
             status: "ISSUED".to_string(),
             items: Some(items_list),
             snapshot: Some(snapshot),
+            created_by,
+            issued_by,
+            authorized_by,
+            created_at,
+            updated_at: now_iso,
+        })
+    }
+
+    /// Creates and immediately issues an invoice within an existing SQLite transaction.
+    /// Used by project progress billing to avoid SQLite busy deadlock while ensuring full atomicity.
+    pub async fn create_and_issue_invoice_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        ctx: &TenantContext,
+        req: CreateInvoiceRequest,
+    ) -> Result<InvoiceResponse, AppError> {
+        if req.items.is_empty() {
+            return Err(AppError::BadRequest(
+                "Invoice must contain at least one item".to_string(),
+                "INVALID_ITEMS",
+            ));
+        }
+
+        let customer_name = req
+            .customer_name
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Pelanggan Umum".to_string());
+        let customer_address = req
+            .customer_address
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let customer_email = req
+            .customer_email
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let now_utc = Utc::now();
+        let now_iso = now_utc.to_rfc3339();
+        let due_date = req.due_date.unwrap_or_else(|| now_iso.clone());
+        let currency = req.currency.unwrap_or_else(|| "IDR".to_string());
+        let tax_type_str = req.tax_type.unwrap_or_else(|| "PPN_11_EXCL".to_string());
+
+        let mut subtotal: i64 = 0;
+        let mut computed_items = Vec::with_capacity(req.items.len());
+
+        for item in req.items {
+            if item.quantity <= 0 {
+                return Err(AppError::BadRequest(
+                    "Item quantity must be a positive integer".to_string(),
+                    "INVALID_QUANTITY",
+                ));
+            }
+            if item.unit_price < 0 {
+                return Err(AppError::BadRequest(
+                    "Item unit price must be a non-negative integer".to_string(),
+                    "INVALID_PRICE",
+                ));
+            }
+            if item.discount < 0 {
+                return Err(AppError::BadRequest(
+                    "Discount must be a non-negative integer".to_string(),
+                    "INVALID_DISCOUNT",
+                ));
+            }
+
+            let base_total = item
+                .quantity
+                .checked_mul(item.unit_price)
+                .ok_or_else(|| {
+                    AppError::BadRequest(
+                        "Arithmetic overflow in line total calculation".to_string(),
+                        "ARITHMETIC_OVERFLOW",
+                    )
+                })?;
+
+            let line_total = base_total
+                .checked_sub(item.discount)
+                .ok_or_else(|| {
+                    AppError::BadRequest(
+                        "Arithmetic overflow in line total discount".to_string(),
+                        "ARITHMETIC_OVERFLOW",
+                    )
+                })?;
+
+            if line_total < 0 {
+                return Err(AppError::BadRequest(
+                    "Discount cannot exceed item gross total".to_string(),
+                    "INVALID_DISCOUNT",
+                ));
+            }
+
+            subtotal = subtotal.checked_add(line_total).ok_or_else(|| {
+                AppError::BadRequest(
+                    "Arithmetic overflow in subtotal calculation".to_string(),
+                    "ARITHMETIC_OVERFLOW",
+                )
+            })?;
+
+            computed_items.push(InvoiceItemDto {
+                id: Uuid::new_v4().to_string(),
+                description: item.description.trim().to_string(),
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                discount: item.discount,
+                tax_amount: 0,
+                line_total,
+            });
+        }
+
+        // Indonesian Tax Calculation
+        let is_inclusive = tax_type_str.ends_with("_INCL");
+        let tax_res = calculate_tax_integer(subtotal, &tax_type_str, is_inclusive)?;
+        let tax_amount = tax_res.tax_amount;
+        let total_amount = if is_inclusive {
+            subtotal
+        } else {
+            subtotal.checked_add(tax_amount).ok_or_else(|| {
+                AppError::BadRequest(
+                    "Arithmetic overflow in total amount calculation".to_string(),
+                    "ARITHMETIC_OVERFLOW",
+                )
+            })?
+        };
+
+        let authorized_by = req.authorized_by.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let created_by = Some(ctx.actor_id_str());
+        let issued_by = Some(ctx.actor_id_str());
+
+        let invoice_id = Uuid::new_v4().to_string();
+
+        // Server-authoritative sequential numbering: [PREFIX]-YYYY-XXXXXX
+        let year = now_utc.year();
+
+        let prefix: Option<String> = sqlx::query_scalar(
+            "SELECT invoice_prefix FROM business_profiles WHERE tenant_id = ?1",
+        )
+        .bind(ctx.tenant_id_str())
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(AppError::from)?
+        .flatten();
+
+        let pfx = prefix
+            .filter(|p| !p.trim().is_empty())
+            .unwrap_or_else(|| "INV".to_string());
+
+        let year_pattern = format!("{}-{}-%", pfx, year);
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM invoices WHERE tenant_id = ?1 AND invoice_number IS NOT NULL AND invoice_number LIKE ?2",
+        )
+        .bind(ctx.tenant_id_str())
+        .bind(&year_pattern)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(AppError::from)?;
+
+        let inv_number = format!("{}-{}-{:06}", pfx, year, count + 1);
+
+        // Capture frozen snapshot
+        let snapshot = InvoiceSnapshotDto {
+            customer_name: customer_name.clone(),
+            customer_address: customer_address.clone(),
+            customer_email: customer_email.clone(),
+            items: computed_items.clone(),
+            tax_type: tax_type_str.clone(),
+            subtotal,
+            tax_amount,
+            total_amount,
+            created_by: created_by.clone(),
+            issued_by: issued_by.clone(),
+            authorized_by: authorized_by.clone(),
+            issued_at: now_iso.clone(),
+        };
+        let snapshot_json = serde_json::to_string(&snapshot).unwrap_or_default();
+
+        // 1. Insert invoice record initially in DRAFT status
+        sqlx::query(
+            r#"
+            INSERT INTO invoices 
+                (id, tenant_id, invoice_number, customer_name, customer_address, customer_email,
+                 due_date, currency, tax_type, subtotal, discount, tax_amount, total_amount, balance_due,
+                 status, created_by, issued_by, authorized_by, created_at, updated_at)
+            VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11, ?11, 'DRAFT', ?12, ?13, ?14, ?15, ?15)
+            "#,
+        )
+        .bind(&invoice_id)
+        .bind(ctx.tenant_id_str())
+        .bind(&customer_name)
+        .bind(&customer_address)
+        .bind(&customer_email)
+        .bind(&due_date)
+        .bind(&currency)
+        .bind(&tax_type_str)
+        .bind(subtotal)
+        .bind(tax_amount)
+        .bind(total_amount)
+        .bind(&created_by)
+        .bind(&issued_by)
+        .bind(&authorized_by)
+        .bind(&now_iso)
+        .execute(&mut **tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // 2. Insert line items while invoice is in DRAFT status
+        for item in &computed_items {
+            sqlx::query(
+                r#"
+                INSERT INTO invoice_items 
+                    (id, invoice_id, tenant_id, description, quantity, unit_price, discount, tax_amount, line_total, created_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                "#,
+            )
+            .bind(&item.id)
+            .bind(&invoice_id)
+            .bind(ctx.tenant_id_str())
+            .bind(&item.description)
+            .bind(item.quantity)
+            .bind(item.unit_price)
+            .bind(item.discount)
+            .bind(item.tax_amount)
+            .bind(item.line_total)
+            .bind(&now_iso)
+            .execute(&mut **tx)
+            .await
+            .map_err(AppError::from)?;
+        }
+
+        // 3. Update invoice record to ISSUED status with gapless number and frozen snapshot
+        sqlx::query(
+            r#"
+            UPDATE invoices 
+            SET invoice_number = ?1, status = 'ISSUED', issue_date = ?2, snapshot_json = ?3, issued_by = ?4, updated_at = ?2
+            WHERE id = ?5 AND status = 'DRAFT'
+            "#,
+        )
+        .bind(&inv_number)
+        .bind(&now_iso)
+        .bind(&snapshot_json)
+        .bind(&issued_by)
+        .bind(&invoice_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // Insert into invoice_snapshots table
+        let snap_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO invoice_snapshots (id, invoice_id, tenant_id, snapshot_json, captured_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+        )
+        .bind(&snap_id)
+        .bind(&invoice_id)
+        .bind(ctx.tenant_id_str())
+        .bind(&snapshot_json)
+        .bind(&now_iso)
+        .execute(&mut **tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // Create matching Receivable record
+        let rec_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"
+            INSERT INTO receivables 
+                (id, tenant_id, invoice_id, total_amount, allocated_amount, outstanding_amount, due_date, status, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, 0, ?4, ?5, 'OPEN', ?6, ?6)
+            "#,
+        )
+        .bind(&rec_id)
+        .bind(ctx.tenant_id_str())
+        .bind(&invoice_id)
+        .bind(total_amount)
+        .bind(&due_date)
+        .bind(&now_iso)
+        .execute(&mut **tx)
+        .await
+        .map_err(AppError::from)?;
+
+        // Automatic General Ledger posting via AccountingService WITHIN SAME TX
+        let net_revenue = if is_inclusive {
+            subtotal - tax_amount
+        } else {
+            subtotal
+        };
+
+        let mut journal_lines = vec![
+            PostJournalLineCommand {
+                account_code: "1200".to_string(), // Piutang Usaha
+                debit: Rupiah::new(total_amount),
+                credit: Rupiah::ZERO,
+                memo: Some(format!("Piutang Invoice {}", inv_number)),
+            },
+            PostJournalLineCommand {
+                account_code: "4000".to_string(), // Pendapatan Usaha
+                debit: Rupiah::ZERO,
+                credit: Rupiah::new(net_revenue),
+                memo: Some(format!("Pendapatan Invoice {}", inv_number)),
+            },
+        ];
+
+        if tax_amount > 0 {
+            journal_lines.push(PostJournalLineCommand {
+                account_code: "2100".to_string(), // Utang Pajak
+                debit: Rupiah::ZERO,
+                credit: Rupiah::new(tax_amount),
+                memo: Some(format!("Utang Pajak Invoice {}", inv_number)),
+            });
+        }
+
+        let cmd = PostJournalEntryCommand {
+            tenant_id: ctx.tenant_id,
+            entry_date: now_utc,
+            description: format!("Invoice {} issued to {}", inv_number, customer_name),
+            source_type: "INVOICE".to_string(),
+            source_id: Uuid::parse_str(&invoice_id).ok(),
+            lines: journal_lines,
+        };
+
+        // System posting context: allows invoice issuance by Staff/Manager to post ledger automatically
+        let post_ctx = if ctx.role.can_post_ledger() {
+            ctx.clone()
+        } else {
+            TenantContext {
+                tenant_id: ctx.tenant_id,
+                actor_id: ctx.actor_id,
+                role: Role::Owner,
+            }
+        };
+
+        self.accounting_service.post_journal_command_tx(tx, &post_ctx, cmd).await?;
+
+        // Transactional Outbox Event: InvoiceIssued
+        let outbox_draft = crate::domain::outbox::OutboxEventDraft::invoice_issued(
+            ctx.tenant_id,
+            &invoice_id,
+            &inv_number,
+            total_amount,
+            &customer_name,
+        );
+        crate::repository::outbox_repo::SqlxOutboxRepository::insert_tx_static(tx, &outbox_draft)
+            .await
+            .map_err(AppError::from)?;
+
+        Ok(InvoiceResponse {
+            id: invoice_id,
+            tenant_id: ctx.tenant_id_str(),
+            invoice_number: Some(inv_number),
+            customer_name,
+            customer_address,
+            customer_email,
+            issue_date: Some(now_iso.clone()),
+            due_date,
+            currency,
+            tax_type: tax_type_str,
+            subtotal,
+            discount: 0,
+            tax_amount,
+            total_amount,
+            status: "ISSUED".to_string(),
+            items: Some(computed_items),
+            snapshot: Some(snapshot),
+            created_by,
+            issued_by,
+            authorized_by,
             created_at: now_iso.clone(),
             updated_at: now_iso,
         })
@@ -615,7 +1015,7 @@ impl InvoiceService {
         invoice_id: &str,
         req: VoidInvoiceRequest,
     ) -> Result<InvoiceResponse, AppError> {
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
 
         let inv_row = sqlx::query(
             "SELECT id, tenant_id, invoice_number, status FROM invoices WHERE id = ?1 AND tenant_id = ?2",
@@ -713,7 +1113,7 @@ impl InvoiceService {
             r#"
             SELECT id, tenant_id, invoice_number, customer_name, customer_address, customer_email,
                    issue_date, due_date, currency, tax_type, subtotal, discount, tax_amount, total_amount,
-                   status, snapshot_json, created_at, updated_at
+                   status, snapshot_json, created_by, issued_by, authorized_by, created_at, updated_at
             FROM invoices
             WHERE id = ?1 AND tenant_id = ?2
             "#,
@@ -769,6 +1169,9 @@ impl InvoiceService {
             status: row.get("status"),
             items: Some(items),
             snapshot,
+            created_by: row.get("created_by"),
+            issued_by: row.get("issued_by"),
+            authorized_by: row.get("authorized_by"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -783,7 +1186,7 @@ impl InvoiceService {
             r#"
             SELECT id, tenant_id, invoice_number, customer_name, customer_address, customer_email,
                    issue_date, due_date, currency, tax_type, subtotal, discount, tax_amount, total_amount,
-                   status, snapshot_json, created_at, updated_at
+                   status, snapshot_json, created_by, issued_by, authorized_by, created_at, updated_at
             FROM invoices
             WHERE tenant_id = ?1
             ORDER BY created_at DESC
@@ -820,6 +1223,9 @@ impl InvoiceService {
                     status: r.get("status"),
                     items: None,
                     snapshot,
+                    created_by: r.get("created_by"),
+                    issued_by: r.get("issued_by"),
+                    authorized_by: r.get("authorized_by"),
                     created_at: r.get("created_at"),
                     updated_at: r.get("updated_at"),
                 }
@@ -837,7 +1243,7 @@ impl InvoiceService {
         invoice_id: &str,
         req: UpdateInvoiceRequest,
     ) -> Result<InvoiceResponse, AppError> {
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(AppError::from)?;
 
         let current_status: String = sqlx::query_scalar(
             "SELECT status FROM invoices WHERE id = ?1 AND tenant_id = ?2",
@@ -862,6 +1268,7 @@ impl InvoiceService {
             || req.customer_address.is_some()
             || req.customer_email.is_some()
             || req.due_date.is_some()
+            || req.authorized_by.is_some()
         {
             sqlx::query(
                 r#"
@@ -870,14 +1277,16 @@ impl InvoiceService {
                     customer_address = COALESCE(?2, customer_address),
                     customer_email = COALESCE(?3, customer_email),
                     due_date = COALESCE(?4, due_date),
-                    updated_at = ?5
-                WHERE id = ?6
+                    authorized_by = COALESCE(?5, authorized_by),
+                    updated_at = ?6
+                WHERE id = ?7
                 "#,
             )
             .bind(req.customer_name)
             .bind(req.customer_address)
             .bind(req.customer_email)
             .bind(req.due_date)
+            .bind(req.authorized_by)
             .bind(&now_iso)
             .bind(invoice_id)
             .execute(&mut *tx)

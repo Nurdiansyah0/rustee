@@ -83,6 +83,9 @@ pub struct Invoice {
     pub balance_due: i64,
     pub snapshot_json: Option<String>,
     pub notes: Option<String>,
+    pub created_by: Option<String>,
+    pub issued_by: Option<String>,
+    pub authorized_by: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -29,7 +29,7 @@ pub use middleware::*;
 pub use outbox::outbox_router;
 pub use payments::payments_router;
 pub use receivables::receivables_router;
-pub use router::register_ingestion_routes;
+pub use router::{projects_router, register_ingestion_routes};
 pub use tenants::tenants_router;
 pub use transactions::transactions_router;
 pub use users::users_router;
@@ -83,6 +83,10 @@ impl AppState {
 
     pub fn outbox_processor(&self) -> Arc<crate::service::outbox_processor::OutboxProcessor> {
         Arc::new(crate::service::outbox_processor::OutboxProcessor::with_default_config(self.pool.clone()))
+    }
+
+    pub fn project_service(&self) -> Arc<crate::service::project_service::ProjectService> {
+        Arc::new(crate::service::project_service::ProjectService::new(self.pool.clone()))
     }
 }
 

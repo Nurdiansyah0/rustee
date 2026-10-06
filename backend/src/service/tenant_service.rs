@@ -178,7 +178,7 @@ impl TenantService {
         let membership_id = format!("mem_{}", Uuid::new_v4());
 
         // ATOMIC TRANSACTION
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         // 1. Insert Tenant
         let new_tenant = NewTenant {

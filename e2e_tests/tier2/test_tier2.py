@@ -1038,10 +1038,10 @@ def run_tier2_tests(base_url: str, reporter: Optional[TapReporter] = None) -> Ta
     # =========================================================================
     # FEATURE 30: Backend Test Harness Synchronization (Boundaries)
     # =========================================================================
-    # B30.1: SQLite schema table count strictly equals 33
+    # B30.1: SQLite schema table count strictly equals 41
     schema_info = client.get_system_schema().json or {}
-    reporter.record(schema_info.get("table_count") == 33,
-                    "B30.1: System schema verification confirms exact table count invariant (33 tables)")
+    reporter.record(schema_info.get("table_count") == 41,
+                    "B30.1: System schema verification confirms exact table count invariant (41 tables)")
 
     # B30.2: PRAGMA journal_mode check returns wal
     reporter.record(schema_info.get("journal_mode") == "wal",

@@ -14,13 +14,17 @@ pub mod inventory;
 #[path = "purchase_orders.rs"]
 pub mod purchase_orders;
 
+#[path = "projects.rs"]
+pub mod projects;
+
 pub use inventory::inventory_router;
 pub use products::products_router;
+pub use projects::projects_router;
 pub use purchase_orders::purchase_orders_router;
 pub use warehouses::warehouses_router;
 
 /// Registers ingestion pipeline routes under `/ingestion` and inventory routes under
-/// `/warehouses`, `/products`, `/inventory`, and `/purchase-orders`.
+/// `/warehouses`, `/products`, `/inventory`, `/purchase-orders`, and `/projects`.
 pub fn register_ingestion_routes(router: Router<AppState>) -> Router<AppState> {
     router
         .nest("/ingestion", ingestion_router())
@@ -28,6 +32,7 @@ pub fn register_ingestion_routes(router: Router<AppState>) -> Router<AppState> {
         .nest("/products", products_router())
         .nest("/inventory", inventory_router())
         .nest("/purchase-orders", purchase_orders_router())
+        .nest("/projects", projects_router())
 }
 
 /// Registers inventory routes under `/warehouses`, `/products`, `/inventory`, and `/purchase-orders`.

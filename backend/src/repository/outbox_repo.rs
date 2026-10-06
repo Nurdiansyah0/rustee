@@ -156,7 +156,7 @@ impl OutboxRepository for SqlxOutboxRepository {
     }
 
     async fn insert(&self, draft: &OutboxEventDraft) -> Result<OutboxEvent, DbError> {
-        let mut tx = self.pool.begin().await.map_err(DbError::from_sqlx)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(DbError::from_sqlx)?;
         let event = self.insert_tx(&mut tx, draft).await?;
         tx.commit().await.map_err(DbError::from_sqlx)?;
         Ok(event)
