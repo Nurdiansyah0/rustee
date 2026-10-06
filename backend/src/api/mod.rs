@@ -5,6 +5,7 @@ pub mod auth;
 pub mod categories;
 pub mod handlers;
 pub mod health;
+pub mod invitations;
 pub mod invoices;
 pub mod middleware;
 pub mod outbox;
@@ -24,6 +25,7 @@ pub use analytics::analytics_router;
 pub use auth::{auth_routes, auth_routes_with_rate_limiter, AuthState};
 pub use categories::categories_router;
 pub use health::health_router;
+pub use invitations::{invitations_router, tenant_invitations_router};
 pub use invoices::invoices_router;
 pub use middleware::*;
 pub use outbox::outbox_router;
@@ -139,8 +141,15 @@ pub fn create_app(state: AppState) -> Router {
         auth::auth_routes_with_rate_limiter(state.auth_state.clone(), state.rate_limiter.clone());
     let health_router = health::health_router(state.pool.clone());
 
+    // Public invitation routes (no JWT required)
+    let public_invitation_router = invitations::invitations_router().with_state(state.clone());
+
     let protected_router = Router::new()
         .nest("/tenants", tenants::tenants_router())
+        .nest(
+            "/tenants/:id/invitations",
+            invitations::tenant_invitations_router(),
+        )
         .nest("/accounting", accounting::accounting_router())
         .nest("/invoices", invoices::invoices_router())
         .nest("/receivables", receivables::receivables_router())
@@ -174,5 +183,6 @@ pub fn create_app(state: AppState) -> Router {
             axum::routing::post(webhooks::dana_webhook_handler).with_state(state.clone()),
         )
         .nest("/api/v1/auth", auth_router)
+        .nest("/api/v1", public_invitation_router)
         .nest("/api/v1", protected_router)
 }

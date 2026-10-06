@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod email_service;
 pub mod ingestion_service;
 pub mod inventory_service;
+pub mod invitation_service;
 pub mod invoice_service;
 pub mod jwt;
 pub mod ledger_service;

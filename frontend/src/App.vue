@@ -1,8 +1,16 @@
 <template>
   <div class="min-h-dvh w-full bg-surface-canvas text-content-primary selection:bg-brand-default selection:text-white flex flex-col antialiased">
+    <!-- Invitation Accept Flow: Dedicated full-screen join page -->
+    <JoinWorkspaceView
+      v-if="isJoinView"
+      :token="joinToken"
+      @accepted="handleJoinAccepted"
+      @close="isJoinView = false"
+    />
+
     <!-- Unauthenticated State: Split-Screen Auth -->
     <SplitScreenAuth
-      v-if="!authStore.isAuthenticated"
+      v-else-if="!authStore.isAuthenticated"
       @authenticated="handleAuthenticated"
     />
 
@@ -243,6 +251,7 @@ import AddTransactionModal from '@/components/AddTransactionModal.vue'
 import UpgradeModal from '@/components/UpgradeModal.vue'
 import ProgressiveOnboardingModal from '@/components/ProgressiveOnboardingModal.vue'
 import CreateWorkspaceModal from '@/components/CreateWorkspaceModal.vue'
+import JoinWorkspaceView from '@/views/JoinWorkspaceView.vue'
 
 const authStore = useAuthStore()
 const walletStore = useWalletStore()
@@ -252,6 +261,35 @@ const analyticsStore = useAnalyticsStore()
 const subscriptionStore = useSubscriptionStore()
 const realtimeStore = useRealtimeStore()
 const workspaceStore = useWorkspaceStore()
+
+function parseJoinToken() {
+  if (typeof window === 'undefined') return { isJoin: false, token: '' }
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('invite')) {
+      return { isJoin: true, token: url.searchParams.get('invite') }
+    }
+    const match = window.location.pathname.match(/\/join\/([^/?#]+)/)
+    if (match) {
+      return { isJoin: true, token: match[1] }
+    }
+  } catch {}
+  return { isJoin: false, token: '' }
+}
+
+const initialJoin = parseJoinToken()
+const isJoinView = ref(initialJoin.isJoin)
+const joinToken = ref(initialJoin.token)
+
+async function handleJoinAccepted() {
+  isJoinView.value = false
+  if (typeof window !== 'undefined') {
+    try {
+      window.history.replaceState({}, '', '/')
+    } catch {}
+  }
+  await handleAuthenticated()
+}
 
 const currentTab = ref('home')
 const showAddModal = ref(false)
@@ -374,8 +412,11 @@ async function handleAuthenticated(authEvent = {}) {
     ])
 
     // 3. Pure Business OS: If authenticated user hasn't completed onboarding or has no business workspace, prompt business setup
+    // STAFF EXEMPTION: Staff accounts belong to someone else's workspace and MUST NOT create a business or undergo onboarding.
+    const isStaffAccount = authStore.user?.account_type === 'staff' ||
+      (workspaceStore.businessWorkspaces.length > 0 && workspaceStore.activeRole !== 'owner')
     const hasBusinessWorkspace = workspaceStore.businessWorkspaces.length > 0
-    if (!authStore.isOnboarded || !hasBusinessWorkspace) {
+    if (!isStaffAccount && (!authStore.isOnboarded || !hasBusinessWorkspace)) {
       onboardingInitialName.value = authEvent?.name || authStore.displayName || authStore.user?.display_name || authStore.user?.name || ''
       showOnboardingModal.value = true
     }

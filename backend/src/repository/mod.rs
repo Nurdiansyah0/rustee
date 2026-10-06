@@ -7,6 +7,7 @@ pub mod error;
 pub mod idempotency_repo;
 pub mod ingestion_repo;
 pub mod inventory_repo;
+pub mod invitation_repo;
 pub mod invoice_repo;
 pub mod outbox_repo;
 pub mod project_repo;
@@ -60,3 +61,6 @@ pub use user_preferences_repo::{
     UserPreferencesRepository,
 };
 pub use user_repo::{NewUser, SqlxUserRepository, User, UserRepository};
+pub use invitation_repo::{
+    InvitationRepository, NewInvitation, SqlxInvitationRepository, WorkspaceInvitation,
+};

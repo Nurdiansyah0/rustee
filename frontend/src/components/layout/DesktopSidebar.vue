@@ -90,8 +90,8 @@
             </button>
           </div>
 
-          <!-- Divider & Action to Create New Business Workspace (PRD §5 & §69) -->
-          <div class="pt-1.5 border-t border-border-subtle">
+          <!-- Divider & Action to Create New Business Workspace (PRD §5 & §69 - Owner Only) -->
+          <div v-if="workspaceStore.activeRole === 'owner'" class="pt-1.5 border-t border-border-subtle">
             <button
               type="button"
               @click="handleOpenCreateWorkspace"
@@ -146,9 +146,9 @@
 
     <!-- Bottom Cluster -->
     <div class="space-y-2 pt-3 border-t border-border-subtle shrink-0">
-      <!-- Trial Status Card (when trialing) -->
+      <!-- Trial Status Card (when trialing - Owner Only) -->
       <button
-        v-if="subscriptionStore.isTrialing"
+        v-if="subscriptionStore.isTrialing && workspaceStore.activeRole === 'owner'"
         type="button"
         @click="$emit('open-upgrade')"
         class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-brand-default/15 via-brand-default/10 to-brand-default/5 border border-brand-default/25 cursor-pointer hover:border-brand-default transition shadow-xs group focus-ring block"
@@ -167,9 +167,9 @@
         </p>
       </button>
 
-      <!-- Upgrade Banner (for Free Tier) -->
+      <!-- Upgrade Banner (for Free Tier - Owner Only) -->
       <button
-        v-else-if="!authStore.isPremium"
+        v-else-if="!authStore.isPremium && workspaceStore.activeRole === 'owner'"
         type="button"
         @click="$emit('open-upgrade')"
         class="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-brand-default/15 via-brand-default/10 to-surface-subtle border border-brand-border cursor-pointer hover:border-brand-default transition focus-ring block"

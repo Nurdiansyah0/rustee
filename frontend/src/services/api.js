@@ -245,6 +245,24 @@ export const api = {
     request(`/api/v1/tenants/${id}/members/${userId}`, {
       method: 'DELETE',
     }),
+  // Workspace Invitations (invite-link flow for staff onboarding)
+  createWorkspaceInvitation: (id, data) =>
+    request(`/api/v1/tenants/${id}/invitations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listWorkspaceInvitations: (id) => request(`/api/v1/tenants/${id}/invitations`),
+  revokeWorkspaceInvitation: (id, invitationId) =>
+    request(`/api/v1/tenants/${id}/invitations/${invitationId}`, {
+      method: 'DELETE',
+    }),
+  // Public invitation endpoints (no auth required)
+  previewInvitation: (token) => request(`/api/v1/invitations/${token}`),
+  acceptInvitation: (token, data) =>
+    request(`/api/v1/invitations/${token}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ token, ...data }),
+    }),
   switchWorkspace: (id) =>
     request(`/api/v1/tenants/${id}/switch`, {
       method: 'POST',

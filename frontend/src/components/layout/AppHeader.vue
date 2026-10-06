@@ -98,8 +98,8 @@
             </button>
           </div>
 
-          <!-- Divider & Action to Create New Business Workspace (PRD §5 & §69) -->
-          <div class="pt-1.5 border-t border-border-subtle">
+          <!-- Divider & Action to Create New Business Workspace (PRD §5 & §69 - Owner Only) -->
+          <div v-if="workspaceStore.activeRole === 'owner'" class="pt-1.5 border-t border-border-subtle">
             <button
               type="button"
               @click="handleOpenCreateWorkspace"
@@ -123,9 +123,9 @@
         </span>
       </div>
 
-      <!-- Trial Countdown Badge (when trialing) -->
+      <!-- Trial Countdown Badge (when trialing - Owner Only) -->
       <button
-        v-if="subscriptionStore.isTrialing"
+        v-if="subscriptionStore.isTrialing && workspaceStore.activeRole === 'owner'"
         type="button"
         @click="$emit('open-upgrade')"
         class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-default/15 border border-brand-default/30 text-brand-default hover:bg-brand-default/25 active:scale-95 text-[11px] font-extrabold transition cursor-pointer shadow-sm shadow-brand-default/10"
@@ -144,9 +144,9 @@
         <span>Premium</span>
       </div>
 
-      <!-- Upgrade CTA (Free tier) -->
+      <!-- Upgrade CTA (Free tier - Owner Only) -->
       <button
-        v-else
+        v-else-if="workspaceStore.activeRole === 'owner'"
         type="button"
         @click="$emit('open-upgrade')"
         class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-default/10 border border-brand-border text-brand-default hover:bg-brand-default hover:text-white text-[11px] font-extrabold transition cursor-pointer"

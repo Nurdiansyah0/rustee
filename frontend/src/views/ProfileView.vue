@@ -15,6 +15,9 @@
       </div>
     </div>
 
+    <!-- Team & RBAC Member Access Card (PRD §8, §69) -->
+    <TeamManagementCard />
+
     <!-- Subscription Status Card -->
     <div class="p-5 sm:p-6 bg-surface-card rounded-xl border border-border-subtle shadow-card space-y-4">
       <div class="flex items-center justify-between">
@@ -198,6 +201,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useSubscriptionStore } from '@/stores/subscription'
+import TeamManagementCard from '@/components/team/TeamManagementCard.vue'
 import {
   Sparkles,
   ShieldCheck,
