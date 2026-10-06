@@ -21,6 +21,7 @@ pub struct RegisterRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginRequest {
+    #[serde(alias = "identifier", alias = "username")]
     pub email: String,
     pub password: String,
 }
@@ -33,6 +34,9 @@ pub struct UserDto {
     pub currency: String,
     pub role: String,
     pub subscription_tier: String,
+    pub account_type: String,
+    pub username: Option<String>,
+    pub phone: Option<String>,
     pub created_at: String,
 }
 
@@ -236,6 +240,9 @@ impl AuthService {
             currency: "IDR".to_string(),
             role: "user".to_string(),
             subscription_tier: "free".to_string(),
+            account_type: "owner".to_string(),
+            username: None,
+            phone: None,
             created_at: now,
         };
 
@@ -248,12 +255,19 @@ impl AuthService {
         })
     }
 
-    /// Authenticates user credentials with constant-time email enumeration protection
+    /// Authenticates user credentials via email, username, or phone number
     pub async fn login(&self, req: LoginRequest) -> Result<AuthResponse, AppError> {
-        let normalized_email = Self::normalize_email(&req.email)?;
+        let identifier = req.email.trim();
+        if identifier.is_empty() {
+            return Err(AppError::BadRequest(
+                "Email, username, or phone number is required".to_string(),
+                "IDENTIFIER_REQUIRED",
+            ));
+        }
+
         let user_opt = self
             .user_repo
-            .find_by_email(&normalized_email)
+            .find_by_identifier(identifier)
             .await
             .map_err(AppError::from)?;
 
@@ -267,7 +281,7 @@ impl AuthService {
 
                 if !valid {
                     return Err(AppError::Unauthorized(
-                        "Invalid email or password".to_string(),
+                        "Invalid email, username, or password".to_string(),
                         "INVALID_CREDENTIALS",
                     ));
                 }
@@ -286,6 +300,9 @@ impl AuthService {
                     currency: user.currency,
                     role: user.role,
                     subscription_tier: user.subscription_tier,
+                    account_type: user.account_type,
+                    username: user.username,
+                    phone: user.phone,
                     created_at: user.created_at,
                 };
 
@@ -302,7 +319,7 @@ impl AuthService {
                     .await;
 
                 Err(AppError::Unauthorized(
-                    "Invalid email or password".to_string(),
+                    "Invalid email, username, or password".to_string(),
                     "INVALID_CREDENTIALS",
                 ))
             }
@@ -329,6 +346,9 @@ impl AuthService {
             currency: user.currency,
             role: user.role,
             subscription_tier: user.subscription_tier,
+            account_type: user.account_type,
+            username: user.username,
+            phone: user.phone,
             created_at: user.created_at,
         };
 

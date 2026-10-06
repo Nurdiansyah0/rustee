@@ -213,10 +213,10 @@
             <Input
               ref="loginEmailInputRef"
               v-model="form.email"
-              type="email"
-              label="Email yang biasa kamu gunakan"
-              placeholder="contoh: budi@perusahaan.com"
-              autocomplete="email"
+              type="text"
+              label="Email / Username / No. HP"
+              placeholder="Email, username, atau no. HP"
+              autocomplete="username"
               required
             />
           </div>

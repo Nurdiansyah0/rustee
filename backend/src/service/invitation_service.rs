@@ -41,6 +41,8 @@ pub struct InvitationDto {
 pub struct AcceptInvitationRequest {
     pub token: String,
     pub display_name: String,
+    pub username: Option<String>,
+    pub phone: Option<String>,
     pub password: String,
 }
 
@@ -49,6 +51,8 @@ pub struct AcceptInvitationResponse {
     pub user_id: String,
     pub email: String,
     pub display_name: String,
+    pub username: Option<String>,
+    pub phone: Option<String>,
     pub token: String,
     pub workspace_id: String,
     pub workspace_name: String,
@@ -240,6 +244,35 @@ impl InvitationService {
                 .await;
         }
 
+        let clean_username = req.username
+            .map(|u| u.trim().to_lowercase())
+            .filter(|u| !u.is_empty());
+
+        if let Some(ref uname) = clean_username {
+            if uname.len() < 3 || uname.len() > 30 {
+                return Err(AppError::BadRequest(
+                    "Username harus antara 3 hingga 30 karakter".to_string(),
+                    "INVALID_USERNAME_LENGTH",
+                ));
+            }
+            if !uname.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                return Err(AppError::BadRequest(
+                    "Username hanya boleh berisi huruf, angka, garis bawah (_), atau strip (-)".to_string(),
+                    "INVALID_USERNAME_FORMAT",
+                ));
+            }
+            if self.user_repo.find_by_identifier(uname).await.map_err(AppError::from)?.is_some() {
+                return Err(AppError::Conflict(
+                    "Username ini sudah digunakan, silakan pilih username lain".to_string(),
+                    "USERNAME_ALREADY_EXISTS",
+                ));
+            }
+        }
+
+        let clean_phone = req.phone
+            .map(|p| p.trim().chars().filter(|c| c.is_ascii_digit() || *c == '+').collect::<String>())
+            .filter(|p| !p.is_empty());
+
         let password_hash = self
             .crypto_service
             .hash_password(req.password)
@@ -258,14 +291,16 @@ impl InvitationService {
             r#"
             INSERT INTO users
                 (id, email, password_hash, display_name, currency, role, subscription_tier,
-                 account_type, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, 'IDR', 'user', 'free', 'staff', ?5, ?5)
+                 account_type, username, phone, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, 'IDR', 'user', 'free', 'staff', ?5, ?6, ?7, ?7)
             "#,
         )
         .bind(&user_id)
         .bind(&normalized_email)
         .bind(&password_hash)
         .bind(&display_name)
+        .bind(&clean_username)
+        .bind(&clean_phone)
         .bind(&now)
         .execute(&mut *tx)
         .await?;
@@ -314,6 +349,8 @@ impl InvitationService {
             user_id,
             email: normalized_email,
             display_name,
+            username: clean_username,
+            phone: clean_phone,
             token,
             workspace_id: inv.tenant_id,
             workspace_name: tenant.name,
@@ -469,6 +506,8 @@ impl InvitationService {
             user_id: user.id,
             email: user.email,
             display_name: user.display_name,
+            username: user.username,
+            phone: user.phone,
             token,
             workspace_id: inv.tenant_id.clone(),
             workspace_name: tenant.name,

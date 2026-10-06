@@ -73,6 +73,39 @@
           />
         </div>
 
+        <!-- Username (Optional / Recommended for easy login) -->
+        <div v-if="!alreadyLoggedIn" class="space-y-1">
+          <label class="block text-xs font-semibold text-content-secondary" for="username">
+            Username Login <span class="text-xs text-content-muted font-normal">(opsional)</span>
+          </label>
+          <input
+            id="username"
+            v-model="form.username"
+            type="text"
+            autocomplete="username"
+            placeholder="Contoh: budi_kasir atau kasir1"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-card border border-border-subtle text-sm text-content-primary placeholder-content-muted focus:outline-none focus:ring-2 focus:ring-brand-default focus:border-transparent transition"
+            :disabled="state === 'submitting'"
+          />
+          <p class="text-[11px] text-content-muted">Bisa digunakan untuk login ke aplikasi selain email.</p>
+        </div>
+
+        <!-- Phone Number (Optional) -->
+        <div v-if="!alreadyLoggedIn" class="space-y-1">
+          <label class="block text-xs font-semibold text-content-secondary" for="phone">
+            No. WhatsApp / Handphone <span class="text-xs text-content-muted font-normal">(opsional)</span>
+          </label>
+          <input
+            id="phone"
+            v-model="form.phone"
+            type="tel"
+            autocomplete="tel"
+            placeholder="Contoh: 08123456789"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-card border border-border-subtle text-sm text-content-primary placeholder-content-muted focus:outline-none focus:ring-2 focus:ring-brand-default focus:border-transparent transition"
+            :disabled="state === 'submitting'"
+          />
+        </div>
+
         <!-- Password (hidden when already logged in) -->
         <div v-if="!alreadyLoggedIn" class="space-y-1">
           <label class="block text-xs font-semibold text-content-secondary" for="password">
@@ -174,6 +207,8 @@ const showPassword = ref(false)
 
 const form = ref({
   displayName: '',
+  username: '',
+  phone: '',
   password: '',
 })
 
@@ -272,6 +307,8 @@ async function handleSubmit() {
   try {
     const res = await api.acceptInvitation(resolvedToken.value, {
       display_name: form.value.displayName.trim(),
+      username: form.value.username.trim() || null,
+      phone: form.value.phone.trim() || null,
       password: alreadyLoggedIn.value ? '__existing_user__' : form.value.password,
     })
 

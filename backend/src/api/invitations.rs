@@ -35,6 +35,8 @@ pub struct CreateInvitationRequest {
 pub struct AcceptInvitationRequest {
     pub token: String,
     pub display_name: String,
+    pub username: Option<String>,
+    pub phone: Option<String>,
     pub password: String,
 }
 
@@ -66,6 +68,8 @@ pub struct AcceptInvitationResponse {
     pub user_id: String,
     pub email: String,
     pub display_name: String,
+    pub username: Option<String>,
+    pub phone: Option<String>,
     pub token: String,
     pub workspace_id: String,
     pub workspace_name: String,
@@ -214,6 +218,8 @@ pub async fn accept_invitation(
     let req = ServiceAcceptRequest {
         token,
         display_name: payload.display_name,
+        username: payload.username,
+        phone: payload.phone,
         password: payload.password,
     };
 
@@ -224,6 +230,8 @@ pub async fn accept_invitation(
         user_id: result.user_id,
         email: result.email,
         display_name: result.display_name,
+        username: result.username,
+        phone: result.phone,
         token: result.token,
         workspace_id: result.workspace_id,
         workspace_name: result.workspace_name,
