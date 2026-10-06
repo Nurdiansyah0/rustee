@@ -342,35 +342,45 @@ function openPersonalizationModal() {
   showOnboardingModal.value = true
 }
 
+let isAuthenticatingLock = false
+
 async function handleAuthenticated(authEvent = {}) {
-  cleanupAuthUrlParams()
+  if (isAuthenticatingLock) return
+  isAuthenticatingLock = true
 
-  // Initialize Foreground WebSocket connection (§25, §27)
-  realtimeStore.initRealtime()
+  try {
+    cleanupAuthUrlParams()
 
-  // 1. Immediately present onboarding modal if new user registration was signaled
-  const isNew = Boolean(authEvent?.isNewUser || authStore.isJustRegistered)
-  if (isNew) {
-    onboardingInitialName.value = authEvent?.name || authStore.user?.display_name || authStore.user?.name || ''
-    showOnboardingModal.value = true
-    authStore.isJustRegistered = false
-  }
+    // Initialize Foreground WebSocket connection (§25, §27)
+    realtimeStore.initRealtime()
 
-  // 2. Fetch authoritative user states and personalization
-  await Promise.allSettled([
-    authStore.fetchPersonalization(),
-    workspaceStore.fetchWorkspaces(),
-    walletStore.fetchWallets(),
-    categoryStore.fetchCategories(),
-    analyticsStore.fetchDashboard(),
-    subscriptionStore.fetchSubscriptionStatus(),
-    syncService.reconcileOnReconnect()
-  ])
+    // 1. Immediately present onboarding modal if new user registration was signaled
+    const isNew = Boolean(authEvent?.isNewUser || authStore.isJustRegistered)
+    if (isNew) {
+      onboardingInitialName.value = authEvent?.name || authStore.user?.display_name || authStore.user?.name || ''
+      showOnboardingModal.value = true
+      authStore.isJustRegistered = false
+    }
 
-  // 3. Fallback: If authenticated user hasn't completed onboarding yet, enforce personalization step
-  if (!authStore.isOnboarded) {
-    onboardingInitialName.value = authEvent?.name || authStore.displayName || authStore.user?.display_name || authStore.user?.name || ''
-    showOnboardingModal.value = true
+    // 2. Fetch authoritative user states and personalization
+    await Promise.allSettled([
+      authStore.fetchPersonalization(),
+      workspaceStore.fetchWorkspaces(),
+      walletStore.fetchWallets(),
+      categoryStore.fetchCategories(),
+      analyticsStore.fetchDashboard(),
+      subscriptionStore.fetchSubscriptionStatus(),
+      syncService.reconcileOnReconnect()
+    ])
+
+    // 3. Pure Business OS: If authenticated user hasn't completed onboarding or has no business workspace, prompt business setup
+    const hasBusinessWorkspace = workspaceStore.businessWorkspaces.length > 0
+    if (!authStore.isOnboarded || !hasBusinessWorkspace) {
+      onboardingInitialName.value = authEvent?.name || authStore.displayName || authStore.user?.display_name || authStore.user?.name || ''
+      showOnboardingModal.value = true
+    }
+  } finally {
+    isAuthenticatingLock = false
   }
 }
 

@@ -178,7 +178,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       saveCachedWorkspaces(list)
 
       if (list.length > 0) {
-        // Resolve active workspace
+        // Resolve active workspace: Pure Business OS prioritizes operational business workspace
         let active = null
         if (currentWorkspace.value?.id) {
           active = list.find((w) => w.id === currentWorkspace.value.id)
@@ -189,8 +189,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             active = list.find((w) => w.id === cached.id)
           }
         }
-        if (!active) {
-          active = list.find((w) => w.is_personal || w.is_default) || list[0]
+        if (!active || active.is_personal) {
+          // Pure Business OS: Prefer operational business workspace over legacy personal fallback
+          const businessWs = list.find((w) => !w.is_personal)
+          if (businessWs) {
+            active = businessWs
+          } else if (!active) {
+            active = list.find((w) => w.is_default) || list[0]
+          }
         }
 
         currentWorkspace.value = active

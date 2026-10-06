@@ -215,7 +215,7 @@ export const useAuthStore = defineStore('auth', () => {
       const res = await api.login(email, password)
       if (res?.user) {
         user.value = res.user
-        permissions.value = res.user.permissions || []
+        permissions.value = res.permissions || res.user.permissions || []
         saveCachedUser(res.user)
         initialized.value = true
         fetchPersonalization().catch(() => {})
@@ -241,7 +241,7 @@ export const useAuthStore = defineStore('auth', () => {
       const res = await api.register(name, email, password)
       if (res?.user) {
         user.value = res.user
-        permissions.value = res.user.permissions || []
+        permissions.value = res.permissions || res.user.permissions || []
         personalization.value = {
           display_name: name,
           income_title: null,
